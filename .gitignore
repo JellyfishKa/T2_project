@@ -1,3 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+ml_env/
+venv/
+env/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Model cache (Hugging Face)
+ml/models/*.bin
+ml/models/*.safetensors
+ml/models/*.pt
+ml/models/*.pth
+ml/models/cache/
+
+# Logs
+*.log
+ml/models/*.log
+ml/benchmarks/*.log
+
+# Test results and benchmark outputs
+ml/models/test_results.json
+ml/benchmarks/results.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
 # ===============================
 # Common project ignores
 # ===============================
