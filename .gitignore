@@ -47,6 +47,3 @@ backend/uv.lock
 
 # codspeed
 backend/.codspeed/
-/backend/src/models/__pycache__
-/backend/tests/__pycache__
-/backend/src/__pycache__
