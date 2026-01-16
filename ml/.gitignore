@@ -19,20 +19,20 @@ ENV/
 *.ipynb
 
 # Model cache (Hugging Face)
-ml/models/*.bin
-ml/models/*.safetensors
-ml/models/*.pt
-ml/models/*.pth
-ml/models/cache/
+models/*.bin
+models/*.safetensors
+models/*.pt
+models/*.pth
+models/cache/
 
 # Logs
 *.log
-ml/models/*.log
-ml/benchmarks/*.log
+models/*.log
+benchmarks/*.log
 
 # Test results and benchmark outputs
-ml/models/test_results.json
-ml/benchmarks/results.json
+models/test_results.json
+benchmarks/results.json
 
 # IDE
 .vscode/
@@ -43,7 +43,3 @@ ml/benchmarks/results.json
 # OS
 .DS_Store
 Thumbs.db
-
-# Environment variables
-.env
-.env.local
