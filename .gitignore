@@ -9,8 +9,8 @@
 # Backend-specific ignores
 # ===============================
 
-backend/.idea/
 backend/.ipynb_checkpoints/
+backend/.idea/
 backend/.mypy_cache/
 backend/.vscode/
 backend/__pycache__/
@@ -33,6 +33,8 @@ backend/venv/
 backend/.venv/
 backend/docs.zip
 backend/archive.zip
+__pycache__/
+cerfs/
 
 # vim temporary files (backend)
 backend/*~
