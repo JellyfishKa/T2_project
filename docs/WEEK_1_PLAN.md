@@ -1,4 +1,4 @@
-## Получение токенов GigaChat
+## Получение токенов GigaChat (DEPRECATED)
 
 1) Для начала авторизируйтесь через Сбер ID по данной ссылке https://developers.sber.ru/studio/workspaces
 
