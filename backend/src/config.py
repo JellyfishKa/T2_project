@@ -1,19 +1,41 @@
-import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-from gigachat import GigaChat
+from pydantic import ConfigDict
 
+from pydantic_settings import BaseSettings
 
 load_dotenv()
+BASE_DIR = Path(__file__).parent.parent
 
-giga = GigaChat(
-    credentials=os.getenv("GIGACHAT_AUTH_KEY", "NO SECRET KEY"),
-    scope="GIGACHAT_API_PERS",
-    model="GigaChat",
-    ca_bundle_file="cerfs/russian_trusted_root_ca_pem.crt",
-)
 
-gigachat_token = giga.get_token()
+class Settings(BaseSettings):
+    hf_token: str | None = None
+    gigachat_model_id: str
+    cotype_model_id: str
+    tpro_model_id: str
 
-print(gigachat_token)
+    model_config = ConfigDict(env_file=BASE_DIR / ".env")
+
+
+settings = Settings()
+
+
+# ------- Проверка корректности работы модели - id получен ------- #
+# from transformers import AutoTokenizer
+
+# AutoTokenizer.from_pretrained(
+#     settings.gigachat_model_id,
+#     token=settings.hf_token,
+# )
+
+# AutoTokenizer.from_pretrained(
+#     settings.cotype_model_id,
+#     token=settings.hf_token,
+# )
+
+# AutoTokenizer.from_pretrained(
+#     settings.tpro_model_id,
+#     token=settings.hf_token,
+# )
