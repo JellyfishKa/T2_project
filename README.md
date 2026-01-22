@@ -103,11 +103,7 @@ t2-retail-network/
 │   │   ├── test_llm_clients.py
 │   │   ├── test_routes.py
 │   │   └── test_services.py
-│   └── requirements
-        ├── dev
-            ├── requirements.txt
-        ├── prod
-            ├── requirements.txt
+│   └── requirements.txt
 │
 ├── frontend/
 │   ├── src/
