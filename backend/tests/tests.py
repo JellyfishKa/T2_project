@@ -1,7 +1,12 @@
 import os
-import pytest
+
+
 from dotenv import load_dotenv
+
 from gigachat import GigaChat
+
+import pytest
+
 
 load_dotenv()
 
@@ -27,11 +32,10 @@ def test_gigachat_chat_started(giga):
                 {
                     "role": "user",
                     "content": "Привет, напиши короткий приветственный текст!",
-                }
-            ]
-        }
+                },
+            ],
+        },
     )
     assert response
     assert response.choices
     assert response.choices[0].message.content
-

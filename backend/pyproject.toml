@@ -1,0 +1,10 @@
+[tool.black]
+line-length = 88
+
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"
+
+[tool.flake8]
+import-order-style = google
+application-import-names

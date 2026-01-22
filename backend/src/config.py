@@ -11,7 +11,7 @@ giga = GigaChat(
     credentials=os.getenv("GIGACHAT_AUTH_KEY", "NO SECRET KEY"),
     scope="GIGACHAT_API_PERS",
     model="GigaChat",
-    ca_bundle_file="cerfs/russian_trusted_root_ca_pem.crt"
+    ca_bundle_file="cerfs/russian_trusted_root_ca_pem.crt",
 )
 
 gigachat_token = giga.get_token()
