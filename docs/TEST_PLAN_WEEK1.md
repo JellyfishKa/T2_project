@@ -6,7 +6,7 @@
 
 ## 2. Объем тестирования (Scope)
 
-- **Компоненты**: `GigaChatClient`, `CotypeClient`, `TProClient`.
+- **Компоненты**: `QwenClient`, `LlamaClient`, `TProClient`.
 - **Интеграции**: Mock API взаимодействий (без реальных внешних вызовов в юнит-тестах).
 - **Целевое покрытие кода (Coverage)**: > 80%.
 
@@ -16,8 +16,8 @@
 
 *Цель*: Проверить, что клиенты корректно парсят валидные ответы.
 
-- **TC-001**: `GigaChatClient` возвращает текст из валидного JSON ответа.
-- **TC-002**: `CotypeClient` возвращает текст из валидного JSON ответа.
+- **TC-001**: `QwenClient` возвращает текст из валидного JSON ответа.
+- **TC-002**: `LlamaClient` возвращает текст из валидного JSON ответа.
 - **TC-003**: `TProClient` возвращает текст из валидного JSON ответа.
 
 ### 3.2. Обработка ошибок (Error Handling)
@@ -34,8 +34,8 @@
 
 *Цель*: Проверить, что система переключается на резервную модель при сбое.
 
-- **TC-009**: `LLMService` пробует `CotypeClient`, если `GigaChatClient` падает.
-- **TC-010**: `LLMService` пробует `TProClient`, если `CotypeClient` падает.
+- **TC-009**: `LLMService` пробует `LlamaClient`, если `QwenClient` падает.
+- **TC-010**: `LLMService` пробует `TProClient`, если `LlamaClient` падает.
 - **TC-011**: Вызывает `AllModelsFailedException`, если все клиенты падают.
 
 ### 3.4. Валидация входных данных
