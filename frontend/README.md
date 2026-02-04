@@ -9,6 +9,10 @@ frontend/
 ├── public/               # Статические файлы
 ├── src/                  
 │   ├── components/       # Vue компоненты
+│   │   ├── Header.vue
+│   │   ├── Layout.vue
+│   │   ├── RouteMap.vue
+│   │   └── Sidebar.vue
 │   ├── router/          # Маршрутизация (Vue Router)
 │   │    └── index.ts         
 │   ├── services/        # Сервисы для работы с API
@@ -16,11 +20,19 @@ frontend/
 │   ├── styles/          # Глобальные стили
 │   │   └── main.css       
 │   ├── tests/           # Тесты
-│    │   └── App.spec.ts    
+│   │   └── components/
+│   │   │   ├── Dashboard.spec.ts
+│   │   │   ├── Header.spec.ts
+│   │   │   └── Layout.spec.ts
+│   │   └──setup.js
 │   ├── views/           # Страницы приложения
+│   │   ├── DashboardView.vue
+│   │   ├── HomeView.vue
+│   │   ├── AnalyticsView.vue
+│   │   └── OptimizeView.vue
 │   ├── App.vue          # Корневой компонент
 │   └── main.ts          # Точка входа
-├── env/                 # Переменные окружения
+├── .env                 # Переменные окружения
 ├── env.d.ts             # Объявления TypeScript
 ├── index.html           # HTML шаблон
 ├── package.json         # Зависимости и скрипты
