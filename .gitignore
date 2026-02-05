@@ -1,3 +1,4 @@
 ./PM_files/
 /PM_files
 /frontend/node_modules
+*.pyc
