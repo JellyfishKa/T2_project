@@ -5,7 +5,17 @@ export default defineConfig({
   plugins: [vue()],
   test: {
     globals: true,
+<<<<<<< Updated upstream
     environment: 'happy-dom',
     include: ['src/**/*.spec.ts'],
   }
+=======
+    setupFiles: ['./src/tests/setup.js'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: ['node_modules', 'src/tests', 'src/router/index.ts', 'src/main.ts', 'src/services/api.ts']
+    }
+  },
+>>>>>>> Stashed changes
 })
