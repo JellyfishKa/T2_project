@@ -12,9 +12,9 @@ BASE_DIR = Path(__file__).parent.parent
 
 class Settings(BaseSettings):
     hf_token: str | None = None
-    gigachat_model_id: str
-    cotype_model_id: str
-    tpro_model_id: str
+
+    qwen_api_endpoint: str
+    qwen_model_id: str
 
     model_config = ConfigDict(env_file=BASE_DIR / ".env")
 
