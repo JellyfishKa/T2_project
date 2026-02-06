@@ -26,6 +26,10 @@ class TestExtendedModels:
         # Reset mocks before each test
         mock_transformers.reset_mock()
         mock_torch.reset_mock()
+        # Clear side_effect to prevent leakage between tests
+        mock_transformers.AutoTokenizer.from_pretrained.side_effect = None
+        mock_transformers.AutoConfig.from_pretrained.side_effect = None
+        mock_transformers.AutoModelForCausalLM.from_pretrained.side_effect = None
 
     def test_gigachat_with_cpu_fallback(self):
         """TC-ML-004: Тест GigaChat с CPU fallback при недоступности GPU."""
