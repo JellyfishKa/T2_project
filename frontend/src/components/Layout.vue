@@ -2,24 +2,24 @@
   <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <Header @toggle-sidebar="isSidebarOpen = !isSidebarOpen" />
-    
+
     <div class="flex">
       <!-- Sidebar для десктопа -->
-      <Sidebar 
-        :is-open="isSidebarOpen" 
-        @close="isSidebarOpen = false" 
+      <Sidebar
+        :is-open="isSidebarOpen"
+        @close="isSidebarOpen = false"
         class="hidden lg:block"
       />
-      
+
       <!-- Mobile Sidebar (overlay) -->
-      <div 
-        v-if="isSidebarOpen" 
+      <div
+        v-if="isSidebarOpen"
         class="fixed inset-0 z-40 lg:hidden"
         @click="isSidebarOpen = false"
       >
         <div class="fixed inset-0 bg-gray-600 bg-opacity-75"></div>
       </div>
-      
+
       <Transition
         enter-active-class="transition ease-in-out duration-300 transform"
         enter-from-class="-translate-x-full"
@@ -28,14 +28,14 @@
         leave-from-class="translate-x-0"
         leave-to-class="-translate-x-full"
       >
-        <Sidebar 
-          v-if="isSidebarOpen" 
-          :is-open="isSidebarOpen" 
-          @close="isSidebarOpen = false" 
+        <Sidebar
+          v-if="isSidebarOpen"
+          :is-open="isSidebarOpen"
+          @close="isSidebarOpen = false"
           class="fixed inset-y-0 left-0 z-50 w-64 lg:hidden"
         />
       </Transition>
-      
+
       <!-- Main Content -->
       <main class="flex-1 p-4 md:p-6 lg:p-8">
         <div class="mx-auto max-w-7xl">

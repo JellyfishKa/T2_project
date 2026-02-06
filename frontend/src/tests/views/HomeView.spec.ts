@@ -25,10 +25,12 @@ describe('HomeView.vue', () => {
 
     // Check if the main heading is rendered
     expect(wrapper.find('h1').text()).toBe('T2 Розничная сеть')
-    
+
     // Check if the description is rendered
-    expect(wrapper.text()).toContain('Комплексная платформа на основе искусственного интеллекта')
-    
+    expect(wrapper.text()).toContain(
+      'Комплексная платформа на основе искусственного интеллекта'
+    )
+
     // Check if the navigation section exists
     expect(wrapper.find('h2').text()).toBe('Навигация')
   })
@@ -43,9 +45,9 @@ describe('HomeView.vue', () => {
     // Check if all quick action links exist
     const links = wrapper.findAll('a')
     expect(links.length).toBe(4)
-    
+
     // Check if the links have correct text
-    const linkTexts = links.map(link => link.text())
+    const linkTexts = links.map((link) => link.text())
     expect(linkTexts).toContain('Dashboard')
     expect(linkTexts).toContain('Test Models')
     expect(linkTexts).toContain('Optimize')
@@ -62,10 +64,10 @@ describe('HomeView.vue', () => {
     // Check if links have correct to attributes
     const dashboardLink = wrapper.find('a[href="/dashboard"]')
     expect(dashboardLink.exists()).toBe(true)
-    
+
     const optimizeLink = wrapper.find('a[href="/optimize"]')
     expect(optimizeLink.exists()).toBe(true)
-    
+
     const analyticsLink = wrapper.find('a[href="/analytics"]')
     expect(analyticsLink.exists()).toBe(true)
   })

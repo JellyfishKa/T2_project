@@ -37,8 +37,8 @@ const router = createRouter({
 })
 
 // Update document title on route change
-router.beforeEach((to, from, next) => {
-  document.title = to.meta.title as string || 'T2 LLM Platform'
+router.beforeEach((to, _from, next) => {
+  document.title = (to.meta.title as string) || 'T2 LLM Platform'
   next()
 })
 

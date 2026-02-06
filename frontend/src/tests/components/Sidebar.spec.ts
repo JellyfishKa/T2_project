@@ -25,11 +25,11 @@ describe('Sidebar.vue', () => {
 
     // Check if the sidebar header is rendered
     expect(wrapper.find('.h-16.items-center').exists()).toBe(true)
-    
+
     // Check if navigation items exist
     const navLinks = wrapper.findAll('a')
     expect(navLinks.length).toBe(4) // Home, Dashboard, Optimize, Analytics
-    
+
     // Check if the close button exists for mobile view
     expect(wrapper.find('button').exists()).toBe(true)
   })
@@ -64,7 +64,7 @@ describe('Sidebar.vue', () => {
     const navLinks = wrapper.findAll('a')
     if (navLinks.length > 0) {
       await navLinks[0].trigger('click')
-      
+
       // Check if the close event was emitted
       expect(wrapper.emitted('close')).toBeTruthy()
     }
@@ -82,7 +82,9 @@ describe('Sidebar.vue', () => {
     })
 
     // Check if the dashboard link is highlighted
-    const dashboardLink = wrapper.findAll('a').find((link: any) => link.text().includes('Dashboard'))
+    const dashboardLink = wrapper
+      .findAll('a')
+      .find((link: any) => link.text().includes('Dashboard'))
     expect(dashboardLink?.classes()).toContain('text-blue-600')
     expect(dashboardLink?.classes()).toContain('bg-blue-50')
   })

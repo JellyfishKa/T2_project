@@ -6,13 +6,16 @@
         T2 Розничная сеть
       </h1>
       <p class="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto">
-      Комплексная платформа на основе искусственного интеллекта для оптимизации маршрутов магазинов и сетевой аналитики с использованием нескольких LLM-моделей (GigaChat, Cotype, T-Pro).
+        Комплексная платформа на основе искусственного интеллекта для
+        оптимизации маршрутов магазинов и сетевой аналитики с использованием
+        нескольких LLM-моделей (GigaChat, Cotype, T-Pro).
       </p>
     </div>
 
-
     <!-- Quick Actions -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
+    <div
+      class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8"
+    >
       <h2 class="text-2xl font-bold text-gray-900 mb-6">Навигация</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <router-link
@@ -21,21 +24,21 @@
         >
           <div class="text-lg font-semibold mb-1">Dashboard</div>
         </router-link>
-        
+
         <router-link
           to="/optimize"
           class="bg-green-50 hover:bg-green-100 text-green-700 p-4 rounded-lg text-center transition-colors duration-200"
         >
           <div class="text-lg font-semibold mb-1">Test Models</div>
         </router-link>
-        
+
         <router-link
           to="/optimize"
           class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 p-4 rounded-lg text-center transition-colors duration-200"
         >
           <div class="text-lg font-semibold mb-1">Optimize</div>
         </router-link>
-        
+
         <router-link
           to="/analytics"
           class="bg-purple-50 hover:bg-purple-100 text-purple-700 p-4 rounded-lg text-center transition-colors duration-200"
@@ -47,5 +50,4 @@
   </div>
 </template>
 
-<script setup lang="ts">
-</script>
+<script setup lang="ts"></script>
