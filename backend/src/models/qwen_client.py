@@ -49,14 +49,14 @@ class QwenClient(LLMClient):
                 tokenizer = AutoTokenizer.from_pretrained(self.model_name)
                 model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
-                    dtype=(
-                        torch.float32 if self.device == "cpu" else torch.float16
-                    ),
+                    dtype=(torch.float32 if self.device == "cpu" else torch.float16),
                     device_map="auto",
                     low_cpu_mem_usage=True,
                 )
                 QwenClient._generator = pipeline(
-                    "text-generation", model=model, tokenizer=tokenizer,
+                    "text-generation",
+                    model=model,
+                    tokenizer=tokenizer,
                 )
                 logger.info("Локальная модель успешно загружена в память.")
             except Exception as e:
@@ -65,7 +65,9 @@ class QwenClient(LLMClient):
         return QwenClient._generator
 
     async def generate_route(
-        self, locations: List[Location], constraints: Dict = None,
+        self,
+        locations: List[Location],
+        constraints: Dict = None,
     ) -> Route:
         if not locations:
             logger.error("Валидация провалена: список локаций пуст")
@@ -111,29 +113,23 @@ class QwenClient(LLMClient):
                     )
                     await asyncio.sleep(sleep_time)
                 else:
-                    logger.error(
-                        "Все попытки генерации исчерпаны. Fallback required."
-                    )
+                    logger.error("Все попытки генерации исчерпаны. Fallback required.")
                     if isinstance(e, QwenError):
                         raise e
-                    raise QwenServerError(
-                        f"Local generation failed after retries: {e}"
-                    )
+                    raise QwenServerError(f"Local generation failed after retries: {e}")
 
-    async def _run_inference(
-        self, locations: List[Location], constraints: Dict
-    ) -> str:
+    async def _run_inference(self, locations: List[Location], constraints: Dict) -> str:
         """Обертка над синхронным pipeline"""
         generator = self._get_generator()
         prompt = self._construct_prompt(
-            [loc.model_dump() for loc in locations], constraints,
+            [loc.model_dump() for loc in locations],
+            constraints,
         )
 
         messages = [
             {
                 "role": "system",
-                "content": "You are a logistics expert. "
-                "Return ONLY valid JSON.",
+                "content": "You are a logistics expert. " "Return ONLY valid JSON.",
             },
             {"role": "user", "content": prompt},
         ]
@@ -165,9 +161,7 @@ class QwenClient(LLMClient):
             return raw_text
 
         except asyncio.TimeoutError:
-            raise QwenTimeoutError(
-                f"Generation exceeded timeout of {self.timeout}s"
-            )
+            raise QwenTimeoutError(f"Generation exceeded timeout of {self.timeout}s")
 
     def _construct_prompt(self, locations: List[Dict], constraints: Dict) -> str:
         locations_json = json.dumps(locations, ensure_ascii=False)
@@ -192,7 +186,8 @@ class QwenClient(LLMClient):
         }}"""
 
     def _parse_response(
-        self, text_content: str,
+        self,
+        text_content: str,
         original_locations: List[Location],
     ) -> Route:
         try:
@@ -219,8 +214,7 @@ class QwenClient(LLMClient):
             )
         except Exception as e:
             logger.error(
-                f"Ошибка парсинга или валидации: {e}. "
-                f"Текст: {text_content}",
+                f"Ошибка парсинга или валидации: {e}. " f"Текст: {text_content}",
             )
             raise QwenServerError(f"Route Validation Error: {str(e)}")
 
