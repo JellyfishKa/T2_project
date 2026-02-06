@@ -82,7 +82,7 @@ describe('Sidebar.vue', () => {
     })
 
     // Check if the dashboard link is highlighted
-    const dashboardLink = wrapper.findAll('a').find(link => link.text().includes('Dashboard'))
+    const dashboardLink = wrapper.findAll('a').find((link: any) => link.text().includes('Dashboard'))
     expect(dashboardLink?.classes()).toContain('text-blue-600')
     expect(dashboardLink?.classes()).toContain('bg-blue-50')
   })

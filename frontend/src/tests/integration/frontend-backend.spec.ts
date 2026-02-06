@@ -1,8 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
-import axios from 'axios'
-import HomeView from '@/views/HomeView.vue'
-import { createRouter, createMemoryHistory } from 'vue-router'
 
 // Mock the API service
 vi.mock('@/services/api', () => ({
@@ -14,23 +10,8 @@ vi.mock('@/services/api', () => ({
 import { api } from '@/services/api'
 
 describe('Frontend-Backend Integration Tests', () => {
-  let router
-  let wrapper
-
   beforeEach(() => {
-    router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/', component: HomeView },
-        { path: '/dashboard', component: { template: '<div>Dashboard</div>' } }
-      ]
-    })
-
-    wrapper = mount(HomeView, {
-      global: {
-        plugins: [router]
-      }
-    })
+    // No setup needed for this test suite
   })
 
   it('TC-FB-001: Integration test for route optimization API call', async () => {
@@ -130,7 +111,7 @@ describe('Frontend-Backend Integration Tests', () => {
       })
       // If we reach this line, the error wasn't caught
       expect(true).toBe(false) // This should not execute
-    } catch (error) {
+    } catch (error: any) {
       // Verify that the error was handled properly
       expect(error.response.status).toBe(500)
       expect(error.response.data.detail).toBe('Internal server error')

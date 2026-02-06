@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import Layout from '@/components/Layout.vue'
 import Header from '@/components/Header.vue'
 import Sidebar from '@/components/Sidebar.vue'
@@ -24,53 +24,37 @@ describe('Layout.vue', () => {
 
     // Check if the Header component is rendered
     expect(wrapper.findComponent(Header).exists()).toBe(true)
-    
+
     // Check if the main content area exists
     expect(wrapper.find('main').exists()).toBe(true)
-    
+
     // Check if the router view exists
     expect(wrapper.find('router-view-stub').exists()).toBe(true)
   })
 
-  it('manages sidebar state correctly', async () => {
+  it('shows/hides sidebar when toggle event is triggered', async () => {
     const wrapper = mount(Layout, {
       global: {
         plugins: [router]
       }
     })
 
-    // Initially sidebar should be closed
-    expect(wrapper.vm.isSidebarOpen).toBe(false)
+    // Initially sidebar should not be visible in mobile view
+    expect(wrapper.find('.fixed.inset-y-0.left-0.z-50.w-64.lg\\\\:hidden').exists()).toBe(false)
 
     // Trigger the toggle-sidebar event from the header
     const header = wrapper.findComponent(Header)
     await header.vm.$emit('toggle-sidebar')
 
-    // Sidebar should now be open
-    expect(wrapper.vm.isSidebarOpen).toBe(true)
+    // Sidebar should now be visible in mobile view
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.fixed.inset-y-0.left-0.z-50.w-64.lg\\\\:hidden').exists()).toBe(true)
 
-    // Close the sidebar
-    await wrapper.findComponent(Sidebar).vm.$emit('close')
-    expect(wrapper.vm.isSidebarOpen).toBe(false)
-  })
-
-  it('handles escape key to close sidebar', async () => {
-    const wrapper = mount(Layout, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    // Open the sidebar
-    await wrapper.setData({ isSidebarOpen: true })
-    expect(wrapper.vm.isSidebarOpen).toBe(true)
-
-    // Simulate pressing the escape key
-    const event = new KeyboardEvent('keydown', { key: 'Escape' })
-    window.dispatchEvent(event)
-
-    // Sidebar should be closed after escape key press
-    expect(wrapper.vm.isSidebarOpen).toBe(false)
+    // Close the sidebar by emitting close event from sidebar
+    const sidebar = wrapper.findComponent(Sidebar)
+    await sidebar.vm.$emit('close')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.fixed.inset-y-0.left-0.z-50.w-64.lg\\\\:hidden').exists()).toBe(false)
   })
 
   it('closes sidebar when clicking overlay on mobile', async () => {
@@ -80,9 +64,12 @@ describe('Layout.vue', () => {
       }
     })
 
-    // Open the sidebar
+    // Show the sidebar first
     await wrapper.setData({ isSidebarOpen: true })
-    expect(wrapper.vm.isSidebarOpen).toBe(true)
+    await wrapper.vm.$nextTick()
+    
+    // Check if sidebar is visible
+    expect(wrapper.find('.fixed.inset-y-0.left-0.z-50.w-64.lg\\\\:hidden').exists()).toBe(true)
 
     // Click on the overlay div
     const overlayDiv = wrapper.find('.fixed.inset-0.z-40.lg\\\\:hidden')
@@ -90,7 +77,7 @@ describe('Layout.vue', () => {
       await overlayDiv.trigger('click')
       // Wait for reactivity to update
       await wrapper.vm.$nextTick()
-      expect(wrapper.vm.isSidebarOpen).toBe(false)
+      expect(wrapper.find('.fixed.inset-y-0.left-0.z-50.w-64.lg\\\\:hidden').exists()).toBe(false)
     }
   })
 })

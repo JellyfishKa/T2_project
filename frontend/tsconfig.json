@@ -23,7 +23,7 @@
       "@/*": ["src/*"]
     },
 
-    "types": ["node", "vitest/globals"],
+    "types": ["node"],
     "allowSyntheticDefaultImports": true
   },
   "include": [
