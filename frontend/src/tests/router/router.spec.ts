@@ -7,7 +7,7 @@ const MockComponent = { template: '<div>Mock Component</div>' }
 
 // Create a test router with mock routes
 const createTestRouter = () => {
-  return createRouter({
+  const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       {
@@ -35,6 +35,14 @@ const createTestRouter = () => {
       }
     ]
   })
+
+  // Add the same beforeEach hook as the real router
+  router.beforeEach((to, from, next) => {
+    document.title = to.meta.title as string || 'T2 LLM Platform'
+    next()
+  })
+
+  return router
 }
 
 describe('Router', () => {
