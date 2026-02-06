@@ -25,10 +25,10 @@ describe('Header.vue', () => {
 
     // Check if the logo is rendered
     expect(wrapper.find('.h-8.w-8.bg-black').exists()).toBe(true)
-    
+
     // Check if the title is rendered
     expect(wrapper.text()).toContain('LLM Platform')
-    
+
     // Check if the navigation items exist
     expect(wrapper.findAll('a').length).toBeGreaterThan(0)
   })
@@ -60,7 +60,9 @@ describe('Header.vue', () => {
     })
 
     // Check if the dashboard link is highlighted
-    const dashboardLink = wrapper.findAll('a').find((link: any) => link.text().includes('Dashboard'))
+    const dashboardLink = wrapper
+      .findAll('a')
+      .find((link: any) => link.text().includes('Dashboard'))
     expect(dashboardLink?.classes()).toContain('text-blue-600')
     expect(dashboardLink?.classes()).toContain('bg-blue-50')
   })

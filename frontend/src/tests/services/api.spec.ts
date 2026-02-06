@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import axios from 'axios'
 import { api } from '@/services/api'
 
@@ -24,8 +24,8 @@ describe('API Service', () => {
       baseURL: process.env.VITE_API_URL || 'http://localhost:8000',
       timeout: 30000,
       headers: {
-        'Content-Type': 'application/json',
-      },
+        'Content-Type': 'application/json'
+      }
     })
 
     expect(newApi.defaults.baseURL).toBe('https://api.example.com')

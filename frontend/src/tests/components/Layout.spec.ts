@@ -2,7 +2,6 @@ import { mount, shallowMount } from '@vue/test-utils'
 import { describe, it, expect } from 'vitest'
 import Layout from '@/components/Layout.vue'
 import Header from '@/components/Header.vue'
-import Sidebar from '@/components/Sidebar.vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 // Create a minimal router for testing
@@ -32,7 +31,10 @@ describe('Layout.vue', () => {
     })
 
     // Check if the Header component is rendered
-    expect(wrapper.findComponent({ name: 'Header' }).exists() || wrapper.find('header-stub').exists()).toBe(true)
+    expect(
+      wrapper.findComponent({ name: 'Header' }).exists() ||
+        wrapper.find('header-stub').exists()
+    ).toBe(true)
 
     // Check if the main content area exists
     expect(wrapper.find('main').exists()).toBe(true)
