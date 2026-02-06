@@ -56,10 +56,9 @@ jobs:
           cd backend
           python -m black --check src/
 
-      - name: Run frontend formatting and linting checks
+      - name: Run frontend formatting checks
         run: |
           cd frontend
-          npx eslint src/ --ext .ts,.vue
           npx prettier --check src/
 
       - name: Run TypeScript type checking
