@@ -5,6 +5,9 @@ from datetime import datetime
 from time import time
 from typing import Dict, List
 
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
 from src.config import settings
 from src.models.exceptions import (
     QwenError,
@@ -14,10 +17,6 @@ from src.models.exceptions import (
 )
 from src.models.llm_client import LLMClient
 from src.models.schemas import Location, Route
-
-import torch
-
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 
 logger = logging.getLogger("qwen_client")
@@ -44,14 +43,15 @@ class QwenClient(LLMClient):
         if QwenClient._generator is None:
             try:
                 logger.info(
-                    f"Инициализация локальной модели {self.model_name}\
-                     на {self.device}...",
+                    f"Инициализация локальной модели {self.model_name} "
+                    f"на {self.device}...",
                 )
                 tokenizer = AutoTokenizer.from_pretrained(self.model_name)
                 model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
-                    dtype=torch.float32
-                    if self.device == "cpu" else torch.float16,
+                    dtype=(
+                        torch.float32 if self.device == "cpu" else torch.float16
+                    ),
                     device_map="auto",
                     low_cpu_mem_usage=True,
                 )
@@ -74,8 +74,10 @@ class QwenClient(LLMClient):
         start_time = time()
         logger.debug(
             "Запрос отправлен в локальную LLM",
-            extra={"locations_count": len(locations),
-                   "constraints": constraints},
+            extra={
+                "locations_count": len(locations),
+                "constraints": constraints,
+            },
         )
 
         max_retries = 3
@@ -83,8 +85,7 @@ class QwenClient(LLMClient):
 
         for attempt in range(1, max_retries + 2):
             try:
-                response_text = await self._run_inference(locations,
-                                                          constraints)
+                response_text = await self._run_inference(locations, constraints)
 
                 result = self._parse_response(response_text, locations)
 
@@ -94,8 +95,10 @@ class QwenClient(LLMClient):
 
                 logger.info(
                     "Маршрут успешно сгенерирован",
-                    extra={"duration": duration,
-                           "distance": result.total_distance_km},
+                    extra={
+                        "duration": duration,
+                        "distance": result.total_distance_km,
+                    },
                 )
                 return result
 
@@ -103,20 +106,23 @@ class QwenClient(LLMClient):
                 if attempt <= max_retries:
                     sleep_time = backoff_factor * (2 ** (attempt - 1))
                     logger.error(
-                        f"Ошибка попытки {attempt}/{max_retries}:"
+                        f"Ошибка попытки {attempt}/{max_retries}: "
                         f"{type(e).__name__}. Retry in {sleep_time}s",
                     )
                     await asyncio.sleep(sleep_time)
                 else:
-                    logger.error("Все попытки генерации исчерпаны."
-                                 "Fallback required.")
+                    logger.error(
+                        "Все попытки генерации исчерпаны. Fallback required."
+                    )
                     if isinstance(e, QwenError):
                         raise e
-                    raise QwenServerError("Local generation"
-                                          f"failed after retries: {e}")
+                    raise QwenServerError(
+                        f"Local generation failed after retries: {e}"
+                    )
 
-    async def _run_inference(self, locations: List[Location],
-                             constraints: Dict) -> str:
+    async def _run_inference(
+        self, locations: List[Location], constraints: Dict
+    ) -> str:
         """Обертка над синхронным pipeline"""
         generator = self._get_generator()
         prompt = self._construct_prompt(
@@ -133,7 +139,8 @@ class QwenClient(LLMClient):
         ]
 
         full_prompt = generator.tokenizer.apply_chat_template(
-            messages, tokenize=False,
+            messages,
+            tokenize=False,
             add_generation_prompt=True,
         )
 
@@ -158,13 +165,13 @@ class QwenClient(LLMClient):
             return raw_text
 
         except asyncio.TimeoutError:
-            raise QwenTimeoutError("Generation exceeded"
-                                   f"timeout of {self.timeout}s")
+            raise QwenTimeoutError(
+                f"Generation exceeded timeout of {self.timeout}s"
+            )
 
-    def _construct_prompt(self, locations: List[Dict],
-                          constraints: Dict) -> str:
-        return f"""Optimize route for: {json.dumps(locations,
-                                                   ensure_ascii=False)}
+    def _construct_prompt(self, locations: List[Dict], constraints: Dict) -> str:
+        locations_json = json.dumps(locations, ensure_ascii=False)
+        return f"""Optimize route for: {locations_json}
         You are logistic expert. Use your skills to generate proper route.
         Points with high priority should be visited first.
         Total cost in rubles would be
@@ -212,7 +219,7 @@ class QwenClient(LLMClient):
             )
         except Exception as e:
             logger.error(
-                f"Ошибка парсинга или валидации: {e}."
+                f"Ошибка парсинга или валидации: {e}. "
                 f"Текст: {text_content}",
             )
             raise QwenServerError(f"Route Validation Error: {str(e)}")
