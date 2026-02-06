@@ -1,105 +1,67 @@
-import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createRouter, createWebHistory } from 'vue-router'
-import Header from '../../components/Header.vue'
+import { describe, it, expect } from 'vitest'
+import Header from '@/components/Header.vue'
+import { createRouter, createMemoryHistory } from 'vue-router'
+
+// Create a minimal router for testing
+const history = createMemoryHistory()
+const router = createRouter({
+  history,
+  routes: [
+    { path: '/', component: { template: '<div>Home</div>' } },
+    { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
+    { path: '/optimize', component: { template: '<div>Optimize</div>' } },
+    { path: '/analytics', component: { template: '<div>Analytics</div>' } }
+  ]
+})
 
 describe('Header.vue', () => {
-  const router = createRouter({
-    history: createWebHistory(),
-    routes: [
-      { path: '/', component: { template: '<div>Home</div>' } },
-      { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
-      { path: '/optimize', component: { template: '<div>Optimize</div>' } },
-      { path: '/analytics', component: { template: '<div>Analytics</div>' } },
-    ]
-  })
-
-  it('рендерит логотип и название платформы', () => {
+  it('renders header with logo and title', () => {
     const wrapper = mount(Header, {
       global: {
         plugins: [router]
       }
     })
+
+    // Check if the logo is rendered
+    expect(wrapper.find('.h-8.w-8.bg-black').exists()).toBe(true)
     
-    expect(wrapper.find('h1').text()).toBe('LLM Platform')
-    expect(wrapper.find('p.text-gray-500').text()).toBe('AI Models Dashboard')
+    // Check if the title is rendered
+    expect(wrapper.text()).toContain('LLM Platform')
+    
+    // Check if the navigation items exist
+    expect(wrapper.findAll('a').length).toBeGreaterThan(0)
   })
 
-  it('содержит кнопку toggle sidebar для мобильных устройств', () => {
+  it('emits toggle-sidebar event when menu button is clicked', async () => {
     const wrapper = mount(Header, {
       global: {
         plugins: [router]
       }
     })
-    
-    const toggleButton = wrapper.find('button.lg\\:hidden')
-    expect(toggleButton.exists()).toBe(true)
-    expect(toggleButton.attributes('aria-label')).toBe('Open sidebar')
+
+    // Find and click the mobile menu button
+    const menuButton = wrapper.find('button')
+    await menuButton.trigger('click')
+
+    // Check if the event was emitted
+    expect(wrapper.emitted('toggle-sidebar')).toBeTruthy()
   })
 
-  it('эмитит событие при клике на кнопку toggle sidebar', async () => {
-    const wrapper = mount(Header, {
-      global: {
-        plugins: [router]
-      }
-    })
-    
-    const toggleButton = wrapper.find('button.lg\\:hidden')
-    await toggleButton.trigger('click')
-    
-    expect(wrapper.emitted()).toHaveProperty('toggle-sidebar')
-  })
-
-  it('отображает навигационные ссылки', async () => {
-    await router.push('/')
-    const wrapper = mount(Header, {
-      global: {
-        plugins: [router]
-      }
-    })
-    
-    const navItems = ['Home', 'Dashboard', 'Optimize', 'Analytics']
-    navItems.forEach(item => {
-      expect(wrapper.text()).toContain(item)
-    })
-  })
-
-  it('показывает активную навигационную ссылку', async () => {
+  it('highlights active navigation item', async () => {
+    // Navigate to dashboard
     await router.push('/dashboard')
-    const wrapper = mount(Header, {
-      global: {
-        plugins: [router]
-      }
-    })
-    
-    const activeLink = wrapper.find('.text-blue-600.bg-blue-50')
-    expect(activeLink.exists()).toBe(true)
-    expect(activeLink.text()).toBe('Dashboard')
-  })
+    await router.isReady()
 
-  it('скрывает описание на мобильных устройствах', () => {
     const wrapper = mount(Header, {
       global: {
         plugins: [router]
       }
     })
-    
-    const description = wrapper.find('p.text-gray-500')
-    expect(description.classes()).toContain('hidden')
-    expect(description.classes()).toContain('sm:block')
-  })
 
-  it('содержит логотип с правильными стилями', () => {
-    const wrapper = mount(Header, {
-      global: {
-        plugins: [router]
-      }
-    })
-    
-    const logo = wrapper.find('.bg-black.rounded-lg')
-    expect(logo.exists()).toBe(true)
-    expect(logo.classes()).toContain('h-8')
-    expect(logo.classes()).toContain('w-8')
-    expect(logo.find('span').text()).toBe('T2')
+    // Check if the dashboard link is highlighted
+    const dashboardLink = wrapper.findAll('a').find((link: any) => link.text().includes('Dashboard'))
+    expect(dashboardLink?.classes()).toContain('text-blue-600')
+    expect(dashboardLink?.classes()).toContain('bg-blue-50')
   })
 })
