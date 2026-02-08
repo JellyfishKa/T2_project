@@ -37,7 +37,7 @@ class QwenClient(LLMClient):
     def __init__(self):
         self.model_name = settings.qwen_model_id
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.timeout = 30.0
+        self.timeout = 30
 
     def _get_generator(self):
         """Загрузка модели один раз при первом вызове"""
@@ -52,8 +52,10 @@ class QwenClient(LLMClient):
                     self.model_name,
                     dtype=torch.float32
                     if self.device == "cpu" else torch.float16,
-                    device_map="auto",
+                    device_map="cpu",
                     low_cpu_mem_usage=True,
+                    load_in_8bit=True,
+                    trust_remote_code=True,
                 )
                 QwenClient._generator = pipeline(
                     "text-generation", model=model, tokenizer=tokenizer,
@@ -144,8 +146,9 @@ class QwenClient(LLMClient):
                     None,
                     lambda: generator(
                         full_prompt,
-                        max_new_tokens=512,
+                        max_new_tokens=128,
                         do_sample=False,
+                        num_beams=1,
                         temperature=0.1,
                     ),
                 ),
@@ -192,7 +195,6 @@ class QwenClient(LLMClient):
             json_start = text_content.find("{")
             json_end = text_content.rfind("}") + 1
             data = json.loads(text_content[json_start:json_end])
-            print(data)
 
             def to_float(val):
                 try:
