@@ -27,10 +27,10 @@ class TProClient(LLMClient):
     _llm = None
 
     def __init__(self):
-        self.model_filename = settings.tpro_model_id
-        self.timeout = 500000
+        self.model_name = settings.tpro_model_id
+        self.timeout = 30
         try:
-            self.model_path = settings.get_tpro_model_path()
+            self.model_path = settings.get_model_path(settings.tpro_model_id)
         except FileNotFoundError as e:
             logger.error(str(e))
             self.model_path = None
@@ -39,11 +39,10 @@ class TProClient(LLMClient):
         """Lazy Loading модели через llama.cpp"""
         if TProClient._llm is None:
             if not self.model_path:
-                raise TProServerError(f"Model file {self.model_filename}"
+                raise TProServerError(f"Model file {self.model_name}"
                                       "not found in project directories.")
 
             try:
-                # НАСТРОЙКИ НЕ ДЛЯ ПРОДА
                 logger.info(f"Loading GGUF model from {self.model_path}...")
                 TProClient._llm = Llama(
                     model_path=self.model_path,
@@ -112,8 +111,6 @@ class TProClient(LLMClient):
         loop = asyncio.get_event_loop()
 
         try:
-            # Запускаем блокирующую функцию
-            # create_chat_completion в thread pool
             output = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
@@ -135,21 +132,37 @@ class TProClient(LLMClient):
         except Exception as e:
             raise TProServerError(f"Inference error: {e}")
 
-    def _construct_prompt(self, locations: List[Dict],
-                          constraints: Dict) -> str:
-        return f"""
-        Task: Optimize logistics route.
-        Data: {json.dumps(locations, ensure_ascii=False)}
-        Constraints: {json.dumps(constraints) if constraints else "{}"}
+    def _construct_prompt(
+        self,
+        locations: List[Dict],
+        constraints: Dict,
+    ) -> str:
+        locations_json = json.dumps(locations, ensure_ascii=False)
+        constraints_str = json.dumps(constraints) if constraints else "{}"
 
-        Required Output JSON Schema:
+        return f"""
+        Role: You are a professional logistics expert specializing
+        in route optimization in Russia.
+        Task:
+        1. Optimize the route for the provided locations.
+        2. Prioritize high-priority points.
+        3. Estimate the total cost in RUB based on average petrol prices
+        for the region identified in the addresses.
+
+        Input Data:
+        Locations: {locations_json}
+        Constraints: {constraints_str}
+
+        Output Format:
+        Return ONLY a valid JSON object matching exactly this schema
+        (no markdown, no comments):
         {{
             "route_id": "string",
-            "locations_sequence": ["location_id_1", "location_id_2"],
+            "locations_sequence": ["id_from_input", ...],
             "total_distance_km": float,
             "total_time_hours": float,
             "total_cost_rub": float,
-            "model_used": "tpro-gguf-local",
+            "model_used": "{self.model_name}",
             "created_at": "{datetime.now().isoformat()}"
         }}
         """

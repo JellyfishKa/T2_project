@@ -21,26 +21,36 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(env_file=BASE_DIR / ".env")
 
-    def get_tpro_model_path(self) -> str:
+    def get_model_path(self, model_id: str) -> str:
         """
-        Пытается найти файл модели.
-        1. Сначала проверяет абсолютный путь.
-        2. Затем ищет в папке src/models (рядом с клиентом).
-        3. Затем ищет в корне backend.
+        Универсальный поиск GGUF файла модели.
+        1. Проверяет абсолютный путь.
+        2. Ищет в папке src/models.
+        3. Ищет в корне backend.
         """
-        if Path(self.tpro_model_id).exists():
-            return self.tpro_model_id
+        if not model_id:
+            raise ValueError("model_id cannot be empty")
 
+        model_file = Path(model_id)
+
+        # 1. Проверка абсолютного или относительного пути от текущей папки
+        if model_file.exists():
+            return str(model_file)
+
+        # 2. Поиск в директории src/models
         models_dir = BASE_DIR / "src" / "models"
-        model_path = models_dir / self.tpro_model_id
-        if model_path.exists():
-            return str(model_path)
+        path_in_models = models_dir / model_id
+        if path_in_models.exists():
+            return str(path_in_models)
 
-        root_path = BASE_DIR / self.tpro_model_id
+        # 3. Поиск в корне проекта
+        root_path = BASE_DIR / model_id
         if root_path.exists():
             return str(root_path)
 
-        raise FileNotFoundError(f"GGUF model not found: {self.tpro_model_id}")
+        raise FileNotFoundError(
+            f"GGUF model file not found: {model_id}",
+        )
 
 
 settings = Settings()
