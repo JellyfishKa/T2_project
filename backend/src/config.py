@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     tpro_api_endpoint: str
     tpro_model_id: str
 
+    llama_api_endpoint: str
+    llama_model_id: str
+
     model_config = ConfigDict(env_file=BASE_DIR / ".env")
 
     def get_model_path(self, model_id: str) -> str:

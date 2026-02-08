@@ -57,3 +57,41 @@ class TProServerError(TProError):
 
 class TProValidationError(TProError):
     pass
+
+
+class LlamaError(Exception):
+    """Базовый класс ошибок Llama"""
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(
+            self.message,
+        )
+
+    def __str__(self):
+        return f"{self.message}"
+
+
+class LlamaTimeoutError(LlamaError):
+    """Ошибка превышения времени ожидания Llama"""
+    pass
+
+
+class LlamaAuthError(LlamaError):
+    """Ошибка аутентификации Llama"""
+    pass
+
+
+class LlamaRateLimitError(LlamaError):
+    """Ошибка превышения лимита запросов Llama"""
+    pass
+
+
+class LlamaServerError(LlamaError):
+    """Ошибка сервера или инференса Llama"""
+    pass
+
+
+class LlamaValidationError(LlamaError):
+    """Ошибка валидации данных Llama"""
+    pass
