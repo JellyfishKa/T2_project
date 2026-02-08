@@ -11,13 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.11]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -35,3 +35,56 @@ jobs:
         run: |
           export PYTHONPATH=$PYTHONPATH:.
           pytest ml/tests/ -v
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm run test:run -- --coverage
+
+      - name: Run backend formatting checks
+        run: |
+          cd backend
+          python -m black --check src/
+
+      - name: Run frontend formatting checks
+        run: |
+          cd frontend
+          npx prettier --check src/
+
+      - name: Run TypeScript type checking
+        run: |
+          cd frontend
+          npm run type-check
+
+      - name: Run Python security checks with Bandit
+        run: |
+          cd backend
+          bandit -r src/ -f json -o bandit-report.json || echo "Bandit completed with issues"
+
+      - name: Run Python dependency vulnerability scan
+        run: |
+          cd backend
+          pip-audit --desc on .
+
+      - name: Run frontend dependency vulnerability scan
+        run: |
+          cd frontend
+          npm audit --audit-level critical --production || echo "Audit completed with known issues"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./backend/coverage.xml, ./frontend/coverage/coverage-final.json
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false

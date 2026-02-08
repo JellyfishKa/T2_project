@@ -53,49 +53,5 @@ Thumbs.db
 
 ./PM_files/
 /PM_files
-
-# ===============================
-# Backend-specific ignores
-# ===============================
-
-backend/.ipynb_checkpoints/
-backend/.idea/
-backend/.mypy_cache/
-backend/.vscode/
-backend/__pycache__/
-backend/.pytest_cache/
-backend/htmlcov/
-backend/dist/
-backend/site/
-backend/.coverage*
-backend/coverage.xml
-backend/.netlify/
-backend/test.db
-backend/log.txt
-backend/Pipfile.lock
-backend/env3.*
-backend/env
-backend/.env
-backend/docs_build/
-backend/site_build/
-backend/venv/
-backend/.venv/
-backend/docs.zip
-backend/archive.zip
-__pycache__/
-cerfs/
-
-# vim temporary files (backend)
-backend/*~
-backend/.*.sw?
-backend/.cache/
-
-# macOS (backend)
-backend/.DS_Store
-
-# Ignore while the setup still depends on requirements.txt files
-backend/uv.lock
-
-# codspeed
-backend/.codspeed/
+/frontend/node_modules
 *.pyc
