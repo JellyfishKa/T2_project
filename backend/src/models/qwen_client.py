@@ -3,10 +3,17 @@ import json
 import logging
 from datetime import datetime
 from time import time
-from typing import Dict, List
+from typing import (
+    Dict,
+    List,
+)
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+try:
+    from llama_cpp import Llama
+except ImportError:
+    raise ImportError(
+        "Please install llama-cpp-python: pip install llama-cpp-python",
+    )
 
 from src.config import settings
 from src.models.exceptions import (
@@ -16,55 +23,49 @@ from src.models.exceptions import (
     QwenValidationError,
 )
 from src.models.llm_client import LLMClient
-from src.models.schemas import Location, Route
-
+from src.models.schemas import (
+    Location,
+    Route,
+)
 
 logger = logging.getLogger("qwen_client")
-logger.setLevel(logging.DEBUG)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
 
 class QwenClient(LLMClient):
-    _generator = None
+    _llm = None
 
     def __init__(self):
         self.model_name = settings.qwen_model_id
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.timeout = 30
+        self.timeout = 120
+        try:
+            self.model_path = settings.get_model_path(settings.qwen_model_id)
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            self.model_path = None
 
     def _get_generator(self):
-        """Загрузка модели один раз при первом вызове"""
-        if QwenClient._generator is None:
+        """Lazy Loading модели через llama.cpp."""
+        if QwenClient._llm is None:
+            if not self.model_path:
+                raise QwenServerError(
+                    f"Model file for {self.model_name} not found.",
+                )
+
             try:
-                logger.info(
-                    f"Инициализация локальной модели {self.model_name} "
-                    f"на {self.device}...",
+                logger.info(f"Loading Qwen GGUF from {self.model_path}...")
+                QwenClient._llm = Llama(
+                    model_path=self.model_path,
+                    n_threads=4,
+                    n_gpu_layers=0,
+                    n_ctx=2048,
+                    n_batch=512,
+                    verbose=False,
                 )
-                tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    dtype=(torch.float32 if self.device == "cpu" else torch.float16),
-                    device_map="auto",
-                    low_cpu_mem_usage=True,
-                    load_in_8bit=True,
-                    trust_remote_code=True,
-                )
-                QwenClient._generator = pipeline(
-                    "text-generation",
-                    model=model,
-                    tokenizer=tokenizer,
-                )
-                logger.info("Локальная модель успешно загружена в память.")
+                logger.info("Qwen GGUF model loaded successfully.")
             except Exception as e:
-                logger.error(f"Критическая ошибка при загрузке модели: {e}")
+                logger.error(f"Critical error loading Qwen GGUF: {e}")
                 raise QwenServerError(f"Failed to load local model: {e}")
-        return QwenClient._generator
+        return QwenClient._llm
 
     async def generate_route(
         self,
@@ -72,12 +73,12 @@ class QwenClient(LLMClient):
         constraints: Dict = None,
     ) -> Route:
         if not locations:
-            logger.error("Валидация провалена: список локаций пуст")
-            raise QwenValidationError("Список локаций пуст")
+            logger.error("Validation failed: locations list is empty")
+            raise QwenValidationError("Locations list is empty")
 
         start_time = time()
         logger.debug(
-            "Запрос отправлен в локальную LLM",
+            "Request sent to Qwen GGUF",
             extra={
                 "locations_count": len(locations),
                 "constraints": constraints,
@@ -87,18 +88,22 @@ class QwenClient(LLMClient):
         max_retries = 3
         backoff_factor = 1
 
+        locations_data = [loc.model_dump() for loc in locations]
+
         for attempt in range(1, max_retries + 2):
             try:
-                response_text = await self._run_inference(locations, constraints)
-
+                response_text = await self._run_inference(
+                    locations_data,
+                    constraints,
+                )
                 result = self._parse_response(response_text, locations)
 
                 duration = time() - start_time
                 if duration > 10.0:
-                    logger.warning(f"Медленная генерация: {duration:.2f}s")
+                    logger.warning(f"Slow generation: {duration:.2f}s")
 
                 logger.info(
-                    "Маршрут успешно сгенерирован",
+                    "Route generated successfully",
                     extra={
                         "duration": duration,
                         "distance": result.total_distance_km,
@@ -110,83 +115,96 @@ class QwenClient(LLMClient):
                 if attempt <= max_retries:
                     sleep_time = backoff_factor * (2 ** (attempt - 1))
                     logger.error(
-                        f"Ошибка попытки {attempt}/{max_retries}: "
+                        f"Error attempt {attempt}/{max_retries}: "
                         f"{type(e).__name__}. Retry in {sleep_time}s",
                     )
                     await asyncio.sleep(sleep_time)
                 else:
-                    logger.error("Все попытки генерации исчерпаны. Fallback required.")
+                    logger.error("All generation attempts exhausted.")
                     if isinstance(e, QwenError):
                         raise e
-                    raise QwenServerError(f"Local generation failed after retries: {e}")
+                    raise QwenServerError(
+                        f"Local generation failed: {e}",
+                    )
 
-    async def _run_inference(self, locations: List[Location], constraints: Dict) -> str:
-        """Обертка над синхронным pipeline"""
-        generator = self._get_generator()
-        prompt = self._construct_prompt(
-            [loc.model_dump() for loc in locations],
-            constraints,
-        )
+    async def _run_inference(
+        self,
+        locations_data: List[Dict],
+        constraints: Dict,
+    ) -> str:
+        """Запуск инференса в отдельном потоке."""
+        llm = self._get_generator()
+        prompt = self._construct_prompt(locations_data, constraints)
 
         messages = [
             {
                 "role": "system",
-                "content": "You are a logistics expert. " "Return ONLY valid JSON.",
+                "content": (
+                    "You are a logistics expert. "
+                    "Return ONLY valid JSON."
+                ),
             },
             {"role": "user", "content": prompt},
         ]
 
-        full_prompt = generator.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-
         loop = asyncio.get_event_loop()
         try:
-            outputs = await asyncio.wait_for(
+            output = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
-                    lambda: generator(
-                        full_prompt,
-                        max_new_tokens=128,
-                        do_sample=False,
-                        num_beams=1,
+                    lambda: llm.create_chat_completion(
+                        messages=messages,
+                        max_tokens=512,
                         temperature=0.1,
+                        stop=["<|im_end|>"],
                     ),
                 ),
                 timeout=self.timeout,
             )
 
-            raw_text = outputs[0]["generated_text"]
-            if "<|im_start|>assistant" in raw_text:
-                return raw_text.split("<|im_start|>assistant")[-1].strip()
-            return raw_text
+            return output["choices"][0]["message"]["content"]
 
         except asyncio.TimeoutError:
-            raise QwenTimeoutError(f"Generation exceeded timeout of {self.timeout}s")
+            raise QwenTimeoutError(
+                f"Generation exceeded timeout of {self.timeout}s",
+            )
+        except Exception as e:
+            raise QwenServerError(f"Inference error: {e}")
 
-    def _construct_prompt(self, locations: List[Dict], constraints: Dict) -> str:
+    def _construct_prompt(
+        self,
+        locations: List[Dict],
+        constraints: Dict,
+    ) -> str:
         locations_json = json.dumps(locations, ensure_ascii=False)
-        return f"""Optimize route for: {locations_json}
-        You are logistic expert. Use your skills to generate proper route.
-        Points with high priority should be visited first.
-        Total cost in rubles would be
-        calculated as petrol prices.
-        It's all depends on location (town in Russia).
-        You should search for petrol price for current region
-        (you can get what's location
-        by analyzing address).
-        Return ONLY JSON with these exact keys:
+        constraints_str = json.dumps(constraints) if constraints else "{}"
+
+        return f"""
+        Role: You are a professional logistics expert specializing
+        in route optimization in Russia.
+        Task:
+        1. Optimize the route for the provided locations.
+        2. Prioritize high-priority points.
+        3. Estimate the total cost in RUB based on average petrol prices
+        for the region identified in the addresses.
+
+        Input Data:
+        Locations: {locations_json}
+        Constraints: {constraints_str}
+
+        Output Format:
+        Return ONLY a valid JSON object matching exactly this schema
+        (no markdown, no comments):
         {{
             "route_id": "string",
-            "locations_sequence": ["id1", "id2", "id3", ...],
+            "locations_sequence": ["id_from_input", ...],
             "total_distance_km": float,
             "total_time_hours": float,
             "total_cost_rub": float,
-            "model_used": "qwen-local",
+            "model_used": "{self.model_name}",
             "created_at": "{datetime.now().isoformat()}"
-        }}"""
+        }}
+        """
 
     def _parse_response(
         self,
@@ -194,9 +212,19 @@ class QwenClient(LLMClient):
         original_locations: List[Location],
     ) -> Route:
         try:
-            json_start = text_content.find("{")
-            json_end = text_content.rfind("}") + 1
-            data = json.loads(text_content[json_start:json_end])
+            # Очистка markdown блоков, если модель их добавила
+            clean_text = text_content.strip()
+            if clean_text.startswith("```json"):
+                clean_text = clean_text[7:]
+            if clean_text.endswith("```"):
+                clean_text = clean_text[:-3]
+
+            json_start = clean_text.find("{")
+            json_end = clean_text.rfind("}") + 1
+            if json_start == -1:
+                raise ValueError("No JSON object found in response")
+
+            data = json.loads(clean_text[json_start:json_end])
 
             def to_float(val):
                 try:
@@ -216,7 +244,7 @@ class QwenClient(LLMClient):
             )
         except Exception as e:
             logger.error(
-                f"Ошибка парсинга или валидации: {e}. " f"Текст: {text_content}",
+                f"Parsing error: {e}. Text: {text_content}",
             )
             raise QwenServerError(f"Route Validation Error: {str(e)}")
 
@@ -224,4 +252,4 @@ class QwenClient(LLMClient):
         return "Not implemented"
 
     async def health_check(self) -> bool:
-        return torch.cuda.is_available() or self.device == "cpu"
+        return QwenClient._llm is not None
