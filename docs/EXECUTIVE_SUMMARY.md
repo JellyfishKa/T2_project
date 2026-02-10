@@ -26,7 +26,7 @@
 ## Цели
 
 ### Основные цели (MVP - Неделя 2)
-1. Интегрировать 3 LLM-модели (GigaChat, Cotype, T-Pro)
+1. Интегрировать 3 LLM-модели (Qwen, T-Pro, Llama)
 2. Оптимизация маршрутов работает (базовый алгоритм)
 3. Dashboard UI функционален (80%)
 4. Команда комфортна с tech stack
@@ -58,7 +58,7 @@
 
 **Backend**: Python + FastAPI + PostgreSQL  
 **Frontend**: Vue 3 + TypeScript + Tailwind CSS  
-**LLM Models**: GigaChat, Cotype, T-Pro  
+**LLM Models**: Qwen, T-Pro, Llama
 **DevOps**: Docker + GitHub Actions  
 
 ---
@@ -154,7 +154,7 @@
 
 | Риск | Влияние | Вероятность | Смягчение |
 |------|---------|-------------|-----------|
-| GigaChat API недоступна | Высокое | Среднее | Используй Cotype fallback (всегда работает) |
+| Qwen API недоступна | Высокое | Среднее | Используй T-Pro/Llama fallback (Llama всегда работает локально) |
 | Scope creep | Высокое | Высокое | Строгое Понедельник планирование, Пятница reviews |
 | Performance проблемы | Среднее | Среднее | Performance тестирование в Неделе 3 |
 | Integration delays | Среднее | Низкое | Ясные API контракты определены upfront |
