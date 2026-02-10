@@ -1,0 +1,5 @@
+[flake8]
+max-line-length = 100
+inline-quotes = double
+import-order-style = google
+extend-ignore = E203, W503, BLK, AZ, ASY, I1, I2
