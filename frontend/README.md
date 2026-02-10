@@ -1,48 +1,52 @@
 # T2 Project
 
-Vue 3 веб-интерфейс для работы с LLM моделями GigaChat, Cotype и T-Pro
+Vue 3 веб-интерфейс для работы с LLM моделями Llama, Qwen и T-Pro
 ## Структура проекта
 
 ```
 frontend/
-├── node_modules/          # Зависимости npm
-├── public/               # Статические файлы
-├── src/                  
-│   ├── components/       # Vue компоненты
-│   │   ├── Header.vue
-│   │   ├── Layout.vue
-│   │   ├── RouteMap.vue
-│   │   └── Sidebar.vue
-│   ├── router/          # Маршрутизация (Vue Router)
-│   │    └── index.ts         
-│   ├── services/        # Сервисы для работы с API
-│   │   └── api.ts        
-│   ├── styles/          # Глобальные стили
-│   │   └── main.css       
-│   ├── tests/           # Тесты
-│   │   └── components/
-│   │   │   ├── Dashboard.spec.ts
-│   │   │   ├── Header.spec.ts
-│   │   │   └── Layout.spec.ts
-│   │   └──setup.js
-│   ├── views/           # Страницы приложения
-│   │   ├── DashboardView.vue
-│   │   ├── HomeView.vue
-│   │   ├── AnalyticsView.vue
-│   │   └── OptimizeView.vue
-│   ├── App.vue          # Корневой компонент
-│   └── main.ts          # Точка входа
-├── .env                 # Переменные окружения
-├── env.d.ts             # Объявления TypeScript
-├── index.html           # HTML шаблон
-├── package.json         # Зависимости и скрипты
-├── package-lock.json    # Лок версий зависимостей
-├── postcss.config.js    # Конфигурация PostCSS
-├── README.md            # Эта документация
-├── tailwind.config.js   # Конфигурация TailwindCSS
-├── tsconfig.json        # Конфигурация TypeScript
-├── vite.config.ts       # Конфигурация Vite
-└── vitest.config.ts     # Конфигурация тестов
+├── src/
+│   ├── components/
+│   │   ├── dashboard/          # Компоненты дашборда
+│   │   │   ├── MetricCard.vue      
+│   │   │   ├── MetricsTable.vue   
+│   │   │   ├── ModelComparison.vue 
+│   │   │   ├── RouteList.vue      
+│   │   │   ├── RouteMetrics.vue   
+│   │   │   └── HealthStatus.vue   
+│   │   ├── optimize/           # Компоненты оптимизации
+│   │   │   ├── ConstraintsPanel.vue # Панель ограничений
+│   │   │   ├── FileUpload.vue      
+│   │   │   ├── LocationInput.vue    
+│   │   │   └── OptimizationForm.vue 
+│   │   ├── types.ts            
+│   │   ├── Header.vue        
+│   │   ├── Layout.vue         
+│   │   ├── RouteMap.vue        
+│   │   └── Sidebar.vue         
+│   ├── views/                  # Страницы приложения
+│   │   ├── HomeView.vue        
+│   │   ├── DashboardView.vue   
+│   │   ├── OptimizeView.vue    
+│   │   └── AnalyticsView.vue   
+│   ├── services/               # Сервисы API
+│   │   ├── api.ts             
+│   │   └── mockData.ts        
+│   ├── router/                 # Маршрутизация
+│   │   └── index.ts
+│   ├── tests/                  # Тесты
+│   │   ├── components/       
+│   │   ├── views/              
+│   │   └── services/           
+│   ├── styles/                 # Глобальные стили
+│   │   └── main.css
+│   ├── App.vue                 
+│   └── main.ts              
+├── package.json               # Зависимости
+├── tsconfig.json              # TypeScript конфиг
+├── vite.config.ts             # Vite конфиг
+├── tailwind.config.js         # Tailwind конфиг
+└── README.md                  
 ```
 
 ## Быстрый старт
@@ -64,12 +68,6 @@ npm run dev
 
 ```bash
 npm run test
-```
-
-### 3. Запуск бенчмарка
-
-```bash
-python ml/benchmarks/llm_benchmark.py --iterations 5
 ```
 
 
