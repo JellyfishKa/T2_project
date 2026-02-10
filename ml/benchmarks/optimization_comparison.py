@@ -1,7 +1,7 @@
 """
 Сравнение результатов оптимизации маршрутов по всем трём моделям (ML-5).
 
-Запускает оптимизацию для каждой модели (Qwen, Llama, T-Pro / GigaChat, Cotype, T-Pro),
+Запускает оптимизацию для каждой модели (Qwen, Llama, T-Pro),
 оценивает качество через backend quality_evaluator, сохраняет результаты в JSON
 и генерирует отчёт optimization_report.md.
 """
@@ -126,16 +126,12 @@ def _parse_order_from_response(response: str, n: int) -> Optional[List[int]]:
 
 
 def _get_backend_clients() -> Dict[str, Any]:
-    """Возвращает клиенты backend (GigaChat, Cotype, T-Pro) по возможности."""
+    """Возвращает клиенты backend (T-Pro) по возможности."""
     clients = {}
     try:
-        from src.models.gigachat_client import GigaChatClient
-        from src.models.cotype_client import CotypeClient
         from src.models.tpro_client import TProClient
-        clients["qwen"] = GigaChatClient(token="opt_token", api_url="http://opt.url")
-        clients["llama"] = CotypeClient(model_path="/opt/model")
-        clients["tpro"] = TProClient(api_key="opt_key")
-    except ImportError:
+        clients["tpro"] = TProClient()
+    except Exception:
         pass
     return clients
 
