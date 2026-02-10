@@ -1,15 +1,11 @@
 # ===============================
 # Code formatting & linting
 # ===============================
-black==25.12.0
+flake8==7.3.0
 flake8-absolute-import==1.0.0.3
-flake8-alphabetize==0.0.21
 flake8-commas==4.0.0
 flake8-fastapi==0.7.0
 flake8-plugin-utils==1.3.3
-flake8-use-pathlib==0.3.0
-flake8-warnings==0.4.1
-flake8==7.3.0
 flake8_import_order==0.19.2
 
 # ===============================
