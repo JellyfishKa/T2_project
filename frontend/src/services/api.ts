@@ -1,4 +1,3 @@
-// Более простая версия - раздельный mock API для development
 import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios'
 import {
   Location,
