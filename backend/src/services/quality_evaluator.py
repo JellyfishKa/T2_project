@@ -37,7 +37,7 @@ def _component_score(reduction_pct: float) -> float:
 
 
 def get_route_quality_metrics(
-    original: Dict[str, Any], optimized: Dict[str, Any]
+    original: Dict[str, Any], optimized: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
     Вычисляет метрики качества оптимизации без итоговой оценки.
