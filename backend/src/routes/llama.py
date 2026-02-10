@@ -18,7 +18,7 @@ router = APIRouter(prefix="/llama", tags=["Llama LLM"])
 
 @router.post("/optimize", response_model=Route, status_code=status.HTTP_200_OK)
 async def optimize_route_llama(locations: List[Location],
-                               constraints: Dict = {}):
+                               constraints: Dict = None):
     client = LlamaClient()
     try:
         return await client.generate_route(locations, constraints)

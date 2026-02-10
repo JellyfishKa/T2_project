@@ -87,8 +87,7 @@ class LlamaClient(LLMClient):
                     locations_data,
                     constraints,
                 )
-                logger.info("RAW MODEL RESPONSE"
-                            f"(Attempt {attempt}):\n{response_text}")
+                logger.info(f"RAW MODEL RESPONSE (Attempt {attempt}):\n{response_text}")
                 result = self._parse_response(response_text, locations)
 
                 duration = time() - start_time

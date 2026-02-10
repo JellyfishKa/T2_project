@@ -39,8 +39,9 @@ class TProClient(LLMClient):
         """Lazy Loading модели через llama.cpp"""
         if TProClient._llm is None:
             if not self.model_path:
-                raise TProServerError(f"Model file {self.model_name}"
-                                      "not found in project directories.")
+                raise TProServerError(
+                    f"Model file {self.model_name} not found in project directories.",
+                )
 
             try:
                 logger.info(f"Loading GGUF model from {self.model_path}...")
@@ -83,8 +84,7 @@ class TProClient(LLMClient):
 
             except Exception as e:
                 if attempt <= max_retries:
-                    logger.warning(f"Retry {attempt}/{max_retries}"
-                                   "due to: {e}")
+                    logger.warning(f"Retry {attempt}/{max_retries} due to: {e}")
                 else:
                     logger.error("All retries exhausted.")
                     raise TProServerError(f"Generation failed: {e}")
@@ -97,7 +97,7 @@ class TProClient(LLMClient):
 
         system_prompt = (
             "You are a logistics expert. "
-            "You MUST return ONLY valid JSON with"
+            "You MUST return ONLY valid JSON with "
             "no markdown formatting or explanations."
         )
 
@@ -127,8 +127,7 @@ class TProClient(LLMClient):
             return content
 
         except asyncio.TimeoutError:
-            raise TProTimeoutError("Generation timed out"
-                                   f"after {self.timeout}s")
+            raise TProTimeoutError(f"Generation timed out after {self.timeout}s")
         except Exception as e:
             raise TProServerError(f"Inference error: {e}")
 

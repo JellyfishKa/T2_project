@@ -10,7 +10,7 @@ router = APIRouter(prefix="/qwen", tags=["Qwen LLM"])
 
 
 @router.post("/optimize", response_model=Route)
-async def optimize_route(locations: List[Location], constraints: Dict = {}):
+async def optimize_route(locations: List[Location], constraints: Dict = None):
     client = QwenClient()
     try:
         return await client.generate_route(locations, constraints)

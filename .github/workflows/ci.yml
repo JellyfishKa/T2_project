@@ -51,10 +51,10 @@ jobs:
           cd frontend
           npm run test:run -- --coverage
 
-      - name: Run backend formatting checks
+      - name: Run backend linting checks
         run: |
           cd backend
-          python -m black --check src/
+          python -m flake8 src/
 
       - name: Run frontend formatting checks
         run: |
