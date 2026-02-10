@@ -58,3 +58,4 @@ Thumbs.db
 /PM_files
 /frontend/node_modules
 *.pyc
+/backend/src/models
