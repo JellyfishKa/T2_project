@@ -1,11 +1,4 @@
-import {
-  Location,
-  Route,
-
-  Metric,
-  BenchmarkResult,
-  HealthStatus
-} from './types'
+import { Location, Route, Metric, BenchmarkResult, HealthStatus } from './types'
 
 // 5+ магазинов с координатами Москвы
 export const mockLocations: Location[] = [

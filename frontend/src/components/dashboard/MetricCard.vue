@@ -28,5 +28,4 @@ const formattedValue = computed(() => {
   }
   return props.value.toFixed(1)
 })
-
 </script>
