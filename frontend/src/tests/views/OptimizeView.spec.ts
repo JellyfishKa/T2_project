@@ -25,7 +25,7 @@ const MockFileUpload = {
 
 describe('OptimizeView.vue', () => {
   let wrapper: any
-  
+
   beforeEach(() => {
     const router = createRouter({
       history: createMemoryHistory(),
@@ -34,7 +34,7 @@ describe('OptimizeView.vue', () => {
         { path: '/optimize', component: OptimizeView }
       ]
     })
-    
+
     wrapper = mount(OptimizeView, {
       global: {
         plugins: [router],
@@ -47,15 +47,13 @@ describe('OptimizeView.vue', () => {
     })
   })
 
- 
-
   it('displays model selection options', () => {
     const modelLabels = wrapper.findAll('div.text-sm.font-medium')
-    
+
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
     expect(wrapper.text()).toContain('T-Pro')
-    
+
     // Проверяем описания моделейs
     expect(wrapper.text()).toContain('Высокая точность, платный')
     expect(wrapper.text()).toContain('Быстрый, бесплатный')
@@ -70,28 +68,21 @@ describe('OptimizeView.vue', () => {
   it('changes selected model when clicked', async () => {
     const qwenRadio = wrapper.find('input[value="qwen"]')
     await qwenRadio.setValue()
-    
+
     expect(wrapper.vm.selectedModel).toBe('qwen')
   })
 
   it('handles form validation updates', async () => {
     const optimizationForm = wrapper.findComponent({ name: 'OptimizationForm' })
-  
-
-    
 
     expect(wrapper.vm.isFormValid).toBe(false)
   })
-
-  
-
-
 
   it('disables optimize button when form is invalid', async () => {
     // Устанавливаем невалидную форму
     wrapper.vm.isFormValid = false
     await nextTick()
-    
+
     const optimizeButton = wrapper.find('button.bg-blue-600')
     expect(optimizeButton.attributes('disabled')).toBe('')
     expect(optimizeButton.classes()).toContain('disabled:opacity-50')
@@ -101,28 +92,30 @@ describe('OptimizeView.vue', () => {
     // Устанавливаем валидную форму
     wrapper.vm.isFormValid = true
     await nextTick()
-    
+
     const optimizeButton = wrapper.find('button.bg-blue-600')
     expect(optimizeButton.attributes('disabled')).toBeUndefined()
   })
 
   it('shows alert when optimizing with invalid form', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
-    
+
     wrapper.vm.isFormValid = false
     await wrapper.vm.handleOptimize()
-    
-    expect(alertSpy).toHaveBeenCalledWith('Пожалуйста, заполните все обязательные поля формы')
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Пожалуйста, заполните все обязательные поля формы'
+    )
     alertSpy.mockRestore()
   })
 
   it('resets form when reset button is clicked', async () => {
     const resetButton = wrapper.find('button.bg-white')
     await resetButton.trigger('click')
-    
+
     // Проверяем, что модель сбросилась к Llama
     expect(wrapper.vm.selectedModel).toBe('llama')
-    
+
     // Проверяем, что constraints сбросились к значениям по умолчанию
     expect(wrapper.vm.constraints).toEqual({
       vehicleCapacity: 1,
@@ -140,6 +133,8 @@ describe('OptimizeView.vue', () => {
 
   it('shows form requirements information', () => {
     expect(wrapper.text()).toContain('Все поля обязательны для заполнения')
-    expect(wrapper.text()).toContain('Минимум 2 магазина для оптимизации маршрута')
+    expect(wrapper.text()).toContain(
+      'Минимум 2 магазина для оптимизации маршрута'
+    )
   })
 })

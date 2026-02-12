@@ -23,7 +23,7 @@ export const mockLocations: Location[] = [
     id: 'store-2',
     name: 'ТЦ Европейский',
     latitude: 55.7358,
-    longitude: 37.5240,
+    longitude: 37.524,
     address: 'Площадь Киевского Вокзала, 2, Москва',
     time_window_start: '10:00',
     time_window_end: '22:00',
@@ -220,5 +220,5 @@ export const generateMockRoute = () => {
 }
 
 export const simulateDelay = (ms = 500): Promise<void> => {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }

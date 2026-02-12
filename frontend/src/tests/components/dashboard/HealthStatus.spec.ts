@@ -66,7 +66,7 @@ describe('HealthStatus.vue', () => {
     })
 
     const dots = wrapper.findAll('.h-2.w-2.rounded-full')
-    
+
     // database: connected -> green
     expect(dots[0].classes()).toContain('bg-green-500')
     // llama: connected -> green
@@ -105,12 +105,15 @@ describe('HealthStatus.vue', () => {
     const healthyWrapper = mount(HealthStatus, {
       props: { status: healthyStatus }
     })
-    expect(healthyWrapper.find('path[d*="M9 12l2 2 4-4m6 2a9"]').exists()).toBe(true)
+    expect(healthyWrapper.find('path[d*="M9 12l2 2 4-4m6 2a9"]').exists()).toBe(
+      true
+    )
 
     const unhealthyWrapper = mount(HealthStatus, {
       props: { status: unhealthyStatus }
     })
-    expect(unhealthyWrapper.find('path[d*="M12 9v2m0 4h.01m-6.938"]').exists()).toBe(true)
+    expect(
+      unhealthyWrapper.find('path[d*="M12 9v2m0 4h.01m-6.938"]').exists()
+    ).toBe(true)
   })
-
 })

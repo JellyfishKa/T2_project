@@ -52,9 +52,10 @@ describe('MetricsTable.vue', () => {
     })
 
     expect(wrapper.text()).toContain('Нет метрик')
-    expect(wrapper.text()).toContain('Запустите оптимизацию для создания метрик')
+    expect(wrapper.text()).toContain(
+      'Запустите оптимизацию для создания метрик'
+    )
   })
-
 
   it('отображает мобильные карточки на маленьких экранах', () => {
     // Имитируем маленький экран
@@ -83,7 +84,7 @@ describe('MetricsTable.vue', () => {
 
   it('правильно переводит названия моделей', () => {
     const wrapper = mount(MetricsTable, {
-      props: { 
+      props: {
         metrics: [
           {
             id: 'metric-1',

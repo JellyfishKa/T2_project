@@ -55,7 +55,7 @@ describe('DashboardView.vue', () => {
 
   beforeEach(() => {
     vi.resetAllMocks()
-    
+
     // Настраиваем моки
     vi.mocked(api.fetchRoutes).mockResolvedValue(mockRoutes)
     vi.mocked(api.fetchRouteDetails).mockResolvedValue(mockRouteDetails)
@@ -74,16 +74,14 @@ describe('DashboardView.vue', () => {
 
   it('отображает заголовок и описание', () => {
     const wrapper = mount(DashboardView)
-    
+
     expect(wrapper.text()).toContain('Dashboard')
     expect(wrapper.text()).toContain('Обзор оптимизированных маршрутов')
   })
 
-
-
   it('отображает загрузочное состояние', () => {
     const wrapper = mount(DashboardView)
-    
+
     expect(wrapper.text()).toContain('Загрузка данных...')
     expect(wrapper.find('.animate-spin').exists()).toBe(true)
   })
@@ -91,7 +89,7 @@ describe('DashboardView.vue', () => {
   it('отображает статус здоровья', async () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
-    
+
     expect(wrapper.text()).toContain('Система работает нормально')
     expect(wrapper.text()).toContain('Все системы работают')
   })
@@ -99,7 +97,7 @@ describe('DashboardView.vue', () => {
   it('отображает статистику маршрутов', async () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
-    
+
     expect(wrapper.text()).toContain('Всего маршрутов')
     expect(wrapper.text()).toContain('3')
     expect(wrapper.text()).toContain('Среднее время')
@@ -108,10 +106,10 @@ describe('DashboardView.vue', () => {
 
   it('отображает ошибку при неудачной загрузке', async () => {
     vi.mocked(api.fetchRoutes).mockRejectedValue(new Error('Network error'))
-    
+
     const wrapper = mount(DashboardView)
     await flushPromises()
-    
+
     expect(wrapper.text()).toContain('Ошибка загрузки данных')
     expect(wrapper.text()).toContain('Network error')
   })
@@ -120,26 +118,24 @@ describe('DashboardView.vue', () => {
     vi.mocked(api.fetchRoutes)
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce(mockRoutes)
-    
+
     const wrapper = mount(DashboardView)
     await flushPromises()
-    
+
     // Кликаем по кнопке повторной попытки
     const retryButton = wrapper.find('button.text-red-800')
     await retryButton.trigger('click')
     await flushPromises()
-    
+
     expect(api.fetchRoutes).toHaveBeenCalledTimes(2)
   })
 
   it('выбирает первый маршрут по умолчанию', async () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
-    
+
     expect(api.fetchRouteDetails).toHaveBeenCalledWith('route-1')
   })
-
-
 
   it('правильно рассчитывает средние значения', async () => {
     vi.mocked(api.fetchRoutes).mockResolvedValue({
@@ -167,15 +163,13 @@ describe('DashboardView.vue', () => {
         }
       ]
     })
-    
+
     const wrapper = mount(DashboardView)
     await flushPromises()
-    
+
     // Среднее время: (1 + 3) / 2 = 2.0
     expect(wrapper.text()).toContain('2.0 ч')
     // Средняя стоимость: (100 + 300) / 2 = 200
     expect(wrapper.text()).toContain('200 ₽')
   })
-
- 
 })

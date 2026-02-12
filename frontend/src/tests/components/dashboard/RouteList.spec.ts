@@ -55,9 +55,9 @@ describe('RouteList.vue', () => {
 
   it('подсвечивает выбранный маршрут', () => {
     const wrapper = mount(RouteList, {
-      props: { 
+      props: {
         routes: mockRoutes,
-        selectedRouteId: 'route-2' 
+        selectedRouteId: 'route-2'
       }
     })
 
@@ -73,9 +73,10 @@ describe('RouteList.vue', () => {
     })
 
     expect(wrapper.text()).toContain('Нет маршрутов')
-    expect(wrapper.text()).toContain('Создайте первый маршрут в разделе Optimize')
+    expect(wrapper.text()).toContain(
+      'Создайте первый маршрут в разделе Optimize'
+    )
   })
-
 
   it('отображает мобильные карточки на маленьких экранах', () => {
     Object.defineProperty(window, 'innerWidth', {
@@ -101,7 +102,7 @@ describe('RouteList.vue', () => {
 
   it('правильно отображает иконки моделей', () => {
     const wrapper = mount(RouteList, {
-      props: { 
+      props: {
         routes: [
           {
             id: 'route-1',

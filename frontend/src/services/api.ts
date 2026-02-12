@@ -27,7 +27,7 @@ const API_CONFIG = {
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json'
+    Accept: 'application/json'
   }
 }
 
@@ -41,12 +41,19 @@ const mockApi = {
   // 1. Оптимизация маршрута
   optimize: async (request: OptimizeRequest): Promise<any> => {
     await simulateDelay(500)
-    console.log('Mock: Optimizing route with', request.locations.length, 'locations')
+    console.log(
+      'Mock: Optimizing route with',
+      request.locations.length,
+      'locations'
+    )
     return generateMockRoute()
   },
 
   // 2. Получение списка маршрутов
-  fetchRoutes: async (skip: number = 0, limit: number = 10): Promise<PaginatedResponse<Route>> => {
+  fetchRoutes: async (
+    skip: number = 0,
+    limit: number = 10
+  ): Promise<PaginatedResponse<Route>> => {
     await simulateDelay(300)
     const items = mockRoutes.slice(skip, skip + limit)
     return {
@@ -58,8 +65,8 @@ const mockApi = {
   // 3. Получение деталей маршрута
   fetchRouteDetails: async (routeId: string): Promise<RouteDetails> => {
     await simulateDelay(250)
-    const route = mockRoutes.find(r => r.id === routeId)
-    
+    const route = mockRoutes.find((r) => r.id === routeId)
+
     if (!route) {
       throw {
         response: {
@@ -76,27 +83,35 @@ const mockApi = {
     return {
       ...route,
       locations_sequence: route.locations,
-      locations_data: mockLocations.filter(loc => route.locations.includes(loc.id))
+      locations_data: mockLocations.filter((loc) =>
+        route.locations.includes(loc.id)
+      )
     }
   },
 
   // 4. Получение метрик
   fetchMetrics: async (routeId?: string): Promise<{ metrics: Metric[] }> => {
     await simulateDelay(350)
-    const metrics = routeId 
-      ? mockMetrics.filter(m => m.route_id === routeId)
+    const metrics = routeId
+      ? mockMetrics.filter((m) => m.route_id === routeId)
       : mockMetrics
-    
+
     return { metrics }
   },
 
   // 5. Запуск бенчмарка
-  runBenchmark: async (request: BenchmarkRequest): Promise<{
+  runBenchmark: async (
+    request: BenchmarkRequest
+  ): Promise<{
     total_duration_seconds: number
     results: BenchmarkResult[]
   }> => {
     await simulateDelay(800)
-    console.log('Mock: Running benchmark with', request.num_iterations, 'iterations')
+    console.log(
+      'Mock: Running benchmark with',
+      request.num_iterations,
+      'iterations'
+    )
     return {
       total_duration_seconds: 45.2,
       results: mockBenchmarkResults
@@ -128,13 +143,14 @@ realApi.interceptors.response.use(
       console.error('Network error:', error.message)
       return Promise.reject({
         error: 'Network Error',
-        message: 'Unable to connect to the server. Please check your internet connection.',
+        message:
+          'Unable to connect to the server. Please check your internet connection.',
         code: 'NETWORK_ERROR'
       })
     }
 
     const { status, data } = error.response
-    
+
     switch (status) {
       case 400:
         console.error('Bad Request:', data)
@@ -166,7 +182,10 @@ const realApiFunctions = {
     return response.data
   },
 
-  fetchRoutes: async (skip: number = 0, limit: number = 10): Promise<PaginatedResponse<Route>> => {
+  fetchRoutes: async (
+    skip: number = 0,
+    limit: number = 10
+  ): Promise<PaginatedResponse<Route>> => {
     const response = await realApi.get('/routes', { params: { skip, limit } })
     return response.data
   },
@@ -182,7 +201,9 @@ const realApiFunctions = {
     return response.data
   },
 
-  runBenchmark: async (request: BenchmarkRequest): Promise<{
+  runBenchmark: async (
+    request: BenchmarkRequest
+  ): Promise<{
     total_duration_seconds: number
     results: BenchmarkResult[]
   }> => {
