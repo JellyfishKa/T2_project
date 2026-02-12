@@ -131,7 +131,7 @@ describe('DashboardView.vue', () => {
   })
 
   it('выбирает первый маршрут по умолчанию', async () => {
-    const wrapper = mount(DashboardView)
+    mount(DashboardView)
     await flushPromises()
 
     expect(api.fetchRouteDetails).toHaveBeenCalledWith('route-1')

@@ -1,7 +1,7 @@
 import {
   Location,
   Route,
-  RouteDetails,
+
   Metric,
   BenchmarkResult,
   HealthStatus

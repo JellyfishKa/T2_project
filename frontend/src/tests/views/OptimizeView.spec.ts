@@ -48,8 +48,6 @@ describe('OptimizeView.vue', () => {
   })
 
   it('displays model selection options', () => {
-    const modelLabels = wrapper.findAll('div.text-sm.font-medium')
-
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
     expect(wrapper.text()).toContain('T-Pro')
@@ -73,8 +71,6 @@ describe('OptimizeView.vue', () => {
   })
 
   it('handles form validation updates', async () => {
-    const optimizationForm = wrapper.findComponent({ name: 'OptimizationForm' })
-
     expect(wrapper.vm.isFormValid).toBe(false)
   })
 

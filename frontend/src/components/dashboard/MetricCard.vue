@@ -29,14 +29,4 @@ const formattedValue = computed(() => {
   return props.value.toFixed(1)
 })
 
-const colorClasses = computed(() => {
-  const colorMap = {
-    blue: 'bg-blue-500',
-    green: 'bg-green-500',
-    purple: 'bg-purple-500',
-    yellow: 'bg-yellow-500',
-    red: 'bg-red-500'
-  }
-  return colorMap[props.color] || 'bg-gray-500'
-})
 </script>
