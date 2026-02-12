@@ -5,7 +5,7 @@ import { api } from '@/services/api'
 describe('API Service', () => {
   it('creates axios instance with correct defaults', () => {
     // Check if the baseURL is set correctly (default fallback)
-    expect(api.defaults.baseURL).toBe('http://localhost:8000')
+    expect(api.defaults.baseURL).toBe('http://localhost:8000/api/v1')
 
     // Check if timeout is set correctly
     expect(api.defaults.timeout).toBe(30000)
