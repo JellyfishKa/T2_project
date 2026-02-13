@@ -186,7 +186,7 @@ const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
     llama: 'llama',
     qwen: 'Qwen',
-    tpro: 'T-Pro'
+    DeepSeek: 'DeepSeek'
   }
   return modelMap[model] || model
 }

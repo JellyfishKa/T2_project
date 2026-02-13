@@ -167,7 +167,7 @@ const getModelName = (model: string): string => {
     gigachat: 'GigaChat',
     qwen: 'Qwen',
     cotype: 'Cotype',
-    tpro: 'T-Pro'
+    DeepSeek: 'DeepSeek'
   }
   return modelMap[model] || model
 }
@@ -177,7 +177,7 @@ const getModelBadgeClass = (model: string): string => {
     gigachat: 'bg-green-100 text-green-800',
     qwen: 'bg-purple-100 text-purple-800',
     cotype: 'bg-blue-100 text-blue-800',
-    tpro: 'bg-yellow-100 text-yellow-800'
+    DeepSeek: 'bg-yellow-100 text-yellow-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

@@ -48,9 +48,11 @@ describe('OptimizeView.vue', () => {
   })
 
   it('displays model selection options', () => {
+    const modelLabels = wrapper.findAll('div.text-sm.font-medium')
+
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
-    expect(wrapper.text()).toContain('T-Pro')
+    expect(wrapper.text()).toContain('DeepSeek')
 
     // Проверяем описания моделейs
     expect(wrapper.text()).toContain('Высокая точность, платный')
@@ -71,6 +73,8 @@ describe('OptimizeView.vue', () => {
   })
 
   it('handles form validation updates', async () => {
+    const optimizationForm = wrapper.findComponent({ name: 'OptimizationForm' })
+
     expect(wrapper.vm.isFormValid).toBe(false)
   })
 
@@ -124,7 +128,7 @@ describe('OptimizeView.vue', () => {
   it('displays model characteristics', () => {
     expect(wrapper.text()).toContain('Llama: Высокая точность, платный')
     expect(wrapper.text()).toContain('Qwen: Быстрый, бесплатный')
-    expect(wrapper.text()).toContain('T-Pro: Баланс цены и качества')
+    expect(wrapper.text()).toContain('DeepSeek: Баланс цены и качества')
   })
 
   it('shows form requirements information', () => {

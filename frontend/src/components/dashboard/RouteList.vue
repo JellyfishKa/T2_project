@@ -202,7 +202,7 @@ const getModelName = (model: string): string => {
     llama: 'Llama',
     qwen: 'Qwen',
     cotype: 'Cotype',
-    tpro: 'T-Pro'
+    deepseek: 'DeepSeek'
   }
   return modelMap[model] || model
 }
@@ -211,16 +211,16 @@ const getModelInitial = (model: string): string => {
   const initialMap: Record<string, string> = {
     llama: 'L',
     qwen: 'Q',
-    tpro: 'T'
+    deepseek: 'D'
   }
   return initialMap[model] || '?'
 }
 
 const getModelColor = (model: string): string => {
   const colorMap: Record<string, string> = {
-    llama: 'bg-blue-500',
+    llama: 'bg-blue-300',
     qwen: 'bg-purple-500',
-    tpro: 'bg-yellow-500'
+    deepseek: 'bg-blue-500'
   }
   return colorMap[model] || 'bg-gray-500'
 }
@@ -229,7 +229,7 @@ const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
     llama: 'bg-blue-100 text-blue-800',
     qwen: 'bg-purple-100 text-purple-800',
-    tpro: 'bg-yellow-100 text-yellow-800'
+    deepseek: 'bg-blue-400 text-blue-1000'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

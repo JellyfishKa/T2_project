@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios'
-import {
+import type {
   Location,
   Route,
   RouteDetails,
@@ -9,244 +9,292 @@ import {
   OptimizeRequest,
   PaginatedResponse,
   HealthStatus,
-  ApiError
+  ApiError,
+  Insights,
+  ModelComparison
 } from './types'
-import {
-  mockRoutes,
-  mockLocations,
-  mockMetrics,
-  mockBenchmarkResults,
-  mockHealthStatus,
-  generateMockRoute,
-  simulateDelay
-} from './mockData'
 
 // Конфигурация API
 const API_CONFIG = {
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
-  timeout: 30000,
+  timeout: 30000, // 30 секунд
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json'
   }
 }
 
-// Функция для определения режима разработки
-const isDevelopment = (): boolean => {
-  return import.meta.env.MODE === 'development'
-}
+// Создаем экземпляр axios
+const api: AxiosInstance = axios.create(API_CONFIG)
 
-// ========== MOCK API (для Недели 1) ==========
-const mockApi = {
-  // 1. Оптимизация маршрута
-  optimize: async (request: OptimizeRequest): Promise<any> => {
-    await simulateDelay(500)
-    console.log(
-      'Mock: Optimizing route with',
-      request.locations.length,
-      'locations'
-    )
-    return generateMockRoute()
-  },
+// ========== НАСТРОЙКИ ПОВТОРНЫХ ПОПЫТОК ==========
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // 1 секунда
 
-  // 2. Получение списка маршрутов
-  fetchRoutes: async (
-    skip: number = 0,
-    limit: number = 10
-  ): Promise<PaginatedResponse<Route>> => {
-    await simulateDelay(300)
-    const items = mockRoutes.slice(skip, skip + limit)
-    return {
-      total: mockRoutes.length,
-      items
-    }
-  },
+// Функция для задержки
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-  // 3. Получение деталей маршрута
-  fetchRouteDetails: async (routeId: string): Promise<RouteDetails> => {
-    await simulateDelay(250)
-    const route = mockRoutes.find((r) => r.id === routeId)
+// Функция для повторных попыток
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries: number = MAX_RETRIES
+): Promise<T> {
+  try {
+    return await fn()
+  } catch (error) {
+    const axiosError = error as AxiosError
 
-    if (!route) {
-      throw {
-        response: {
-          status: 404,
-          data: {
-            error: 'Маршрут не найден',
-            message: `Route with ID ${routeId} not found`,
-            route_id: routeId
-          }
-        }
-      }
+    // Retry только на 5xx ошибки (серверные)
+    if (
+      retries > 0 &&
+      axiosError.response?.status &&
+      axiosError.response.status >= 500
+    ) {
+      console.log(`Retrying... ${MAX_RETRIES - retries + 1}/${MAX_RETRIES}`)
+      await delay(RETRY_DELAY)
+      return withRetry(fn, retries - 1)
     }
 
-    return {
-      ...route,
-      locations_sequence: route.locations,
-      locations_data: mockLocations.filter((loc) =>
-        route.locations.includes(loc.id)
-      )
-    }
-  },
-
-  // 4. Получение метрик
-  fetchMetrics: async (routeId?: string): Promise<{ metrics: Metric[] }> => {
-    await simulateDelay(350)
-    const metrics = routeId
-      ? mockMetrics.filter((m) => m.route_id === routeId)
-      : mockMetrics
-
-    return { metrics }
-  },
-
-  // 5. Запуск бенчмарка
-  runBenchmark: async (
-    request: BenchmarkRequest
-  ): Promise<{
-    total_duration_seconds: number
-    results: BenchmarkResult[]
-  }> => {
-    await simulateDelay(800)
-    console.log(
-      'Mock: Running benchmark with',
-      request.num_iterations,
-      'iterations'
-    )
-    return {
-      total_duration_seconds: 45.2,
-      results: mockBenchmarkResults
-    }
-  },
-
-  // 6. Проверка здоровья сервиса
-  checkHealth: async (): Promise<HealthStatus> => {
-    await simulateDelay(100)
-    return mockHealthStatus
-  },
-
-  // 7. Получение всех локаций
-  fetchAllLocations: async (): Promise<Location[]> => {
-    await simulateDelay(300)
-    return mockLocations
+    // Пробрасываем ошибку дальше
+    throw error
   }
 }
 
-// ========== REAL API (для Недели 2) ==========
-// Создаем экземпляр axios
-const realApi: AxiosInstance = axios.create(API_CONFIG)
+// ========== ТИПЫ ДЛЯ ОТВЕТОВ ==========
+export interface UploadLocationsResponse {
+  success: boolean
+  message: string
+  locations: Location[]
+  errors?: Array<{
+    row: number
+    field: string
+    message: string
+  }>
+}
 
-// Interceptor для обработки ошибок
-realApi.interceptors.response.use(
+// ========== ИНТЕРСЕПТОРЫ ==========
+// Интерсептор для обработки ошибок
+api.interceptors.response.use(
   (response: AxiosResponse) => response,
-  (error: AxiosError<ApiError>) => {
+  async (error: AxiosError<ApiError>) => {
+    // Обработка timeout
+    if (error.code === 'ECONNABORTED') {
+      console.error('Request timeout:', error.message)
+      return Promise.reject({
+        error: 'Timeout Error',
+        message:
+          'Запрос занял слишком много времени. Пожалуйста, попробуйте снова.',
+        code: 'TIMEOUT_ERROR'
+      })
+    }
+
+    // Обработка сетевых ошибок
     if (!error.response) {
       console.error('Network error:', error.message)
       return Promise.reject({
         error: 'Network Error',
         message:
-          'Unable to connect to the server. Please check your internet connection.',
+          'Не удалось подключиться к серверу. Проверьте интернет-соединение.',
         code: 'NETWORK_ERROR'
       })
     }
 
     const { status, data } = error.response
 
+    // Логируем ошибки для отладки
     switch (status) {
       case 400:
         console.error('Bad Request:', data)
         break
+      case 401:
+        console.error('Unauthorized:', data)
+        break
+      case 403:
+        console.error('Forbidden:', data)
+        break
       case 404:
         console.error('Not Found:', data)
         break
+      case 422:
+        console.error('Validation Error:', data)
+        break
       case 429:
-        console.error('Rate Limited:', data)
+        console.error('Too Many Requests:', data)
         break
       case 500:
-        console.error('Server Error:', data)
+        console.error('Internal Server Error:', data)
         break
+      case 502:
       case 503:
+      case 504:
         console.error('Service Unavailable:', data)
         break
       default:
         console.error(`HTTP Error ${status}:`, data)
     }
 
-    return Promise.reject(error.response.data || error)
+    return Promise.reject(error.response?.data || error)
   }
 )
 
-// Функции-обёртки для реального API
-const realApiFunctions = {
-  optimize: async (request: OptimizeRequest): Promise<any> => {
-    const response = await realApi.post('/optimize', request)
-    return response.data
-  },
+// ========== REAL API ФУНКЦИИ ==========
 
-  fetchRoutes: async (
-    skip: number = 0,
-    limit: number = 10
-  ): Promise<PaginatedResponse<Route>> => {
-    const response = await realApi.get('/routes', { params: { skip, limit } })
-    return response.data
-  },
+/**
+ * Загрузка файла с локациями
+ * POST /api/v1/locations/upload
+ */
+export const uploadLocations = async (
+  file: File
+): Promise<UploadLocationsResponse> => {
+  const formData = new FormData()
+  formData.append('file', file)
 
-  fetchRouteDetails: async (routeId: string): Promise<RouteDetails> => {
-    const response = await realApi.get(`/routes/${routeId}`)
-    return response.data
-  },
+  const response = await withRetry(() =>
+    api.post('/locations/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  )
+  return response.data
+}
 
-  fetchMetrics: async (routeId?: string): Promise<{ metrics: Metric[] }> => {
-    const params = routeId ? { route_id: routeId } : {}
-    const response = await realApi.get('/metrics', { params })
-    return response.data
-  },
+/**
+ * Оптимизация маршрута
+ * POST /api/v1/optimize
+ */
+export const optimize = async (
+  locationIds: string[],
+  model: string,
+  constraints: any
+): Promise<Route> => {
+  const request = {
+    location_ids: locationIds,
+    model: model,
+    constraints: constraints
+  }
 
-  runBenchmark: async (
-    request: BenchmarkRequest
-  ): Promise<{
-    total_duration_seconds: number
-    results: BenchmarkResult[]
-  }> => {
-    const response = await realApi.post('/benchmark', request)
-    return response.data
-  },
+  const response = await withRetry(() => api.post('/optimize', request))
+  return response.data
+}
 
-  checkHealth: async (): Promise<HealthStatus> => {
-    const response = await realApi.get('/health')
-    return response.data
-  },
+/**
+ * Получение метрик
+ * GET /api/v1/metrics
+ */
+export const getMetrics = async (): Promise<{ metrics: Metric[] }> => {
+  const response = await withRetry(() => api.get('/metrics'))
+  return response.data
+}
 
-  fetchAllLocations: async (): Promise<Location[]> => {
-    throw new Error('Endpoint not implemented in backend')
+/**
+ * Получение инсайтов
+ * GET /api/v1/insights
+ */
+export const getInsights = async (): Promise<Insights> => {
+  const response = await withRetry(() => api.get('/insights'))
+  return response.data
+}
+
+/**
+ * Сравнение моделей
+ * GET /api/v1/benchmark/compare
+ */
+export const compareModels = async (): Promise<ModelComparison> => {
+  const response = await withRetry(() => api.get('/benchmark/compare'))
+  return response.data
+}
+
+/**
+ * Получение списка маршрутов
+ * GET /api/v1/routes
+ */
+export const fetchRoutes = async (
+  skip: number = 0,
+  limit: number = 10
+): Promise<PaginatedResponse<Route>> => {
+  const response = await withRetry(() =>
+    api.get('/routes', { params: { skip, limit } })
+  )
+  return response.data
+}
+
+/**
+ * Получение деталей маршрута
+ * GET /api/v1/routes/{route_id}
+ *
+ * ВНИМАНИЕ: Этот endpoint возвращает RouteDetails с полями locations_sequence и locations_data
+ */
+export const fetchRouteDetails = async (
+  routeId: string
+): Promise<RouteDetails> => {
+  const response = await withRetry(() => api.get(`/routes/${routeId}`))
+  return response.data
+}
+
+/**
+ * Получение метрик для конкретного маршрута
+ * GET /api/v1/metrics?route_id={route_id}
+ */
+export const fetchRouteMetrics = async (
+  routeId: string
+): Promise<{ metrics: Metric[] }> => {
+  const response = await withRetry(() =>
+    api.get('/metrics', { params: { route_id: routeId } })
+  )
+  return response.data
+}
+
+/**
+ * Запуск бенчмарка
+ * POST /api/v1/benchmark
+ */
+export const runBenchmark = async (
+  request: BenchmarkRequest
+): Promise<{
+  total_duration_seconds: number
+  results: BenchmarkResult[]
+}> => {
+  const response = await withRetry(() => api.post('/benchmark', request))
+  return response.data
+}
+
+/**
+ * Проверка здоровья сервиса
+ * GET /api/v1/health
+ */
+export const checkHealth = async (): Promise<HealthStatus> => {
+  try {
+    const response = await withRetry(() => api.get('/health'))
+    return response.data
+  } catch (error) {
+    // Если сервер недоступен, возвращаем unhealthy статус
+    if ((error as AxiosError).response?.status === 503) {
+      return (error as AxiosError).response?.data as HealthStatus
+    }
+    throw error
   }
 }
 
-// ========== ЕДИНЫЙ ИНТЕРФЕЙС ==========
-// Выбираем какой API использовать
-const apiFunctions = isDevelopment() ? mockApi : realApiFunctions
+/**
+ * Получение всех локаций
+ * GET /api/v1/locations
+ */
+export const fetchAllLocations = async (): Promise<Location[]> => {
+  const response = await withRetry(() => api.get('/locations'))
+  return response.data
+}
 
-// Экспортируемые функции
-export const optimizeRoute = apiFunctions.optimize
-export const fetchRoutes = apiFunctions.fetchRoutes
-export const fetchRouteDetails = apiFunctions.fetchRouteDetails
-export const fetchMetrics = apiFunctions.fetchMetrics
-export const runBenchmark = apiFunctions.runBenchmark
-export const checkHealth = apiFunctions.checkHealth
-export const fetchAllLocations = apiFunctions.fetchAllLocations
-
-// Экспортируем axios instance для прямого использования
-export const api = realApi
-
-// Экспортируем типы
+export { api }
 export type {
   Location,
   Route,
-  RouteDetails,
   Metric,
   BenchmarkResult,
   BenchmarkRequest,
   OptimizeRequest,
   PaginatedResponse,
   HealthStatus,
+  RouteDetails,
   ApiError
 }

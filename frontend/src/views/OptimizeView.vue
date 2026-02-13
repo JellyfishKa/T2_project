@@ -115,7 +115,7 @@
                     clip-rule="evenodd"
                   />
                 </svg>
-                T-Pro: Баланс цены и качества
+                DeepSeek: Баланс цены и качества
               </li>
             </ul>
           </div>
@@ -180,16 +180,16 @@ const models = [
     name: 'Qwen',
     label: 'Q',
     description: 'Быстрый, бесплатный',
-    color: 'bg-blue-100',
-    textColor: 'text-blue-600'
+    color: 'bg-purple-100',
+    textColor: 'text-purple-600'
   },
   {
-    id: 'tpro',
-    name: 'T-Pro',
-    label: 'T',
+    id: 'DeepSeek',
+    name: 'DeepSeek',
+    label: 'D',
     description: 'Баланс цены и качества',
-    color: 'bg-yellow-100',
-    textColor: 'text-yellow-600'
+    color: 'bg-blue-100',
+    textColor: 'text-blue-600'
   }
 ]
 

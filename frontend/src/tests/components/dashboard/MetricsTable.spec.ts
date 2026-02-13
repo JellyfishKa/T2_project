@@ -107,7 +107,7 @@ describe('MetricsTable.vue', () => {
           {
             id: 'metric-3',
             route_id: 'route-3',
-            model: 'tpro',
+            model: 'DeepSeek',
             response_time_ms: 1500,
             quality_score: 0.95,
             cost_rub: 20,
@@ -119,6 +119,6 @@ describe('MetricsTable.vue', () => {
 
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
-    expect(wrapper.text()).toContain('T-Pro')
+    expect(wrapper.text()).toContain('DeepSeek')
   })
 })

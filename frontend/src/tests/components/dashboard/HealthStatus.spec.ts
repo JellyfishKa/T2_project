@@ -10,7 +10,7 @@ describe('HealthStatus.vue', () => {
       database: 'connected',
       llama: 'connected',
       qwen: 'available',
-      tpro: 'unavailable'
+      deepseek: 'unavailable'
     }
   }
 
@@ -20,7 +20,7 @@ describe('HealthStatus.vue', () => {
       database: 'disconnected',
       llama: 'error',
       qwen: 'unavailable',
-      tpro: 'error'
+      deepseek: 'error'
     }
   }
 
@@ -54,7 +54,7 @@ describe('HealthStatus.vue', () => {
     expect(wrapper.text()).toContain('database')
     expect(wrapper.text()).toContain('llama')
     expect(wrapper.text()).toContain('qwen')
-    expect(wrapper.text()).toContain('tpro')
+    expect(wrapper.text()).toContain('deepseek')
     expect(wrapper.text()).toContain('Подключено')
     expect(wrapper.text()).toContain('Доступно')
     expect(wrapper.text()).toContain('Недоступно')
@@ -73,7 +73,7 @@ describe('HealthStatus.vue', () => {
     expect(dots[1].classes()).toContain('bg-green-500')
     // qwen: available -> blue
     expect(dots[2].classes()).toContain('bg-blue-500')
-    // tpro: unavailable -> yellow
+    // DeepSeek: unavailable -> yellow
     expect(dots[3].classes()).toContain('bg-yellow-500')
   })
 

@@ -1,52 +1,61 @@
 # T2 Project
 
-Vue 3 веб-интерфейс для работы с LLM моделями Llama, Qwen и T-Pro
+Vue 3 веб-интерфейс для работы с LLM моделями Llama, Qwen и DeepSeek
 ## Структура проекта
 
 ```
 frontend/
 ├── src/
-│   ├── components/
-│   │   ├── dashboard/          # Компоненты дашборда
-│   │   │   ├── MetricCard.vue      
-│   │   │   ├── MetricsTable.vue   
-│   │   │   ├── ModelComparison.vue 
-│   │   │   ├── RouteList.vue      
-│   │   │   ├── RouteMetrics.vue   
-│   │   │   └── HealthStatus.vue   
-│   │   ├── optimize/           # Компоненты оптимизации
-│   │   │   ├── ConstraintsPanel.vue # Панель ограничений
-│   │   │   ├── FileUpload.vue      
-│   │   │   ├── LocationInput.vue    
-│   │   │   └── OptimizationForm.vue 
-│   │   ├── types.ts            
-│   │   ├── Header.vue        
-│   │   ├── Layout.vue         
-│   │   ├── RouteMap.vue        
-│   │   └── Sidebar.vue         
-│   ├── views/                  # Страницы приложения
-│   │   ├── HomeView.vue        
-│   │   ├── DashboardView.vue   
-│   │   ├── OptimizeView.vue    
-│   │   └── AnalyticsView.vue   
-│   ├── services/               # Сервисы API
-│   │   ├── api.ts             
-│   │   └── mockData.ts        
-│   ├── router/                 # Маршрутизация
+│   ├── components/           # Компоненты
+│   │   ├── dashboard/        # Компоненты дашборда
+│   │   │   ├── HealthStatus.vue
+│   │   │   ├── MetricCard.vue
+│   │   │   ├── MetricsTable.vue
+│   │   │   ├── ModelComparison.vue
+│   │   │   ├── RouteList.vue
+│   │   │   └── RouteMetrics.vue
+│   │   ├── optimize/         # Компоненты оптимизации
+│   │   │   ├── ConstraintsPanel.vue
+│   │   │   ├── FileUpload.vue
+│   │   │   ├── LocationInput.vue
+│   │   │   ├── OptimizationForm.vue
+│   │   │   └── types.ts
+│   │   ├── Header.vue
+│   │   ├── Layout.vue
+│   │   ├── RouteMap.vue
+│   │   └── Sidebar.vue
+│   ├── composables/          # Composables
+│   │   └── useApi.ts         # Хук для управления API состояниями
+│   ├── views/                 # Страницы
+│   │   ├── HomeView.vue
+│   │   ├── DashboardView.vue
+│   │   ├── OptimizeView.vue
+│   │   └── AnalyticsView.vue
+│   ├── services/              # API сервисы
+│   │   ├── api.ts            # Основной API клиент
+│   │   └── types.ts          # TypeScript типы
+│   ├── router/                # Маршрутизация
 │   │   └── index.ts
-│   ├── tests/                  # Тесты
-│   │   ├── components/       
-│   │   ├── views/              
-│   │   └── services/           
+│   ├── tests/                 # Тесты
+│   │   ├── views/
+│   │   ├── components/
+│   │   │   └── dashboard/
+│   │   │   └── optimize/
+│   │   └── services/
 │   ├── styles/                 # Глобальные стили
 │   │   └── main.css
-│   ├── App.vue                 
-│   └── main.ts              
-├── package.json               # Зависимости
-├── tsconfig.json              # TypeScript конфиг
-├── vite.config.ts             # Vite конфиг
-├── tailwind.config.js         # Tailwind конфиг
-└── README.md                  
+│   ├── App.vue
+│   └── main.ts
+├── .env                        # Переменные окружения (разработка)
+├── .env.production             # Переменные окружения (продакшн)
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── vitest.config.ts
+├── tailwind.config.js
+├── postcss.config.js
+└── README.md
 ```
 
 ## Быстрый старт
@@ -70,6 +79,10 @@ npm run dev
 npm run test
 ```
 
+# Форматирование кода
+```bash
+npx prettier --check src/
+```
 
 ## Требования
 

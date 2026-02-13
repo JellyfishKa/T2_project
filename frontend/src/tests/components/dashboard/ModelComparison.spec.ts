@@ -53,7 +53,7 @@ describe('ModelComparison.vue', () => {
             timestamp: '2024-01-06T11:00:00Z'
           },
           {
-            model: 'tpro',
+            model: 'DeepSeek',
             num_tests: 10,
             avg_response_time_ms: 1500,
             min_response_time_ms: 1200,

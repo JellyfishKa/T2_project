@@ -243,7 +243,7 @@ import HealthStatus from '@/components/dashboard/HealthStatus.vue'
 import {
   fetchRoutes,
   fetchRouteDetails,
-  fetchMetrics,
+  getMetrics,
   runBenchmark,
   checkHealth,
   fetchAllLocations,
@@ -294,7 +294,7 @@ const loadDashboardData = async () => {
     // Загружаем данные параллельно для скорости
     const [routesData, metricsData, healthData] = await Promise.all([
       fetchRoutes(),
-      fetchMetrics(),
+      getMetrics(),
       checkHealth()
     ])
 
@@ -322,7 +322,7 @@ const loadRouteDetails = async (routeId: string) => {
     // Загружаем детали маршрута и метрики параллельно
     const [details, metrics] = await Promise.all([
       fetchRouteDetails(routeId),
-      fetchMetrics(routeId)
+      getMetrics()
     ])
 
     selectedRouteDetails.value = details
@@ -360,7 +360,7 @@ const loadBenchmark = async () => {
 
 const loadMetrics = async () => {
   try {
-    const metricsData = await fetchMetrics()
+    const metricsData = await getMetrics()
     allMetrics.value = metricsData.metrics
   } catch (err: any) {
     console.error('Metrics loading error:', err)
