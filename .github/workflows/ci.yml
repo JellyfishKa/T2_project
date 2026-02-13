@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools
           pip install -r backend/requirements/dev/requirements.txt
 
       - name: Run Backend tests
@@ -51,10 +51,10 @@ jobs:
           cd frontend
           npm run test:run -- --coverage
 
-      - name: Run backend formatting checks
+      - name: Run backend linting checks
         run: |
           cd backend
-          python -m black --check src/
+          python -m flake8 src/
 
       - name: Run frontend formatting checks
         run: |

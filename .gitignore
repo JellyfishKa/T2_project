@@ -1,3 +1,6 @@
+# Node
+node_modules/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -55,3 +58,4 @@ Thumbs.db
 /PM_files
 /frontend/node_modules
 *.pyc
+/backend/src/models
