@@ -1,5 +1,3 @@
-// Типы данных согласно API_CONTRACT.md
-
 export interface Location {
   id: string
   name: string
@@ -19,6 +17,7 @@ export interface Route {
   total_time_hours: number
   total_cost_rub: number
   model_used: string
+  fallback_reason: string | null
   created_at: string
 }
 
@@ -74,6 +73,7 @@ export interface OptimizeRequest {
     start_time?: string
     end_time?: string
   }
+  preferred_model: string
 }
 
 export interface PaginatedResponse<T> {
@@ -85,9 +85,9 @@ export interface HealthStatus {
   status: 'healthy' | 'unhealthy'
   services: {
     database: 'connected' | 'disconnected'
-    llama: 'connected' | 'available' | 'unavailable' | 'error'
     qwen: 'connected' | 'available' | 'unavailable' | 'error'
-    tpro: 'connected' | 'available' | 'unavailable' | 'error'
+    deepseek: 'connected' | 'available' | 'unavailable' | 'error'
+    llama: 'connected' | 'available' | 'unavailable' | 'error'
   }
 }
 
@@ -96,4 +96,40 @@ export interface ApiError {
   message: string
   code?: string
   details?: Record<string, any>
+}
+
+// Новые типы для FE-6
+export interface Insights {
+  total_routes: number
+  total_distance_km: number
+  total_cost_rub: number
+  average_quality_score: number
+  popular_models: Array<{
+    model: string
+    count: number
+  }>
+  cost_savings: {
+    estimated_savings_rub: number
+    percentage: number
+  }
+  recent_activity: Array<{
+    date: string
+    routes_count: number
+  }>
+}
+
+export interface ModelComparison {
+  models: Array<{
+    name: string
+    avg_response_time_ms: number
+    avg_quality_score: number
+    total_cost_rub: number
+    success_rate: number
+    usage_count: number
+  }>
+  recommendations: Array<{
+    scenario: string
+    recommended_model: string
+    reason: string
+  }>
 }

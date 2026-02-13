@@ -11,11 +11,11 @@ const router = createRouter({
       meta: { title: 'Home - T2 LLM Platform' }
     },
     {
-  path: '/dashboard',
-  name: 'dashboard',
-  component: () => import('../views/DashboardView.vue'),
-  meta: { title: 'Dashboard - T2 LLM Platform' }
-},
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('../views/DashboardView.vue'),
+      meta: { title: 'Dashboard - T2 LLM Platform' }
+    },
     {
       path: '/optimize',
       name: 'optimize',

@@ -1,9 +1,9 @@
 export interface Location {
   id: string
   name: string
-  city: string        
-  street: string     
-  houseNumber: string 
+  city: string
+  street: string
+  houseNumber: string
   latitude: number
   longitude: number
   timeWindowStart: string
@@ -12,7 +12,7 @@ export interface Location {
 }
 
 export interface Constraints {
-  vehicleCapacity?: number  
+  vehicleCapacity?: number
   maxDistance?: number
   startTime?: string
   endTime?: string
