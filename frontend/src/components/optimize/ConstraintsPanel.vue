@@ -1,15 +1,20 @@
 <template>
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
     <h3 class="text-lg font-semibold text-gray-900 mb-4">Ограничения</h3>
-    
+
     <div class="space-y-6">
       <!-- Vehicle Capacity (1-4) -->
       <div>
         <div class="flex items-center justify-between mb-2">
-          <label for="vehicleCapacity" class="text-sm font-medium text-gray-700">
+          <label
+            for="vehicleCapacity"
+            class="text-sm font-medium text-gray-700"
+          >
             Вместимость машины
           </label>
-          <span class="text-sm text-gray-500">{{ localConstraints.vehicleCapacity }} ед.</span>
+          <span class="text-sm text-gray-500"
+            >{{ localConstraints.vehicleCapacity }} ед.</span
+          >
         </div>
         <input
           type="range"
@@ -38,7 +43,9 @@
           <label for="maxDistance" class="text-sm font-medium text-gray-700">
             Макс. расстояние
           </label>
-          <span class="text-sm text-gray-500">{{ localConstraints.maxDistance }} км</span>
+          <span class="text-sm text-gray-500"
+            >{{ localConstraints.maxDistance }} км</span
+          >
         </div>
         <input
           type="range"
@@ -60,7 +67,10 @@
       <!-- Time Windows -->
       <div class="space-y-4">
         <div>
-          <label for="startTime" class="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            for="startTime"
+            class="block text-sm font-medium text-gray-700 mb-1"
+          >
             Время начала маршрута
           </label>
           <input
@@ -71,9 +81,12 @@
             class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
         </div>
-        
+
         <div>
-          <label for="endTime" class="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            for="endTime"
+            class="block text-sm font-medium text-gray-700 mb-1"
+          >
             Время окончания маршрута
           </label>
           <input
@@ -88,7 +101,10 @@
 
       <!-- Max Stops -->
       <div>
-        <label for="maxStops" class="block text-sm font-medium text-gray-700 mb-2">
+        <label
+          for="maxStops"
+          class="block text-sm font-medium text-gray-700 mb-2"
+        >
           Макс. количество остановок (опционально)
         </label>
         <input
@@ -105,7 +121,10 @@
 
       <!-- Forbidden Roads -->
       <div>
-        <label for="forbiddenRoads" class="block text-sm font-medium text-gray-700 mb-2">
+        <label
+          for="forbiddenRoads"
+          class="block text-sm font-medium text-gray-700 mb-2"
+        >
           Запрещенные дороги (через запятую)
         </label>
         <textarea
@@ -116,7 +135,13 @@
           class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           placeholder="МКАД, ТТК, Садовое кольцо"
         />
-        <div v-if="localConstraints.forbiddenRoads && localConstraints.forbiddenRoads.length > 0" class="mt-2">
+        <div
+          v-if="
+            localConstraints.forbiddenRoads &&
+            localConstraints.forbiddenRoads.length > 0
+          "
+          class="mt-2"
+        >
           <div class="flex flex-wrap gap-2">
             <span
               v-for="(road, index) in localConstraints.forbiddenRoads"
@@ -163,7 +188,7 @@ const emit = defineEmits<{
 
 // Local state - ИНИЦИАЛИЗИРУЕМ значения по умолчанию
 const localConstraints = reactive<Constraints>({
-  vehicleCapacity: props.constraints.vehicleCapacity || 1,  // Изменено с 100 на 1
+  vehicleCapacity: props.constraints.vehicleCapacity || 1, // Изменено с 100 на 1
   maxDistance: props.constraints.maxDistance || 500,
   startTime: props.constraints.startTime || '08:00',
   endTime: props.constraints.endTime || '20:00',
@@ -171,7 +196,9 @@ const localConstraints = reactive<Constraints>({
   forbiddenRoads: props.constraints.forbiddenRoads || []
 })
 
-const forbiddenRoadsInput = ref(props.constraints.forbiddenRoads?.join(', ') || '')
+const forbiddenRoadsInput = ref(
+  props.constraints.forbiddenRoads?.join(', ') || ''
+)
 
 // Update constraints and notify parent
 const updateConstraints = () => {
@@ -185,8 +212,8 @@ const updateForbiddenRoads = () => {
   } else {
     localConstraints.forbiddenRoads = forbiddenRoadsInput.value
       .split(',')
-      .map(road => road.trim())
-      .filter(road => road.length > 0)
+      .map((road) => road.trim())
+      .filter((road) => road.length > 0)
   }
   updateConstraints()
 }
@@ -202,7 +229,7 @@ const removeForbiddenRoad = (index: number) => {
 
 // Reset constraints to defaults
 const resetConstraints = () => {
-  localConstraints.vehicleCapacity = 1  // Изменено с 100 на 1
+  localConstraints.vehicleCapacity = 1 // Изменено с 100 на 1
   localConstraints.maxDistance = 500
   localConstraints.startTime = '08:00'
   localConstraints.endTime = '20:00'
@@ -213,13 +240,17 @@ const resetConstraints = () => {
 }
 
 // Watch for prop changes
-watch(() => props.constraints, (newConstraints) => {
-  localConstraints.vehicleCapacity = newConstraints.vehicleCapacity || 1
-  localConstraints.maxDistance = newConstraints.maxDistance || 500
-  localConstraints.startTime = newConstraints.startTime || '08:00'
-  localConstraints.endTime = newConstraints.endTime || '20:00'
-  localConstraints.maxStops = newConstraints.maxStops
-  localConstraints.forbiddenRoads = newConstraints.forbiddenRoads || []
-  forbiddenRoadsInput.value = newConstraints.forbiddenRoads?.join(', ') || ''
-}, { deep: true })
+watch(
+  () => props.constraints,
+  (newConstraints) => {
+    localConstraints.vehicleCapacity = newConstraints.vehicleCapacity || 1
+    localConstraints.maxDistance = newConstraints.maxDistance || 500
+    localConstraints.startTime = newConstraints.startTime || '08:00'
+    localConstraints.endTime = newConstraints.endTime || '20:00'
+    localConstraints.maxStops = newConstraints.maxStops
+    localConstraints.forbiddenRoads = newConstraints.forbiddenRoads || []
+    forbiddenRoadsInput.value = newConstraints.forbiddenRoads?.join(', ') || ''
+  },
+  { deep: true }
+)
 </script>

@@ -45,8 +45,6 @@ describe('MetricCard.vue', () => {
     expect(wrapper.text()).toContain('98.8')
   })
 
-
-
   it('рендерит без ошибок при минимальных пропсах', () => {
     expect(() => {
       mount(MetricCard, {

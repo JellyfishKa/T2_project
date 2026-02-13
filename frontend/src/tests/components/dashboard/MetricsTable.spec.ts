@@ -52,9 +52,10 @@ describe('MetricsTable.vue', () => {
     })
 
     expect(wrapper.text()).toContain('Нет метрик')
-    expect(wrapper.text()).toContain('Запустите оптимизацию для создания метрик')
+    expect(wrapper.text()).toContain(
+      'Запустите оптимизацию для создания метрик'
+    )
   })
-
 
   it('отображает мобильные карточки на маленьких экранах', () => {
     // Имитируем маленький экран
@@ -83,7 +84,7 @@ describe('MetricsTable.vue', () => {
 
   it('правильно переводит названия моделей', () => {
     const wrapper = mount(MetricsTable, {
-      props: { 
+      props: {
         metrics: [
           {
             id: 'metric-1',
@@ -106,7 +107,7 @@ describe('MetricsTable.vue', () => {
           {
             id: 'metric-3',
             route_id: 'route-3',
-            model: 'tpro',
+            model: 'DeepSeek',
             response_time_ms: 1500,
             quality_score: 0.95,
             cost_rub: 20,
@@ -118,6 +119,6 @@ describe('MetricsTable.vue', () => {
 
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
-    expect(wrapper.text()).toContain('T-Pro')
+    expect(wrapper.text()).toContain('DeepSeek')
   })
 })

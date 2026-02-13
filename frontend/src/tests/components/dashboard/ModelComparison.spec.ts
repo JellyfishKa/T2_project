@@ -31,9 +31,9 @@ describe('ModelComparison.vue', () => {
 
   it('отображает загрузочное состояние', () => {
     const wrapper = mount(ModelComparison, {
-      props: { 
+      props: {
         benchmarkResults: [],
-        isLoading: true 
+        isLoading: true
       }
     })
 
@@ -41,12 +41,11 @@ describe('ModelComparison.vue', () => {
     expect(wrapper.find('.animate-spin').exists()).toBe(true)
   })
 
-
   it('отображает пустое состояние', () => {
     const wrapper = mount(ModelComparison, {
-      props: { 
+      props: {
         benchmarkResults: [],
-        isLoading: false 
+        isLoading: false
       }
     })
 
@@ -54,11 +53,9 @@ describe('ModelComparison.vue', () => {
     expect(wrapper.text()).toContain('Запустите бенчмарк для сравнения моделей')
   })
 
-
-
   it('правильно определяет цвета для успешности', () => {
     const wrapper = mount(ModelComparison, {
-      props: { 
+      props: {
         benchmarkResults: [
           {
             model: 'llama',
@@ -83,7 +80,7 @@ describe('ModelComparison.vue', () => {
             timestamp: '2024-01-06T11:00:00Z'
           },
           {
-            model: 'tpro',
+            model: 'DeepSeek',
             num_tests: 10,
             avg_response_time_ms: 1500,
             min_response_time_ms: 1200,
@@ -94,7 +91,7 @@ describe('ModelComparison.vue', () => {
             timestamp: '2024-01-06T11:00:00Z'
           }
         ],
-        isLoading: false 
+        isLoading: false
       }
     })
 

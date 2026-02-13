@@ -10,7 +10,7 @@ describe('HealthStatus.vue', () => {
       database: 'connected',
       llama: 'connected',
       qwen: 'available',
-      tpro: 'unavailable'
+      deepseek: 'unavailable'
     }
   }
 
@@ -20,7 +20,7 @@ describe('HealthStatus.vue', () => {
       database: 'disconnected',
       llama: 'error',
       qwen: 'unavailable',
-      tpro: 'error'
+      deepseek: 'error'
     }
   }
 
@@ -54,7 +54,7 @@ describe('HealthStatus.vue', () => {
     expect(wrapper.text()).toContain('database')
     expect(wrapper.text()).toContain('llama')
     expect(wrapper.text()).toContain('qwen')
-    expect(wrapper.text()).toContain('tpro')
+    expect(wrapper.text()).toContain('deepseek')
     expect(wrapper.text()).toContain('Подключено')
     expect(wrapper.text()).toContain('Доступно')
     expect(wrapper.text()).toContain('Недоступно')
@@ -66,14 +66,14 @@ describe('HealthStatus.vue', () => {
     })
 
     const dots = wrapper.findAll('.h-2.w-2.rounded-full')
-    
+
     // database: connected -> green
     expect(dots[0].classes()).toContain('bg-green-500')
     // llama: connected -> green
     expect(dots[1].classes()).toContain('bg-green-500')
     // qwen: available -> blue
     expect(dots[2].classes()).toContain('bg-blue-500')
-    // tpro: unavailable -> yellow
+    // DeepSeek: unavailable -> yellow
     expect(dots[3].classes()).toContain('bg-yellow-500')
   })
 
@@ -105,12 +105,15 @@ describe('HealthStatus.vue', () => {
     const healthyWrapper = mount(HealthStatus, {
       props: { status: healthyStatus }
     })
-    expect(healthyWrapper.find('path[d*="M9 12l2 2 4-4m6 2a9"]').exists()).toBe(true)
+    expect(healthyWrapper.find('path[d*="M9 12l2 2 4-4m6 2a9"]').exists()).toBe(
+      true
+    )
 
     const unhealthyWrapper = mount(HealthStatus, {
       props: { status: unhealthyStatus }
     })
-    expect(unhealthyWrapper.find('path[d*="M12 9v2m0 4h.01m-6.938"]').exists()).toBe(true)
+    expect(
+      unhealthyWrapper.find('path[d*="M12 9v2m0 4h.01m-6.938"]').exists()
+    ).toBe(true)
   })
-
 })
