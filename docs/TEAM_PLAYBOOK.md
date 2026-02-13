@@ -11,11 +11,11 @@
 
 **Задачи на эту неделю (Неделя 1, пример)**:
 - BE-1: Настройка проекта (GitHub, requirements.txt, venv)
-- BE-2: Получить доступ к LLM (GigaChat + HuggingFace токены)
+- BE-2: Получить доступ к LLM (Qwen, T-Pro, Llama + HuggingFace токены)
 - BE-3: BaseLLMClient (абстрактный класс)
-- BE-4: GigaChatClient реализация
-- BE-5: CotypeClient реализация
-- BE-6: T-ProClient реализация (stretch задача)
+- BE-4: QwenClient реализация (PRIMARY)
+- BE-4.5: T-ProClient реализация (SECONDARY)
+- BE-5: LlamaClient реализация (FALLBACK)
 
 **Ежедневный workflow**:
 1. Утро: Проверить Jira за своими задачами
@@ -33,9 +33,9 @@
 - Коммит сообщения: `BE-X: Краткое описание`
 
 **Блокеры**:
-- Не можешь получить токен? → Постой в #blockers сразу
-- Нужна спецификация frontend? → Посмотри API_CONTRACT.md в docs
-- Тесты падают? → Спаррируй с кем-то, не жди
+- Не можешь получить HF токен или доступ к модели? -> Постой в #blockers сразу
+- Нужна спецификация frontend? -> Посмотри API_CONTRACT.md в docs
+- Тесты падают? -> Спаррируй с кем-то, не жди
 
 ---
 
@@ -138,7 +138,7 @@
 **#blockers** (Только чрезвычайные)
 - Используй когда: Застрял и не может продолжить
 - Время ответа: PM в течение 30 мин
-- Пример: "@PM заблокирован на BE-2: не могу получить GigaChat токен"
+- Пример: "@PM заблокирован на BE-2: не могу получить HF токен для Qwen/Llama"
 
 **#code-review** (Проверка PR)
 - Используй когда: Код готов к проверке
@@ -158,7 +158,7 @@
 
 **Пример**:
 ```
-BE-2 Комментарий: "Используем Cotype как fallback пока жду GigaChat токен (expected EOD)"
+BE-2 Комментарий: "Используем Llama как fallback пока жду Qwen токен (expected EOD)"
 ```
 
 ---
@@ -223,12 +223,12 @@ BE-2 Комментарий: "Используем Cotype как fallback пок
 
 **Шаг 2**: Escalate (постой в #blockers)
 ```
-"@PM заблокирован на BE-2: GigaChat API возвращает 403 ошибку"
+"@PM заблокирован на BE-2: Qwen API возвращает 403 ошибку"
 ```
 
 **Шаг 3**: PM разблокирует
 ```
-- Предлагает обходной путь (Cotype fallback)
+- Предлагает обходной путь (T-Pro/Llama fallback)
 - Исследует решение
 - Предоставляет timeline
 ```
@@ -345,7 +345,7 @@ BE-2 Комментарий: "Используем Cotype как fallback пок
 - [ ] Python 3.11+ установлен
 - [ ] Virtual environment готов
 - [ ] Requirements.txt установлен
-- [ ] Доступ к GigaChat/HuggingFace документации
+- [ ] Доступ к HuggingFace документации (Qwen, T-Pro, Llama)
 
 **Frontend**:
 - [ ] Node 18+ установлен
