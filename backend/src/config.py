@@ -7,7 +7,7 @@ from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 load_dotenv()
-BASE_DIR = Path(__file__).parent.parent  # Это корень проекта (backend)
+BASE_DIR = Path(__file__).parent.parent
 
 
 class Settings(BaseSettings):
@@ -21,6 +21,12 @@ class Settings(BaseSettings):
 
     llama_api_endpoint: str
     llama_model_id: str
+
+    database_user: str
+    database_password: str
+    database_host: str
+    database_port: int = 5432
+    database_name: str
 
     model_config = ConfigDict(env_file=BASE_DIR / ".env")
 
