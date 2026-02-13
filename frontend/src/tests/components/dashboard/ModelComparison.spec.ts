@@ -1,34 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ModelComparison from '@/components/dashboard/ModelComparison.vue'
-import type { BenchmarkResult } from '@/services/api'
-
 describe('ModelComparison.vue', () => {
-  const mockBenchmarkResults: BenchmarkResult[] = [
-    {
-      model: 'llama',
-      num_tests: 10,
-      avg_response_time_ms: 1250,
-      min_response_time_ms: 850,
-      max_response_time_ms: 2100,
-      avg_quality_score: 0.87,
-      total_cost_rub: 250.0,
-      success_rate: 1.0,
-      timestamp: '2024-01-06T11:00:00Z'
-    },
-    {
-      model: 'qwen',
-      num_tests: 10,
-      avg_response_time_ms: 450,
-      min_response_time_ms: 350,
-      max_response_time_ms: 650,
-      avg_quality_score: 0.82,
-      total_cost_rub: 0.0,
-      success_rate: 1.0,
-      timestamp: '2024-01-06T11:00:00Z'
-    }
-  ]
-
   it('отображает загрузочное состояние', () => {
     const wrapper = mount(ModelComparison, {
       props: { 
