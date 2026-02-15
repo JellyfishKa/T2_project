@@ -46,7 +46,6 @@ import {
   runBenchmark,
   checkHealth,
   fetchAllLocations,
-  api
 } from '@/services/api'
 
 describe('API Service', () => {

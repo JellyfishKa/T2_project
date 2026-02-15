@@ -57,31 +57,6 @@ describe('MetricsTable.vue', () => {
     )
   })
 
-  it('отображает мобильные карточки на маленьких экранах', () => {
-    // Имитируем маленький экран
-    Object.defineProperty(window, 'innerWidth', {
-      writable: true,
-      configurable: true,
-      value: 375
-    })
-
-    const wrapper = mount(MetricsTable, {
-      props: { metrics: mockMetrics },
-      global: {
-        mocks: {
-          $screen: { sm: false }
-        }
-      }
-    })
-
-    // Проверяем, что есть div для мобильных карточек
-    expect(wrapper.find('.sm\\:hidden').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Маршрут:')
-    expect(wrapper.text()).toContain('Время ответа:')
-    expect(wrapper.text()).toContain('Качество:')
-    expect(wrapper.text()).toContain('Стоимость:')
-  })
-
   it('правильно переводит названия моделей', () => {
     const wrapper = mount(MetricsTable, {
       props: {

@@ -1,50 +1,36 @@
 <template>
   <div class="overflow-hidden">
-    <!-- Desktop Table -->
-    <div class="hidden sm:block overflow-x-auto">
+    <!-- Loading State -->
+    <div v-if="isLoading" class="space-y-3">
+      <SkeletonLoader v-for="i in 5" :key="i" height="60px" />
+    </div>
+
+    <!-- Desktop Table (only shown when not loading and has data) -->
+    <div v-else-if="metrics.length > 0" class="hidden sm:block overflow-x-auto">
       <table class="min-w-full divide-y divide-gray-200">
         <thead>
           <tr>
             <th
+              v-for="column in columns"
+              :key="column.field"
               scope="col"
-              class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+              @click="handleSort(column.field)"
             >
-              Модель
-            </th>
-            <th
-              scope="col"
-              class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              Маршрут
-            </th>
-            <th
-              scope="col"
-              class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              Время ответа
-            </th>
-            <th
-              scope="col"
-              class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              Качество
-            </th>
-            <th
-              scope="col"
-              class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              Стоимость
-            </th>
-            <th
-              scope="col"
-              class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              Время
+              <div class="flex items-center space-x-1">
+                <span>{{ column.label }}</span>
+                <span
+                  v-if="sortable && sortField === column.field"
+                  class="text-gray-400"
+                >
+                  {{ sortDirection === 'asc' ? '↑' : '↓' }}
+                </span>
+              </div>
             </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-for="metric in metrics" :key="metric.id">
+          <tr v-for="metric in sortedMetrics" :key="metric.id">
             <td class="px-3 py-4 whitespace-nowrap">
               <span
                 class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
@@ -97,10 +83,10 @@
       </table>
     </div>
 
-    <!-- Mobile Cards -->
-    <div class="sm:hidden space-y-3">
+    <!-- Mobile Cards (only shown when not loading and has data) -->
+    <div v-else-if="metrics.length > 0" class="sm:hidden space-y-3">
       <div
-        v-for="metric in metrics"
+        v-for="metric in sortedMetrics"
         :key="metric.id"
         class="bg-white border border-gray-200 rounded-lg p-4"
       >
@@ -145,8 +131,8 @@
       </div>
     </div>
 
-    <!-- Empty State -->
-    <div v-if="metrics.length === 0" class="text-center py-8">
+    <!-- Empty State (only shown when not loading and no data) -->
+    <div v-else class="text-center py-8">
       <svg
         class="mx-auto h-12 w-12 text-gray-400"
         fill="none"
@@ -169,27 +155,94 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Metric } from '@/services/api'
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
 
-defineProps<{
+type SortField =
+  | 'model'
+  | 'route_id'
+  | 'response_time_ms'
+  | 'quality_score'
+  | 'cost_rub'
+  | 'timestamp'
+type SortDirection = 'asc' | 'desc'
+
+const props = defineProps<{
   metrics: Metric[]
+  isLoading?: boolean
+  sortable?: boolean
+  sortField?: SortField
+  sortDirection?: SortDirection
 }>()
 
+const emit = defineEmits<{
+  (e: 'sort', field: SortField, direction: SortDirection): void
+}>()
+
+const columns = [
+  { field: 'model' as const, label: 'Модель' },
+  { field: 'route_id' as const, label: 'Маршрут' },
+  { field: 'response_time_ms' as const, label: 'Время ответа' },
+  { field: 'quality_score' as const, label: 'Качество' },
+  { field: 'cost_rub' as const, label: 'Стоимость' },
+  { field: 'timestamp' as const, label: 'Время' }
+]
+
+const sortedMetrics = computed(() => {
+  if (!props.sortable || !props.sortField) return props.metrics
+
+  return [...props.metrics].sort((a, b) => {
+    const sortField = props.sortField as SortField
+
+    if (sortField === 'timestamp') {
+      const aTime = new Date(a.timestamp).getTime()
+      const bTime = new Date(b.timestamp).getTime()
+      return props.sortDirection === 'asc' ? aTime - bTime : bTime - aTime
+    }
+
+    if (sortField === 'model' || sortField === 'route_id') {
+      const aValue = a[sortField]
+      const bValue = b[sortField]
+
+      if (aValue < bValue) return props.sortDirection === 'asc' ? -1 : 1
+      if (aValue > bValue) return props.sortDirection === 'asc' ? 1 : -1
+      return 0
+    }
+
+    // Для числовых полей
+    const aValue = a[sortField] as number
+    const bValue = b[sortField] as number
+
+    if (aValue < bValue) return props.sortDirection === 'asc' ? -1 : 1
+    if (aValue > bValue) return props.sortDirection === 'asc' ? 1 : -1
+    return 0
+  })
+})
+
+const handleSort = (field: SortField) => {
+  if (!props.sortable) return
+
+  const direction =
+    props.sortField === field && props.sortDirection === 'asc' ? 'desc' : 'asc'
+  emit('sort', field, direction)
+}
+
+// Helper functions
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
     llama: 'Llama',
     qwen: 'Qwen',
-    DeepSeek: 'DeepSeek'
+    deepseek: 'DeepSeek'
   }
   return modelMap[model] || model
 }
 
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
-    gigachat: 'bg-green-100 text-green-800',
+    llama: 'bg-blue-100 text-blue-800',
     qwen: 'bg-purple-100 text-purple-800',
-    cotype: 'bg-blue-100 text-blue-800',
-    DeepSeek: 'bg-blue-400 text-blue-1000'
+    deepseek: 'bg-yellow-100 text-yellow-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

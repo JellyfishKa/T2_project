@@ -19,13 +19,12 @@ frontend/
 │   │   │   ├── FileUpload.vue
 │   │   │   ├── LocationInput.vue
 │   │   │   ├── OptimizationForm.vue
+│   │   │   ├── OptimizationResult.vue
 │   │   │   └── types.ts
 │   │   ├── Header.vue
 │   │   ├── Layout.vue
 │   │   ├── RouteMap.vue
-│   │   └── Sidebar.vue
-│   ├── composables/          # Composables
-│   │   └── useApi.ts         # Хук для управления API состояниями
+│   │   └── Sidebar.vue     
 │   ├── views/                 # Страницы
 │   │   ├── HomeView.vue
 │   │   ├── DashboardView.vue
@@ -41,7 +40,10 @@ frontend/
 │   │   ├── components/
 │   │   │   └── dashboard/
 │   │   │   └── optimize/
-│   │   └── services/
+│   │   ├── integration/
+│   │   │   └── front-backend.spec.ts  
+│   │   ├── services/
+│   │   └── setup.js
 │   ├── styles/                 # Глобальные стили
 │   │   └── main.css
 │   ├── App.vue

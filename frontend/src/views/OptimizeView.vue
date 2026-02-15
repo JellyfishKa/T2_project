@@ -14,18 +14,30 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
       <!-- Main Form -->
       <div class="lg:col-span-2 space-y-6">
+        <!-- Форма оптимизации (скрываем после успешной оптимизации) -->
         <OptimizationForm
+          v-if="!optimizationResult"
           ref="optimizationForm"
           @submit="handleSubmit"
           @validate="handleValidation"
         />
 
-        <!-- File Upload Component -->
-        <FileUpload @add-locations="handleAddLocationsFromFile" />
+        <!-- Результат оптимизации -->
+        <OptimizationResult
+          v-else
+          :result="optimizationResult"
+          :is-loading="isOptimizing"
+          :error="optimizationError"
+          :original-metrics="originalMetrics"
+          :locations="formLocations"
+          @reset="resetOptimization"
+          @retry="retryOptimization"
+          @save="saveRoute"
+        />
       </div>
 
-      <!-- Side Panel -->
-      <div class="space-y-6">
+      <!-- Side Panel (скрываем после успешной оптимизации) -->
+      <div v-if="!optimizationResult" class="space-y-6">
         <!-- Model Selection -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4">Выбор модели</h3>
@@ -69,57 +81,10 @@
               </div>
             </label>
           </div>
-
-          <div class="mt-4 pt-4 border-t border-gray-200">
-            <h4 class="text-sm font-medium text-gray-900 mb-2">
-              Характеристики моделей
-            </h4>
-            <ul class="space-y-2 text-sm text-gray-600">
-              <li class="flex items-center">
-                <svg
-                  class="h-4 w-4 text-green-500 mr-2"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-                Llama: Высокая точность, платный
-              </li>
-              <li class="flex items-center">
-                <svg
-                  class="h-4 w-4 text-green-500 mr-2"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-                Qwen: Быстрый, бесплатный
-              </li>
-              <li class="flex items-center">
-                <svg
-                  class="h-4 w-4 text-green-500 mr-2"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-                DeepSeek: Баланс цены и качества
-              </li>
-            </ul>
-          </div>
         </div>
+
+        <!-- File Upload -->
+        <FileUpload @add-locations="handleAddLocationsFromFile" />
 
         <!-- Constraints Summary -->
         <ConstraintsPanel
@@ -129,8 +94,9 @@
       </div>
     </div>
 
-    <!-- Form Actions -->
+    <!-- Form Actions (скрываем после успешной оптимизации) -->
     <div
+      v-if="!optimizationResult"
       class="mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
     >
       <div class="text-sm text-gray-600">
@@ -142,16 +108,39 @@
           type="button"
           @click="resetForm"
           class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          :disabled="isOptimizing"
         >
           Сбросить
         </button>
         <button
           type="button"
           @click="handleOptimize"
-          :disabled="!isFormValid"
+          :disabled="!isFormValid || isOptimizing"
           class="px-6 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          Оптимизировать маршрут
+          <span v-if="isOptimizing" class="flex items-center">
+            <svg
+              class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            Оптимизация...
+          </span>
+          <span v-else>Оптимизировать маршрут</span>
         </button>
       </div>
     </div>
@@ -159,11 +148,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, nextTick } from 'vue'
 import OptimizationForm from '@/components/optimize/OptimizationForm.vue'
+import OptimizationResult from '@/components/optimize/OptimizationResult.vue'
 import ConstraintsPanel from '@/components/optimize/ConstraintsPanel.vue'
 import FileUpload from '@/components/optimize/FileUpload.vue'
+import { optimize } from '@/services/api'
 import type { Constraints, Location } from '@/components/optimize/types'
+import type { Route } from '@/services/types'
 
 // Models
 const models = [
@@ -184,7 +176,7 @@ const models = [
     textColor: 'text-purple-600'
   },
   {
-    id: 'DeepSeek',
+    id: 'deepseek',
     name: 'DeepSeek',
     label: 'D',
     description: 'Баланс цены и качества',
@@ -202,21 +194,38 @@ const constraints = ref<Constraints>({
   endTime: '20:00'
 })
 const isFormValid = ref(false)
-const optimizationForm = ref<any>(null)
+const isOptimizing = ref(false)
+const optimizationResult = ref<Route | null>(null)
+const optimizationError = ref<string | null>(null)
+const originalMetrics = ref<{
+  total_distance_km: number
+  total_time_hours: number
+  total_cost_rub: number
+} | null>(null)
+const formLocations = ref<
+  Array<{
+    id: string
+    name: string
+    address: string
+    time_window_start: string
+    time_window_end: string
+  }>
+>([])
 
-// Computed
-const selectedModelName = computed(() => {
-  return models.find((m) => m.id === selectedModel.value)?.name || 'Llama'
-})
+const optimizationForm = ref<InstanceType<typeof OptimizationForm> | null>(null)
+
+
 
 // Methods
 const handleSubmit = (formData: any) => {
-  console.log('Form submitted:', {
-    ...formData,
-    model: selectedModel.value,
-    modelName: selectedModelName.value,
-    constraints: constraints.value
-  })
+  // Сохраняем локации для отображения в результатах
+  formLocations.value = formData.locations.map((loc: any) => ({
+    id: loc.id,
+    name: loc.name,
+    address: `г. ${loc.city}, ул. ${loc.street}, д. ${loc.houseNumber}`,
+    time_window_start: loc.timeWindowStart,
+    time_window_end: loc.timeWindowEnd
+  }))
 }
 
 const handleValidation = (isValid: boolean) => {
@@ -225,32 +234,25 @@ const handleValidation = (isValid: boolean) => {
 
 const handleConstraintsUpdate = (updatedConstraints: Constraints) => {
   constraints.value = updatedConstraints
-  console.log('Constraints updated:', constraints.value)
 }
 
 const handleAddLocationsFromFile = async (locations: Location[]) => {
   if (optimizationForm.value && locations.length > 0) {
-    // Clear existing form locations first
+    // Очищаем текущие локации и добавляем новые из файла
     optimizationForm.value.clearAllLocations()
-
-    // Wait for DOM update
     await nextTick()
 
-    // Add all locations starting from FIRST position
+    // Добавляем каждую локацию из файла
     locations.forEach((location) => {
-      optimizationForm.value.addLocationFromImport(location)
+      optimizationForm.value?.addLocationFromImport(location)
     })
 
-    console.log(
-      `Added ${locations.length} locations from file, starting from position 1`
-    )
-
-    // Show success message
-    alert(`Успешно добавлено ${locations.length} магазинов из файла`)
+    // Показываем сообщение об успехе (можно добавить уведомление)
+    console.log(`Добавлено ${locations.length} магазинов из файла`)
   }
 }
 
-const handleOptimize = () => {
+const handleOptimize = async () => {
   if (!isFormValid.value) {
     alert('Пожалуйста, заполните все обязательные поля формы')
     return
@@ -263,18 +265,49 @@ const handleOptimize = () => {
 
   const formData = optimizationForm.value.getFormData()
 
-  const optimizationRequest = {
-    routeName: formData.routeName,
-    locations: formData.locations,
-    model: selectedModel.value,
-    constraints: constraints.value,
-    timestamp: new Date().toISOString()
+  // Сохраняем исходные метрики для расчета улучшения
+  const locationIds = formData.locations.map((loc: any) => loc.id)
+
+  // Рассчитываем примерные исходные метрики (можно заменить на реальные от бэкенда)
+  originalMetrics.value = {
+    total_distance_km: locationIds.length * 15, // Пример: 15 км на магазин
+    total_time_hours: locationIds.length * 1.5, // Пример: 1.5 часа на магазин
+    total_cost_rub: locationIds.length * 1000 // Пример: 1000₽ на магазин
   }
 
-  console.log('Starting optimization:', optimizationRequest)
-  alert(
-    `Запуск оптимизации через ${selectedModelName.value}...\n(В Неделе 2 будет отправка на backend)`
-  )
+  try {
+    isOptimizing.value = true
+    optimizationError.value = null
+
+    const result = await optimize(locationIds, selectedModel.value, {
+      vehicle_capacity: constraints.value.vehicleCapacity,
+      max_distance_km: constraints.value.maxDistance,
+      start_time: constraints.value.startTime,
+      end_time: constraints.value.endTime,
+      max_stops: constraints.value.maxStops
+    })
+
+    optimizationResult.value = result
+  } catch (error: any) {
+    console.error('Optimization error:', error)
+    optimizationError.value =
+      error.message || 'Не удалось выполнить оптимизацию'
+  } finally {
+    isOptimizing.value = false
+  }
+}
+
+const retryOptimization = () => {
+  optimizationError.value = null
+  handleOptimize()
+}
+
+const resetOptimization = () => {
+  optimizationResult.value = null
+  optimizationError.value = null
+  originalMetrics.value = null
+  formLocations.value = []
+  resetForm()
 }
 
 const resetForm = () => {
@@ -288,6 +321,12 @@ const resetForm = () => {
     startTime: '08:00',
     endTime: '20:00'
   }
-  console.log('Form reset')
+}
+
+const saveRoute = async () => {
+  if (!optimizationResult.value) return
+
+  // Здесь можно добавить логику сохранения маршрута
+  alert('Маршрут сохранен!')
 }
 </script>

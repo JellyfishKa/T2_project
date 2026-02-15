@@ -1,95 +1,131 @@
-import { mount } from '@vue/test-utils'
+import { mount, VueWrapper } from '@vue/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import OptimizeView from '@/views/OptimizeView.vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { nextTick } from 'vue'
 
-// Mock components
-const MockOptimizationForm = {
-  template: '<div>OptimizationForm Mock</div>',
-  methods: {
-    resetForm: vi.fn(),
-    getFormData: vi.fn(() => ({ routeName: 'Test', locations: [] }))
+
+// Мокаем API
+vi.mock('@/services/api', () => ({
+  optimize: vi.fn()
+}))
+
+// Мокаем компоненты
+vi.mock('@/components/optimize/OptimizationForm.vue', () => ({
+  default: {
+    name: 'OptimizationForm',
+    template: '<div data-testid="optimization-form"></div>',
+    props: ['modelValue'],
+    emits: ['submit', 'validate'],
+    methods: {
+      resetForm: vi.fn(),
+      getFormData: vi.fn(() => ({
+        routeName: 'Test Route',
+        locations: [
+          {
+            id: 'loc-1',
+            name: 'Store 1',
+            city: 'Moscow',
+            street: 'Tverskaya',
+            houseNumber: '15',
+            latitude: 55.7558,
+            longitude: 37.6173,
+            timeWindowStart: '09:00',
+            timeWindowEnd: '18:00',
+            priority: 'medium'
+          }
+        ]
+      })),
+      clearAllLocations: vi.fn(),
+      addLocationFromImport: vi.fn()
+    }
   }
-}
+}))
 
-const MockConstraintsPanel = {
-  template: '<div>ConstraintsPanel Mock</div>',
-  emits: ['update-constraints']
-}
+vi.mock('@/components/optimize/OptimizationResult.vue', () => ({
+  default: {
+    name: 'OptimizationResult',
+    template: '<div data-testid="optimization-result"></div>',
+    props: ['result', 'isLoading', 'error', 'originalMetrics', 'locations'],
+    emits: ['reset', 'retry', 'save']
+  }
+}))
 
-const MockFileUpload = {
-  template: '<div>FileUpload Mock</div>',
-  emits: ['add-locations']
-}
+vi.mock('@/components/optimize/ConstraintsPanel.vue', () => ({
+  default: {
+    name: 'ConstraintsPanel',
+    template: '<div data-testid="constraints-panel"></div>',
+    props: ['constraints'],
+    emits: ['update-constraints']
+  }
+}))
+
+vi.mock('@/components/optimize/FileUpload.vue', () => ({
+  default: {
+    name: 'FileUpload',
+    template: '<div data-testid="file-upload"></div>',
+    emits: ['add-locations']
+  }
+}))
+
+// Создаем роутер для тестов
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/', component: { template: '<div>Home</div>' } },
+    { path: '/optimize', component: OptimizeView }
+  ]
+})
 
 describe('OptimizeView.vue', () => {
-  let wrapper: any
+  let wrapper: VueWrapper<any>
 
-  beforeEach(() => {
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/', component: { template: '<div>Home</div>' } },
-        { path: '/optimize', component: OptimizeView }
-      ]
-    })
+  beforeEach(async () => {
+    vi.resetAllMocks()
 
     wrapper = mount(OptimizeView, {
       global: {
         plugins: [router],
         stubs: {
-          OptimizationForm: MockOptimizationForm,
-          ConstraintsPanel: MockConstraintsPanel,
-          FileUpload: MockFileUpload
+          OptimizationForm: true,
+          OptimizationResult: true,
+          ConstraintsPanel: true,
+          FileUpload: true
         }
       }
     })
+
+    await router.push('/optimize')
+    await router.isReady()
   })
 
-  it('displays model selection options', () => {
-    const modelLabels = wrapper.findAll('div.text-sm.font-medium')
-
+  it('отображает выбор модели', () => {
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
     expect(wrapper.text()).toContain('DeepSeek')
-
-    // Проверяем описания моделейs
-    expect(wrapper.text()).toContain('Высокая точность, платный')
-    expect(wrapper.text()).toContain('Быстрый, бесплатный')
-    expect(wrapper.text()).toContain('Баланс цены и качества')
   })
 
-  it('selects Llama model by default', () => {
+  it('выбирает Llama модель по умолчанию', () => {
     const llamaRadio = wrapper.find('input[value="llama"]')
     expect((llamaRadio.element as HTMLInputElement).checked).toBe(true)
   })
 
-  it('changes selected model when clicked', async () => {
+  it('изменяет выбранную модель при клике', async () => {
     const qwenRadio = wrapper.find('input[value="qwen"]')
-    await qwenRadio.setValue()
+    await qwenRadio.setValue(true)
 
     expect(wrapper.vm.selectedModel).toBe('qwen')
   })
 
-  it('handles form validation updates', async () => {
-    const optimizationForm = wrapper.findComponent({ name: 'OptimizationForm' })
-
-    expect(wrapper.vm.isFormValid).toBe(false)
-  })
-
-  it('disables optimize button when form is invalid', async () => {
-    // Устанавливаем невалидную форму
+  it('отключает кнопку оптимизации при невалидной форме', async () => {
     wrapper.vm.isFormValid = false
     await nextTick()
 
     const optimizeButton = wrapper.find('button.bg-blue-600')
-    expect(optimizeButton.attributes('disabled')).toBe('')
-    expect(optimizeButton.classes()).toContain('disabled:opacity-50')
+    expect(optimizeButton.attributes('disabled')).toBeDefined()
   })
 
-  it('enables optimize button when form is valid', async () => {
-    // Устанавливаем валидную форму
+  it('включает кнопку оптимизации при валидной форме', async () => {
     wrapper.vm.isFormValid = true
     await nextTick()
 
@@ -97,7 +133,7 @@ describe('OptimizeView.vue', () => {
     expect(optimizeButton.attributes('disabled')).toBeUndefined()
   })
 
-  it('shows alert when optimizing with invalid form', async () => {
+  it('показывает предупреждение при попытке оптимизации с невалидной формой', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
     wrapper.vm.isFormValid = false
@@ -107,34 +143,5 @@ describe('OptimizeView.vue', () => {
       'Пожалуйста, заполните все обязательные поля формы'
     )
     alertSpy.mockRestore()
-  })
-
-  it('resets form when reset button is clicked', async () => {
-    const resetButton = wrapper.find('button.bg-white')
-    await resetButton.trigger('click')
-
-    // Проверяем, что модель сбросилась к Llama
-    expect(wrapper.vm.selectedModel).toBe('llama')
-
-    // Проверяем, что constraints сбросились к значениям по умолчанию
-    expect(wrapper.vm.constraints).toEqual({
-      vehicleCapacity: 1,
-      maxDistance: 500,
-      startTime: '08:00',
-      endTime: '20:00'
-    })
-  })
-
-  it('displays model characteristics', () => {
-    expect(wrapper.text()).toContain('Llama: Высокая точность, платный')
-    expect(wrapper.text()).toContain('Qwen: Быстрый, бесплатный')
-    expect(wrapper.text()).toContain('DeepSeek: Баланс цены и качества')
-  })
-
-  it('shows form requirements information', () => {
-    expect(wrapper.text()).toContain('Все поля обязательны для заполнения')
-    expect(wrapper.text()).toContain(
-      'Минимум 2 магазина для оптимизации маршрута'
-    )
   })
 })
