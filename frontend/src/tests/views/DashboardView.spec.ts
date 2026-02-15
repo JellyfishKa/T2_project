@@ -166,7 +166,6 @@ describe('DashboardView.vue', () => {
     created_at: '2026-02-13T09:15:00Z'
   }
 
-
   const mockAllMetrics = {
     metrics: [
       {

@@ -214,8 +214,6 @@ const formLocations = ref<
 
 const optimizationForm = ref<InstanceType<typeof OptimizationForm> | null>(null)
 
-
-
 // Methods
 const handleSubmit = (formData: any) => {
   // Сохраняем локации для отображения в результатах

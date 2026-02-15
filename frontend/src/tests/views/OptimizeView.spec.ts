@@ -4,7 +4,6 @@ import OptimizeView from '@/views/OptimizeView.vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { nextTick } from 'vue'
 
-
 // Мокаем API
 vi.mock('@/services/api', () => ({
   optimize: vi.fn()
