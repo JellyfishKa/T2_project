@@ -59,7 +59,7 @@ class QwenClient(LLMClient):
                     n_gpu_layers=0,
                     n_ctx=2048,
                     n_batch=512,
-                    verbose=False,
+                    verbose=True,
                 )
                 logger.info("Qwen GGUF model loaded successfully.")
             except Exception as e:
@@ -96,6 +96,8 @@ class QwenClient(LLMClient):
                     locations_data,
                     constraints,
                 )
+                logger.info(f"RAW MODEL RESPONSE (Attempt {attempt}):\n{response_text}")
+                print(response_text)
                 result = self._parse_response(response_text, locations)
 
                 duration = time() - start_time

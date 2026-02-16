@@ -22,13 +22,22 @@ from src.models.schemas import Location, Route
 
 logger = logging.getLogger("tpro_client")
 
+# --- Временный файловый лог для отладки ---
+LOG_FILE = "tpro_debug.log"
+file_handler = logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+logger.addHandler(file_handler)
+logger.setLevel(logging.DEBUG)
+# --- конец временного лога ---
+
 
 class TProClient(LLMClient):
     _llm = None
 
     def __init__(self):
         self.model_name = settings.tpro_model_id
-        self.timeout = 30
+        self.timeout = 120
         try:
             self.model_path = settings.get_model_path(settings.tpro_model_id)
         except FileNotFoundError as e:
@@ -44,16 +53,17 @@ class TProClient(LLMClient):
                 )
 
             try:
-                logger.info(f"Loading GGUF model from {self.model_path}...")
+                logger.debug(f"Loading GGUF model from {self.model_path}...")
+                logger.debug(f"Config: n_threads=4, n_gpu_layers=-1, n_ctx=2048")
                 TProClient._llm = Llama(
                     model_path=self.model_path,
                     n_threads=4,
                     n_threads_batch=4,
-                    n_gpu_layers=0,
+                    n_gpu_layers=-1,
                     n_batch=512,
-                    n_ctx=512,
+                    n_ctx=2048,
                 )
-                logger.info("GGUF model loaded successfully.")
+                logger.debug("GGUF model loaded successfully.")
             except Exception as e:
                 logger.error(f"Critical error loading GGUF model: {e}")
                 raise TProServerError(f"Failed to load GGUF model: {e}")
@@ -74,6 +84,8 @@ class TProClient(LLMClient):
             try:
                 response_text = await self._run_inference(locations_data,
                                                           constraints)
+                logger.info(f"RAW MODEL RESPONSE (Attempt {attempt}):\n{response_text}")
+                print(response_text)
                 result = self._parse_response(response_text, locations)
 
                 duration = time() - start_time
@@ -108,6 +120,9 @@ class TProClient(LLMClient):
             {"role": "user", "content": user_prompt},
         ]
 
+        logger.debug(f"Prompt sent to model:\n{user_prompt}")
+        logger.debug(f"Timeout: {self.timeout}s, max_tokens: 1024, temp: 0.1")
+
         loop = asyncio.get_event_loop()
 
         try:
@@ -124,6 +139,7 @@ class TProClient(LLMClient):
             )
 
             content = output["choices"][0]["message"]["content"]
+            logger.debug(f"Full API output: {json.dumps(output, ensure_ascii=False, default=str)}")
             return content
 
         except asyncio.TimeoutError:
