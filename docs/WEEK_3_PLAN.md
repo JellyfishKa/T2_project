@@ -1,48 +1,83 @@
-### Загрузка модели t-pro
+# НЕДЕЛЯ 3: ПЕРЕХОД НА 2 LLM И ПОЛИРОВКА
 
-1) Скачаем модель по ссылке: 
+## Изменение архитектуры LLM
 
-2) Поместим данную модель в папку models
+По результатам бенчмарков и опыта недель 1-2 принято решение перейти с трёх LLM-моделей (Qwen, T-Pro, Llama) на **две модели**:
 
-3) Укажем имя модели в .env файле:
+| | Было (Недели 1-2) | Стало (Неделя 3+) |
+|---|---|---|
+| **Primary** | Qwen (основная) | Qwen (основная) |
+| **Secondary** | T-Pro (вторичная) | — удалена |
+| **Fallback** | Llama (резервная) | Llama (резервная) |
+| **Last resort** | Greedy Algorithm | Greedy Algorithm |
 
-```
-    TPRO_API_ENDPOINT=https://api-inference.huggingface.co/v1/chat/completions
-    TPRO_MODEL_ID=
-```
+### Причины отказа от T-Pro
 
-4) Запустим сервер, проверим работоспособность модели POST-запросом по эндпойнту /tpro/optimize:
+В ходе тестирования и поэтапной подготовки к продакшену выяснилось, что T-Pro работает нестабильно и отказывается корректно взаимодействовать с системой. Основные проблемы:
 
-    - Выполните curl запрос в следующем виде:
-```
-curl -X 'POST' \
-  'http://127.0.0.1:8000/tpro/optimize' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "locations": [
-    {
-      "ID": "loc_red_square",
-      "name": "Red Square",
-      "address": "Red Square, Moscow, Russia",
-      "lat": 55.7539,
-      "lon": 37.6208,
-      "time_window_start": "10:00",
-      "time_window_end": "22:00",
-      "priority": "high"
-    },
-    {
-      "ID": "loc_gorky_park",
-      "name": "Gorky Park",
-      "address": "Krymskiy Val, 9, Moscow, Russia",
-      "lat": 55.7298,
-      "lon": 37.5995,
-      "time_window_start": "08:00",
-      "time_window_end": "23:00",
-      "priority": "medium"
-    }
-  ],
-  "constraints": {}
-}'
+- T-Pro (33B параметров) показала неудовлетворительное качество работы при интеграции
+- Модель отказывалась корректно обрабатывать запросы на оптимизацию
+- Высокие требования к ресурсам (16-20 GB RAM) не оправдывались качеством результата
+- Qwen (0.5B) и Llama (1B) обеспечивают достаточное покрытие задач при минимальных ресурсах (~1.8 GB RAM суммарно)
+
+### Обновлённая fallback-цепочка
 
 ```
+Запрос на оптимизацию
+    |
+    v
+[Qwen] -- успех --> Ответ (model_used="qwen")
+    |
+  ошибка
+    |
+    v
+[Llama] -- успех --> Ответ (model_used="llama")
+    |
+  ошибка
+    |
+    v
+[Greedy Algorithm] --> Ответ (model_used="greedy")
+```
+
+---
+
+## Актуальные endpoints
+
+| Метод | Endpoint | Модель | Назначение |
+|-------|----------|--------|------------|
+| POST | /qwen/optimize | Qwen | Оптимизация маршрута (основная) |
+| POST | /llama/optimize | Llama | Оптимизация маршрута (надежная) |
+| GET | /health | — | Проверка состояния системы |
+
+---
+
+## Актуальная конфигурация .env
+
+```env
+QWEN_API_ENDPOINT=local
+QWEN_MODEL_ID=qwen2-0_5b-instruct-q4_k_m.gguf
+
+LLAMA_API_ENDPOINT=local
+LLAMA_MODEL_ID=Llama-3.2-1B-Instruct-Q4_K_M.gguf
+```
+
+---
+
+## Задачи Недели 3
+
+### Полировка и стабилизация
+
+- [ ] Убедиться, что Qwen и Llama работают стабильно
+- [ ] Проверить fallback-цепочку (Qwen → Llama → Greedy)
+- [ ] Финализация UI — отображение только двух моделей
+- [ ] Обновление документации (переход с 3 на 2 модели)
+- [ ] Production-ready тестирование
+- [ ] Подготовка к демо
+
+### Ресурсы моделей
+
+| Модель | GGUF файл | RAM | Диск |
+|--------|-----------|-----|------|
+| Qwen2-0.5B-Instruct | qwen2-0_5b-instruct-q4_k_m.gguf | ~0.6 GB | ~400 MB |
+| Llama-3.2-1B-Instruct | Llama-3.2-1B-Instruct-Q4_K_M.gguf | ~1.2 GB | ~808 MB |
+| **Итого** | | **~1.8 GB** | **~1.2 GB** |

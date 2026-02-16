@@ -24,8 +24,8 @@
     |  Models   |    | (PostgreSQL) |
     |           |    |              |
     | Qwen      |    | Маршруты     |
-    | T-Pro     |    | Метрики      |
-    | Llama     |    | Cache        |
+    | Llama     |    | Метрики      |
+    |           |    | Cache        |
     +-----------+    +--------------+
 ```
 
@@ -50,9 +50,6 @@ class LLMClient(ABC):
 class QwenClient(LLMClient):
     # Основная модель (лучшее качество)
 
-class TProClient(LLMClient):
-    # Вторичная модель (быстрый отклик)
-
 class LlamaClient(LLMClient):
     # Fallback модель (максимальная надежность, open-source)
 ```
@@ -60,8 +57,6 @@ class LlamaClient(LLMClient):
 **Стратегия fallback**:
 ```
 Пробуем Qwen (Primary)
-  | (если fail)
-Пробуем T-Pro (Secondary)
   | (если fail)
 Пробуем Llama (Fallback)
   | (если все fail)
@@ -85,11 +80,6 @@ POST /qwen/optimize
 |-- Вход: List[Location], ограничения
 |-- Процесс: QwenClient генерирует маршруты
 |-- Выход: OptimizedRoute (последовательность, время, стоимость)
-
-POST /tpro/optimize
-|-- Вход: List[Location], ограничения
-|-- Процесс: TProClient генерирует маршруты
-|-- Выход: OptimizedRoute
 
 POST /llama/optimize
 |-- Вход: List[Location], ограничения
@@ -131,7 +121,7 @@ CREATE TABLE routes (
 CREATE TABLE metrics (
     id UUID PRIMARY KEY,
     route_id UUID REFERENCES routes(id),
-    model VARCHAR(50),  -- qwen, tpro, llama, greedy
+    model VARCHAR(50),  -- qwen, llama, greedy
     response_time_ms INTEGER,
     quality_score FLOAT,  -- 0-100
     cost FLOAT,  -- стоимость модели
@@ -194,12 +184,11 @@ export const api = axios.create({
     |
 Frontend валидирует
     |
-POST /qwen/optimize (или /tpro/optimize, /llama/optimize)
+POST /qwen/optimize (или /llama/optimize)
     |
 Backend LLMClient.generate_route()
     |
 Qwen (попытка 1)
-    | (fail? -> T-Pro)
     | (fail? -> Llama)
     | (fail? -> Greedy)
     |
@@ -219,7 +208,7 @@ Frontend визуализирует на карте
 ```
 ML бенчмарки
     |
-Запустить все 3 модели на test данных
+Запустить все 2 модели на test данных
     |
 Измеряем: response_time, quality, cost
     |
@@ -241,14 +230,11 @@ Dashboard отображает сравнение
 DATABASE_URL=postgresql://user:pass@localhost/t2_db
 
 # LLM Models
-QWEN_API_ENDPOINT=https://api-inference.huggingface.co/v1/chat/completions
-QWEN_MODEL_ID=Qwen/Qwen2-0.5B-Instruct
+QWEN_API_ENDPOINT=local
+QWEN_MODEL_ID=qwen2-0_5b-instruct-q4_k_m.gguf
 
-TPRO_API_ENDPOINT=https://api-inference.huggingface.co/v1/chat/completions
-TPRO_MODEL_ID=t-tech/T-pro-it-1.0
-
-LLAMA_API_ENDPOINT=https://api-inference.huggingface.co/v1/chat/completions
-LLAMA_MODEL_ID=meta-llama/Llama-3.2-1B-Instruct
+LLAMA_API_ENDPOINT=local
+LLAMA_MODEL_ID=Llama-3.2-1B-Instruct-Q4_K_M.gguf
 
 HF_TOKEN=your_hf_token
 
@@ -269,7 +255,6 @@ VITE_API_URL=http://localhost:8000
 # Включить/отключить модели во время выполнения
 ENABLED_MODELS = {
     'qwen': os.getenv('ENABLE_QWEN', 'true') == 'true',
-    'tpro': os.getenv('ENABLE_TPRO', 'true') == 'true',
     'llama': True,  # Всегда включена (локальная, fallback)
 }
 
@@ -293,12 +278,6 @@ def test_qwen_client():
 
 def test_fallback():
     # Mock Qwen fail
-    # Должен fallback на T-Pro
-    result = await service.generate_route([...])
-    assert result.model_used == 'tpro'
-
-def test_full_fallback_chain():
-    # Mock Qwen + T-Pro fail
     # Должен fallback на Llama
     result = await service.generate_route([...])
     assert result.model_used == 'llama'
@@ -346,7 +325,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://...
       - QWEN_MODEL_ID=...
-      - TPRO_MODEL_ID=...
       - LLAMA_MODEL_ID=...
       - HF_TOKEN=...
     depends_on:
@@ -423,9 +401,8 @@ services:
 - Dashboard interaction: <200ms
 
 ### LLM Models
-- Qwen: ~2-3 сек (лучшее качество)
-- T-Pro: ~1-2 сек (быстрый отклик)
-- Llama: ~3-5 сек (надежный fallback)
+- Qwen: ~3-10 сек (лучшее качество, основная)
+- Llama: ~5-15 сек (надежный fallback)
 
 ---
 

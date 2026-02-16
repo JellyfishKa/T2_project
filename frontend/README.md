@@ -1,6 +1,6 @@
 # T2 Project
 
-Vue 3 веб-интерфейс для работы с LLM моделями Llama, Qwen и DeepSeek
+Vue 3 веб-интерфейс для работы с LLM моделями Qwen и Llama
 ## Структура проекта
 
 ```

@@ -1,6 +1,8 @@
 # ML: окружение для LLM
 
-Каталог содержит конфигурацию и скрипты для работы с тремя LLM (Qwen, T-Pro, Llama): загрузка/проверка доступности, бенчмарки и использование в коде. Backend не изменяется — подключаем только его клиенты (QwenClient, TProClient, LlamaClient) для тестов и бенчмарков.
+Каталог содержит конфигурацию и скрипты для работы с двумя LLM (Qwen, Llama): загрузка/проверка доступности, бенчмарки и использование в коде. Backend не изменяется — подключаем только его клиенты (QwenClient, LlamaClient) для тестов и бенчмарков.
+
+> **Примечание**: изначально проект использовал 3 модели (Qwen, T-Pro, Llama). T-Pro была исключена на этапе подготовки к продакшену из-за нестабильной работы.
 
 ---
 
@@ -22,8 +24,8 @@ ml/
 
 В `backend/` определены клиенты с интерфейсом `generate(prompt: str) -> str`. Мы только добавляем `backend` в `sys.path` и вызываем их:
 
-- **test_models.py** — после тестов Qwen/Llama/T-Pro проверяет, что GigaChat, Cotype и T-Pro из backend импортируются и отвечают на тестовый промпт.
-- **llm_benchmark.py** — флаг `--backend`: бенчмарк гоняется по этим же клиентам; вывод в тот же `results.json`.
+- **test_models.py** — проверяет, что QwenClient и LlamaClient из backend импортируются и отвечают на тестовый промпт.
+- **llm_benchmark.py** — флаг `--backend`: бенчмарк гоняется по клиентам backend; вывод в тот же `results.json`.
 
 Запуск бенчмарка по клиентам backend (из корня репозитория):
 
@@ -79,10 +81,9 @@ huggingface-cli login
 | Модель | VRAM (ориентир) | RAM (загрузка) | Примечание |
 |--------|------------------|----------------|------------|
 | Qwen2-0.5B-Instruct | ~2 GB | ~4 GB | Удобна для локального инференса. |
-| Llama-3.2-1B-Instruct | ~4 GB | ~6 GB | Gated: нужен HF-токен и лицензия. |
-| T-Pro-it-1.0 | ~64 GB (bf16) / ~32 GB (int8) | ~8 GB | Имеет смысл квантование или vLLM. |
+| Llama-3.2-1B-Instruct | ~4 GB | ~6 GB | Community GGUF, скачивается без логина. |
 
-Ссылки: [Qwen2-0.5B-Instruct](https://huggingface.co/Qwen/Qwen2-0.5B-Instruct), [Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct), [T-Pro-it-1.0](https://huggingface.co/t-tech/T-pro-it-1.0).
+Ссылки: [Qwen2-0.5B-Instruct](https://huggingface.co/Qwen/Qwen2-0.5B-Instruct), [Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct).
 
 ---
 
@@ -90,7 +91,7 @@ huggingface-cli login
 
 ### Проверка моделей
 
-Проверяет доступность трёх HF-моделей (токенизатор/конфиг, при возможности — инференс) и клиентов backend:
+Проверяет доступность HF-моделей (токенизатор/конфиг, при возможности — инференс) и клиентов backend:
 
 ```bash
 python ml/test_models.py
@@ -134,8 +135,6 @@ print(tokenizer.decode(out[0], skip_special_tokens=True))
 
 **Llama-3.2-1B-Instruct** — тот же подход: `from_pretrained` + при необходимости `apply_chat_template` по документации модели.
 
-**T-Pro-it-1.0** — крупная модель; те же классы, для экономии памяти — `torch_dtype=torch.bfloat16`, `low_cpu_mem_usage=True` или квантование.
-
 ---
 
 ## Кэш и окружение
@@ -156,6 +155,5 @@ print(tokenizer.decode(out[0], skip_special_tokens=True))
 ## Кратко
 
 - Первая загрузка моделей может быть долгой; нужен запас по диску (десятки GB при полном кэше).
-- Для T-Pro предпочтительны квантованная версия или vLLM.
 - Модели с кастомным кодом требуют `trust_remote_code=True`.
 - Backend в этом репозитории не меняем; в ml только подключаем его клиенты и используем их в тестах и бенчмарках.

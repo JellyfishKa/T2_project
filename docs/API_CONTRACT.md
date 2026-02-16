@@ -144,7 +144,7 @@ Content-Type: application/json
 Ответ 503 Service Unavailable:
 {
   "error": "Все модели недоступны",
-  "details": "Qwen down, T-Pro down, Llama down"
+  "details": "Qwen down, Llama down"
 }
 ```
 
@@ -233,14 +233,7 @@ GET /metrics?route_id=route-456
       "model": "qwen",
       "response_time_ms": 2345,
       "quality_score": 0.92,
-      "cost_rub": 45.00,
-      "timestamp": "2026-01-06T10:30:00Z"
-    },
-    {
-      "model": "tpro",
-      "response_time_ms": 1800,
-      "quality_score": 0.88,
-      "cost_rub": 60.00,
+      "cost_rub": 0.00,
       "timestamp": "2026-01-06T10:30:00Z"
     },
     {
@@ -285,17 +278,7 @@ Content-Type: application/json
       "min_response_time_ms": 1850,
       "max_response_time_ms": 3100,
       "avg_quality_score": 0.92,
-      "total_cost_rub": 225.00,
-      "success_rate": 1.0
-    },
-    {
-      "model": "tpro",
-      "num_tests": 5,
-      "avg_response_time_ms": 1800,
-      "min_response_time_ms": 1350,
-      "max_response_time_ms": 2650,
-      "avg_quality_score": 0.88,
-      "total_cost_rub": 300.00,
+      "total_cost_rub": 0.00,
       "success_rate": 1.0
     },
     {
@@ -359,7 +342,6 @@ GET /health
   "services": {
     "database": "connected",
     "qwen": "available",
-    "tpro": "available",
     "llama": "available"
   }
 }
@@ -370,7 +352,6 @@ GET /health
   "services": {
     "database": "disconnected",
     "qwen": "unavailable",
-    "tpro": "available",
     "llama": "available"
   }
 }
@@ -385,7 +366,6 @@ GET /health
 | Endpoint | Модель | Описание |
 |----------|--------|----------|
 | POST /qwen/optimize | Qwen | Прямой вызов Qwen (Primary) |
-| POST /tpro/optimize | T-Pro | Прямой вызов T-Pro (Secondary) |
 | POST /llama/optimize | Llama | Прямой вызов Llama (Fallback) |
 
 Формат запроса и ответа аналогичен `/optimize`, но без fallback.
@@ -465,7 +445,7 @@ api.interceptors.response.use((config) => {
 
 **Для Backend**:
 - [ ] Реализовать все 7 endpoints
-- [ ] Реализовать model-specific endpoints (/qwen, /tpro, /llama)
+- [ ] Реализовать model-specific endpoints (/qwen, /llama)
 - [ ] Возвращать точные модели данных
 - [ ] Обрабатывать все error case
 - [ ] Response times <2 сек
@@ -496,5 +476,5 @@ api.interceptors.response.use((config) => {
 4. **Расстояния**: В километрах
 5. **Время**: В HH:MM формате или часах (зависит от endpoint)
 6. **IDs**: UUIDs или простые строки (консистентность важна)
-7. **model_used**: Одно из: `"qwen"`, `"tpro"`, `"llama"`, `"greedy"`
+7. **model_used**: Одно из: `"qwen"`, `"llama"`, `"greedy"`
 8. **fallback_reason**: `null` если основная модель справилась, строка с причиной если был fallback
