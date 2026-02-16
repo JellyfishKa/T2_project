@@ -27,5 +27,5 @@ async def create_location(
     session.add(new_location)
     await session.commit()
     await session.refresh(new_location)
-    
+
     return new_location

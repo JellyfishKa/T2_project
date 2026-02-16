@@ -28,7 +28,7 @@ class AdvancedMiddleware(BaseHTTPMiddleware):
 
             logger.info(
                 f"Request {request.method} {request.url.path} "
-                f"completed in {process_time:.4f}s with status {response.status_code}"
+                f"completed in {process_time:.4f}s with status {response.status_code}",
             )
             return response
 
