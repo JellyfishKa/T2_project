@@ -1,7 +1,8 @@
 """
-Unit-тесты для сравнения оптимизации моделей (ML-5).
+Unit-тесты для сравнения оптимизации моделей (ML-5, Неделя 3).
 
 Проверяют compare_models_optimization, метрики маршрутов и генерацию отчёта.
+Тестируются только 2 модели: Qwen (Primary) и Llama (Fallback).
 """
 
 import json
@@ -10,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-# Путь к ml/benchmarks для импорта optimization_comparison
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 ML_BENCHMARKS = PROJECT_ROOT / "ml" / "benchmarks"
 sys.path.insert(0, str(PROJECT_ROOT / "backend"))
@@ -61,8 +61,8 @@ class TestCompareModelsOptimization:
         assert "quality_score" in base
         assert "response_time_ms" in base
 
-    def test_all_three_models_present(self, sample_locations, temp_output_dir):
-        """В результатах есть все три модели: qwen, llama, tpro."""
+    def test_two_models_present(self, sample_locations, temp_output_dir):
+        """В результатах есть две модели: qwen и llama (Неделя 3)."""
         import optimization_comparison as oc
         result = oc.compare_models_optimization(
             sample_locations, use_mock=True, output_dir=temp_output_dir
@@ -70,7 +70,7 @@ class TestCompareModelsOptimization:
         models = result["models"]
         assert "qwen" in models
         assert "llama" in models
-        assert "tpro" in models
+        assert "tpro" not in models, "T-Pro удалён из тестов (Неделя 3)"
 
     def test_each_model_has_quality_and_response_time(self, sample_locations, temp_output_dir):
         """У каждой модели есть quality_score и response_time_ms."""
@@ -109,6 +109,8 @@ class TestCompareModelsOptimization:
         assert "Benchmark оптимизации" in text or "оптимизации" in text
         assert "Greedy" in text
         assert "Qwen" in text
+        assert "Llama" in text
+        assert "T-Pro" not in text, "T-Pro не должен быть в отчёте (Неделя 3)"
         assert "|" in text
 
 
@@ -136,4 +138,4 @@ class TestRouteHelpers:
         order = oc._parse_order_from_response("1 0 2", 3)
         assert order == [1, 0, 2]
         assert oc._parse_order_from_response("", 3) is None
-        assert oc._parse_order_from_response("0, 1", 3) is None  # не все индексы
+        assert oc._parse_order_from_response("0, 1", 3) is None

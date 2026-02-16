@@ -3,32 +3,46 @@
 # ==========================================
 FROM python:3.12 as builder
 
-# Устанавливаем системные зависимости для сборки (если нужны для asyncpg/psycopg2)
-RUN apt-get update && apt-get install -y gcc build-essential
+RUN apt-get update && apt-get install -y \
+    gcc \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Создаем виртуальное окружение
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Копируем только requirements для кэширования слоя
 COPY requirements/prod/requirements.txt .
 RUN pip install --no-cache-dir -r requirements/prod/requirements.txt
 
 # ==========================================
 # Stage 2: Final
 # ==========================================
-FROM python:3.12
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Копируем виртуальное окружение из билдера
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Копируем код приложения
 COPY . .
 
-# Команда по умолчанию (будет переопределена в docker-compose для hot-reload)
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN mkdir -p /app/models && chmod 755 /app/models
+
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

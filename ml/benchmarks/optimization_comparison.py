@@ -32,7 +32,6 @@ COST_PER_KM_RUB = 15.0
 MODELS = [
     ("qwen", "Qwen"),
     ("llama", "Llama"),
-    ("tpro", "T-Pro"),
 ]
 
 
@@ -126,11 +125,16 @@ def _parse_order_from_response(response: str, n: int) -> Optional[List[int]]:
 
 
 def _get_backend_clients() -> Dict[str, Any]:
-    """Возвращает клиенты backend (T-Pro) по возможности."""
+    """Возвращает клиенты backend (Qwen, Llama) по возможности."""
     clients = {}
     try:
-        from src.models.tpro_client import TProClient
-        clients["tpro"] = TProClient()
+        from src.models.qwen_client import QwenClient
+        clients["qwen"] = QwenClient()
+    except Exception:
+        pass
+    try:
+        from src.models.llama_client import LlamaClient
+        clients["llama"] = LlamaClient()
     except Exception:
         pass
     return clients

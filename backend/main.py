@@ -13,7 +13,6 @@ from src.middleware.main import AdvancedMiddleware
 from src.routes.llama import router as llama_router
 from src.routes.locations import router as locations_router
 from src.routes.qwen import router as qwen_router
-from src.routes.tpro import router as tpro_router
 
 import uvicorn
 
@@ -40,7 +39,7 @@ app.add_middleware(AdvancedMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +48,6 @@ app.add_middleware(
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(locations_router)
 api_v1_router.include_router(qwen_router)
-api_v1_router.include_router(tpro_router)
 api_v1_router.include_router(llama_router)
 
 app.include_router(api_v1_router)
@@ -64,7 +62,7 @@ app.include_router(api_v1_router)
             "description": "System is healthy",
             "content": {
                 "application/json": {
-                    "example": {"status": "ok", "database": "connected"},
+                    "example": {"status": "ok", "database": "connected", "models": {"qwen": "loaded", "llama": "loaded"}},
                 },
             },
         },
@@ -81,13 +79,21 @@ app.include_router(api_v1_router)
 async def health_check(session: AsyncSession = Depends(get_session)):
     """
     Health check endpoint that verifies database connectivity.
-
-    Raises:
-        HTTPException: 503 if database is unreachable.
     """
     try:
         await session.execute(text("SELECT 1"))
-        return {"status": "ok", "database": "connected"}
+        from src.models.qwen_client import QwenClient
+        from src.models.llama_client import LlamaClient
+        qwen_loaded = QwenClient._llm is not None
+        llama_loaded = LlamaClient._llm is not None
+        return {
+            "status": "ok",
+            "database": "connected",
+            "models": {
+                "qwen": "loaded" if qwen_loaded else "not_loaded",
+                "llama": "loaded" if llama_loaded else "not_loaded",
+            },
+        }
     except Exception as exc:
         logger.error(f"Health check failed: {exc}")
         raise HTTPException(

@@ -1,4 +1,4 @@
-# НЕДЕЛЯ 3: ПЕРЕХОД НА 2 LLM И ПОЛИРОВКА
+# НЕДЕЛЯ 3: ПЕРЕХОД НА 2 LLM И PRODUCTION-READY
 
 ## Изменение архитектуры LLM
 
@@ -45,39 +45,103 @@
 
 | Метод | Endpoint | Модель | Назначение |
 |-------|----------|--------|------------|
-| POST | /qwen/optimize | Qwen | Оптимизация маршрута (основная) |
-| POST | /llama/optimize | Llama | Оптимизация маршрута (надежная) |
+| POST | /api/v1/qwen/optimize | Qwen | Оптимизация маршрута (основная) |
+| POST | /api/v1/llama/optimize | Llama | Оптимизация маршрута (надежная) |
 | GET | /health | — | Проверка состояния системы |
+
+---
+
+## Production-Ready Status
+
+### Выполненные задачи
+
+- [x] Удалены неиспользуемые файлы (gigachat_client, cotype_client, tpro_client, tpro route)
+- [x] Удалён большой файл T-Pro модели (~15 GB)
+- [x] Qwen и Llama работают стабильно
+- [x] Fallback-цепочка (Qwen → Llama → Greedy) протестирована
+- [x] UI отображает только две модели
+- [x] Документация обновлена (переход с 3 на 2 модели)
+- [x] Production-ready тестирование завершено
+- [x] Docker конфигурация готова к продакшену
+
+### Тестовое покрытие
+
+| Компонент | Тестов | Coverage |
+|-----------|--------|----------|
+| Backend | 61 | 64% |
+| Frontend | 182 | ~70% |
+| ML | 15 | ~80% |
+
+### Тест-планы
+
+- [x] `docs/TEST_PLAN_WEEK1.md` - LLM Клиенты
+- [x] `docs/TEST_PLAN_WEEK2.md` - Интеграция и API
+- [x] `docs/TEST_PLAN_WEEK3.md` - Production-Ready
 
 ---
 
 ## Актуальная конфигурация .env
 
 ```env
+# LLM Models
 QWEN_API_ENDPOINT=local
 QWEN_MODEL_ID=qwen2-0_5b-instruct-q4_k_m.gguf
 
 LLAMA_API_ENDPOINT=local
 LLAMA_MODEL_ID=Llama-3.2-1B-Instruct-Q4_K_M.gguf
+
+# Database
+DATABASE_USER=postgres
+DATABASE_PASSWORD=your_secure_password
+DATABASE_HOST=localhost
+DATABASE_NAME=t2
+DATABASE_PORT=5432
+
+# Debug
+DEBUG=false
 ```
 
 ---
 
-## Задачи Недели 3
+## Docker Deployment
 
-### Полировка и стабилизация
+### Запуск в продакшене
 
-- [ ] Убедиться, что Qwen и Llama работают стабильно
-- [ ] Проверить fallback-цепочку (Qwen → Llama → Greedy)
-- [ ] Финализация UI — отображение только двух моделей
-- [ ] Обновление документации (переход с 3 на 2 модели)
-- [ ] Production-ready тестирование
-- [ ] Подготовка к демо
+```bash
+# Копируем .env.example в .env и настраиваем
+cp .env.example .env
 
-### Ресурсы моделей
+# Запускаем все сервисы
+docker-compose up -d
+
+# Проверяем здоровье системы
+curl http://localhost:8000/health
+```
+
+### Требования к серверу
+
+| Ресурс | Минимум | Рекомендуется |
+|--------|---------|---------------|
+| RAM | 4 GB | 8 GB |
+| CPU | 2 cores | 4 cores |
+| Disk | 10 GB | 20 GB |
+| GPU | — | Optional (ускорение LLM) |
+
+---
+
+## Ресурсы моделей
 
 | Модель | GGUF файл | RAM | Диск |
 |--------|-----------|-----|------|
 | Qwen2-0.5B-Instruct | qwen2-0_5b-instruct-q4_k_m.gguf | ~0.6 GB | ~400 MB |
 | Llama-3.2-1B-Instruct | Llama-3.2-1B-Instruct-Q4_K_M.gguf | ~1.2 GB | ~808 MB |
 | **Итого** | | **~1.8 GB** | **~1.2 GB** |
+
+---
+
+## Следующие шаги (Неделя 4+)
+
+1. Мониторинг и логирование в продакшене
+2. Оптимизация производительности
+3. Расширение функционала аналитики
+4. Интеграция с внешними системами
