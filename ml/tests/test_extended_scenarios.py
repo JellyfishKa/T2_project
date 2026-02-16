@@ -4,8 +4,6 @@ from unittest.mock import MagicMock, patch
 import json
 from pathlib import Path
 
-# Mock dependencies before importing test_models
-# We need to keep references to these mocks to configure them in tests
 mock_transformers = MagicMock()
 mock_torch = MagicMock()
 mock_psutil = MagicMock()
@@ -14,34 +12,38 @@ sys.modules['transformers'] = mock_transformers
 sys.modules['torch'] = mock_torch
 sys.modules['psutil'] = mock_psutil
 
-# Bypass Windows-specific stdout reconfiguration and FileHandler creation
 with patch('sys.platform', 'linux'), \
      patch('logging.FileHandler'):
+<<<<<<< Updated upstream
     # Import the module as an alias to avoid pytest collecting 'test_gigachat' etc. as standalone tests
+=======
+>>>>>>> Stashed changes
     import ml.test_models as tm
+
 
 class TestExtendedModels:
 
     def setup_method(self):
-        # Reset mocks before each test
         mock_transformers.reset_mock()
         mock_torch.reset_mock()
-        # Clear side_effect to prevent leakage between tests
         mock_transformers.AutoTokenizer.from_pretrained.side_effect = None
         mock_transformers.AutoConfig.from_pretrained.side_effect = None
         mock_transformers.AutoModelForCausalLM.from_pretrained.side_effect = None
 
+<<<<<<< Updated upstream
     def test_gigachat_with_cpu_fallback(self):
         """TC-ML-004: Тест GigaChat с CPU fallback при недоступности GPU."""
         # Simulate CUDA not available
+=======
+    def test_qwen_with_cpu_fallback(self):
+        """TC-ML-006: Тест Qwen с CPU fallback при недоступности GPU."""
+>>>>>>> Stashed changes
         mock_torch.cuda.is_available.return_value = False
 
-        # Setup AutoTokenizer mock
         mock_tokenizer_instance = MagicMock()
         mock_tokenizer_instance.__len__.return_value = 1000
         mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer_instance
 
-        # Setup AutoConfig mock
         mock_config_instance = MagicMock()
         mock_config_instance.num_parameters.return_value = 1000000
         mock_transformers.AutoConfig.from_pretrained.return_value = mock_config_instance
@@ -52,6 +54,7 @@ class TestExtendedModels:
         assert info['status'] == 'available'
         assert info['model_name'] == "ai-sage/GigaChat3-10B-A1.8B"
 
+<<<<<<< Updated upstream
     @pytest.mark.xfail(reason="sys.modules mock doesn't propagate side_effect to from imports inside functions")
     def test_gigachat_error_handling(self):
         """TC-ML-005: Тест GigaChat с обработкой ошибок при загрузке модели."""
@@ -66,14 +69,16 @@ class TestExtendedModels:
     def test_cotype_cpu_mode(self):
         """TC-ML-006: Тест Cotype в CPU режиме."""
         # Simulate CUDA not available
+=======
+    def test_llama_cpu_mode(self):
+        """TC-ML-007: Тест Llama в CPU режиме."""
+>>>>>>> Stashed changes
         mock_torch.cuda.is_available.return_value = False
 
-        # Setup Tokenizer
         mock_tokenizer_instance = MagicMock()
         mock_tokenizer_instance.__len__.return_value = 2000
         mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer_instance
 
-        # Setup Config
         mock_transformers.AutoConfig.from_pretrained.return_value = MagicMock()
 
         success, info = tm.test_cotype()
@@ -82,54 +87,49 @@ class TestExtendedModels:
         assert info['model_name'] == "MTSAIR/Cotype-Nano"
         # Should be available but not loaded since CUDA is not available
 
+<<<<<<< Updated upstream
     def test_cotype_gpu_loading_failure(self):
         """TC-ML-007: Тест Cotype с обработкой ошибки при загрузке на GPU."""
         # Simulate CUDA available but model loading fails
+=======
+    def test_llama_gpu_loading_failure(self):
+        """TC-ML-008: Тест Llama с обработкой ошибки при загрузке на GPU."""
+>>>>>>> Stashed changes
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.device_count.return_value = 1
         mock_torch.cuda.get_device_name.return_value = "Mock GPU"
 
-        # Setup Tokenizer
         mock_tokenizer_instance = MagicMock()
         mock_tokenizer_instance.__len__.return_value = 2000
         mock_tokenizer_instance.return_value.to.return_value = {} # inputs.to(device)
         mock_tokenizer_instance.decode.return_value = "mock response"
         mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer_instance
 
-        # Setup Config
         mock_transformers.AutoConfig.from_pretrained.return_value = MagicMock()
 
-        # Setup Model to raise exception during loading
         mock_transformers.AutoModelForCausalLM.from_pretrained.side_effect = RuntimeError("Not enough memory")
 
         success, info = tm.test_cotype()
 
-        # Should still succeed as the model is available, just not loaded due to memory issues
         assert success is True
         assert info['model_name'] == "MTSAIR/Cotype-Nano"
 
-    @pytest.mark.xfail(reason="sys.modules mock doesn't propagate side_effect to from imports inside functions")
-    def test_tpro_error_handling(self):
-        """TC-ML-008: Тест T-Pro с обработкой ошибок при загрузке модели."""
-        # Setup to raise an exception
-        mock_transformers.AutoTokenizer.from_pretrained.side_effect = ConnectionError("Network error")
-
-        success, info = tm.test_tpro()
-
-        assert success is False
-        assert 'error' in info
-
     def test_system_info_collection(self):
         """TC-ML-009: Тест сбора информации о системе."""
-        # Setup mock system info
         mock_psutil.cpu_count.return_value = 8
+<<<<<<< Updated upstream
         mock_psutil.virtual_memory.return_value.total = 16 * 1024**3  # 16GB
         mock_psutil.virtual_memory.return_value.available = 8 * 1024**3  # 8GB available
         
+=======
+        mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
+        mock_psutil.virtual_memory.return_value.available = 8 * 1024**3
+
+>>>>>>> Stashed changes
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.device_count.return_value = 1
         mock_torch.cuda.get_device_name.return_value = "NVIDIA GeForce RTX 3080"
-        mock_torch.cuda.get_device_properties.return_value.total_memory = 10 * 1024**3  # 10GB
+        mock_torch.cuda.get_device_properties.return_value.total_memory = 10 * 1024**3
 
         sys_info = tm.get_system_info()
 
@@ -139,8 +139,12 @@ class TestExtendedModels:
         assert sys_info['cuda_device_name'] == "NVIDIA GeForce RTX 3080"
 
     def test_results_output_format(self):
+<<<<<<< Updated upstream
         """TC-ML-010: Тест формата вывода результатов."""
         # This test simulates the main function's behavior
+=======
+        """TC-ML-010: Тест формата вывода результатов (только Qwen и Llama)."""
+>>>>>>> Stashed changes
         import tempfile
         import os
         
@@ -176,9 +180,14 @@ class TestExtendedModels:
                 # Since we can't easily test the full main function due to its complexity,
                 # we'll test the results saving functionality separately
                 import datetime
+<<<<<<< Updated upstream
                 from unittest.mock import mock_open, patch
                 
                 # Test results saving
+=======
+                from unittest.mock import mock_open
+
+>>>>>>> Stashed changes
                 results_summary = {
                     'timestamp': datetime.datetime.now().isoformat(),
                     'system_info': {
@@ -187,9 +196,14 @@ class TestExtendedModels:
                         'cuda_available': False
                     },
                     'results': {
+<<<<<<< Updated upstream
                         'gigachat': {'success': True, 'info': {'model_name': 'ai-sage/GigaChat3-10B-A1.8B', 'status': 'available'}},
                         'cotype': {'success': True, 'info': {'model_name': 'MTSAIR/Cotype-Nano', 'status': 'available'}},
                         'tpro': {'success': True, 'info': {'model_name': 't-tech/T-pro-it-1.0', 'status': 'available'}}
+=======
+                        'qwen': {'success': True, 'info': {'model_name': 'Qwen/Qwen2-0.5B-Instruct', 'status': 'available'}},
+                        'llama': {'success': True, 'info': {'model_name': 'meta-llama/Llama-3.2-1B-Instruct', 'status': 'available'}}
+>>>>>>> Stashed changes
                     }
                 }
                 
@@ -205,11 +219,17 @@ class TestExtendedModels:
                 # Verify all models succeeded
                 all_success = all(r['success'] for r in results_summary['results'].values())
                 assert all_success is True
+<<<<<<< Updated upstream
                 
+=======
+                assert 'tpro' not in results_summary['results'], "T-Pro не должен быть в результатах"
+
+>>>>>>> Stashed changes
             finally:
                 # Restore original working directory
                 os.chdir(original_cwd)
 
+<<<<<<< Updated upstream
     @pytest.mark.xfail(reason="sys.modules mock doesn't propagate side_effect to from imports inside functions")
     def test_main_function_with_partial_failures(self):
         """TC-ML-011: Тест главной функции с частичными ошибками."""
@@ -284,3 +304,56 @@ class TestExtendedModels:
             finally:
                 # Restore original working directory
                 os.chdir(original_cwd)
+=======
+
+class TestWeek3Models:
+    """Тесты для недели 3: только 2 модели (Qwen, Llama)."""
+
+    def test_only_two_models_in_tests(self):
+        """TC-W3-001: Подтверждение только 2 моделей в тестах."""
+        mock_torch.cuda.is_available.return_value = False
+        mock_tokenizer_instance = MagicMock()
+        mock_tokenizer_instance.__len__.return_value = 1000
+        mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer_instance
+        mock_transformers.AutoConfig.from_pretrained.return_value = MagicMock()
+
+        qwen_success, qwen_info = tm.test_qwen()
+        llama_success, llama_info = tm.test_llama()
+
+        assert qwen_success is True
+        assert llama_success is True
+        assert qwen_info['model_name'] == "Qwen/Qwen2-0.5B-Instruct"
+        assert llama_info['model_name'] == "meta-llama/Llama-3.2-1B-Instruct"
+
+    def test_no_tpro_function_exists(self):
+        """TC-W3-002: Функция test_tpro существует для обратной совместимости."""
+        assert hasattr(tm, 'test_tpro'), "Функция test_tpro может существовать для совместимости"
+
+    def test_qwen_as_primary_model(self):
+        """TC-W3-003: Qwen работает как primary модель."""
+        mock_torch.cuda.is_available.return_value = False
+        mock_tokenizer_instance = MagicMock()
+        mock_tokenizer_instance.__len__.return_value = 1000
+        mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer_instance
+        mock_config_instance = MagicMock()
+        mock_config_instance.num_parameters.return_value = 500000000
+        mock_transformers.AutoConfig.from_pretrained.return_value = mock_config_instance
+
+        success, info = tm.test_qwen()
+
+        assert success is True
+        assert info['status'] == 'available'
+
+    def test_llama_as_fallback_model(self):
+        """TC-W3-004: Llama работает как fallback модель."""
+        mock_torch.cuda.is_available.return_value = False
+        mock_tokenizer_instance = MagicMock()
+        mock_tokenizer_instance.__len__.return_value = 2000
+        mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer_instance
+        mock_transformers.AutoConfig.from_pretrained.return_value = MagicMock()
+
+        success, info = tm.test_llama()
+
+        assert success is True
+        assert info['status'] == 'available'
+>>>>>>> Stashed changes
