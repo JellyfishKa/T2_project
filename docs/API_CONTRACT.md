@@ -48,7 +48,8 @@ Production: https://api.t2-retail.com/api/v1
   "total_distance_km": 45.3,
   "total_time_hours": 2.5,
   "total_cost_rub": 1500,
-  "model_used": "gigachat",
+  "model_used": "qwen",
+  "fallback_reason": null,
   "created_at": "2026-01-06T10:30:00Z"
 }
 ```
@@ -58,7 +59,7 @@ Production: https://api.t2-retail.com/api/v1
 {
   "id": "metric-789",
   "route_id": "route-456",
-  "model": "gigachat",
+  "model": "qwen",
   "response_time_ms": 1250,
   "quality_score": 0.85,
   "cost_rub": 25.50,
@@ -69,7 +70,7 @@ Production: https://api.t2-retail.com/api/v1
 ### BenchmarkResult (Результат бенчмарка)
 ```json
 {
-  "model": "gigachat",
+  "model": "qwen",
   "num_tests": 10,
   "avg_response_time_ms": 1250,
   "min_response_time_ms": 850,
@@ -118,7 +119,8 @@ Content-Type: application/json
     "max_distance_km": 500,
     "start_time": "09:00",
     "end_time": "18:00"
-  }
+  },
+  "preferred_model": "qwen"
 }
 
 Ответ 200 OK:
@@ -128,7 +130,8 @@ Content-Type: application/json
   "total_distance_km": 5.5,
   "total_time_hours": 0.5,
   "total_cost_rub": 500,
-  "model_used": "gigachat",
+  "model_used": "qwen",
+  "fallback_reason": null,
   "created_at": "2026-01-06T10:30:00Z"
 }
 
@@ -141,7 +144,7 @@ Content-Type: application/json
 Ответ 503 Service Unavailable:
 {
   "error": "Все модели недоступны",
-  "details": "GigaChat down, Cotype down, T-Pro down"
+  "details": "Qwen down, Llama down"
 }
 ```
 
@@ -165,6 +168,7 @@ GET /routes?skip=0&limit=10
       "total_distance_km": 45.3,
       "total_time_hours": 2.5,
       "total_cost_rub": 1500,
+      "model_used": "qwen",
       "created_at": "2026-01-06T10:30:00Z"
     },
     ...
@@ -199,7 +203,8 @@ GET /routes/route-456
   "total_distance_km": 45.3,
   "total_time_hours": 2.5,
   "total_cost_rub": 1500,
-  "model_used": "gigachat",
+  "model_used": "qwen",
+  "fallback_reason": null,
   "created_at": "2026-01-06T10:30:00Z"
 }
 
@@ -225,20 +230,19 @@ GET /metrics?route_id=route-456
   "route_id": "route-456",
   "metrics": [
     {
-      "model": "gigachat",
-      "response_time_ms": 1250,
-      "quality_score": 0.85,
-      "cost_rub": 25.50,
-      "timestamp": "2026-01-06T10:30:00Z"
-    },
-    {
-      "model": "cotype",
-      "response_time_ms": 450,
-      "quality_score": 0.80,
+      "model": "qwen",
+      "response_time_ms": 2345,
+      "quality_score": 0.92,
       "cost_rub": 0.00,
       "timestamp": "2026-01-06T10:30:00Z"
     },
-    ...
+    {
+      "model": "llama",
+      "response_time_ms": 4500,
+      "quality_score": 0.85,
+      "cost_rub": 0.00,
+      "timestamp": "2026-01-06T10:30:00Z"
+    }
   ]
 }
 ```
@@ -268,26 +272,25 @@ Content-Type: application/json
   "total_duration_seconds": 45.2,
   "results": [
     {
-      "model": "gigachat",
+      "model": "qwen",
       "num_tests": 5,
-      "avg_response_time_ms": 1250,
-      "min_response_time_ms": 850,
-      "max_response_time_ms": 2100,
-      "avg_quality_score": 0.87,
-      "total_cost_rub": 250.00,
-      "success_rate": 1.0
-    },
-    {
-      "model": "cotype",
-      "num_tests": 5,
-      "avg_response_time_ms": 450,
-      "min_response_time_ms": 350,
-      "max_response_time_ms": 650,
-      "avg_quality_score": 0.82,
+      "avg_response_time_ms": 2345,
+      "min_response_time_ms": 1850,
+      "max_response_time_ms": 3100,
+      "avg_quality_score": 0.92,
       "total_cost_rub": 0.00,
       "success_rate": 1.0
     },
-    ...
+    {
+      "model": "llama",
+      "num_tests": 5,
+      "avg_response_time_ms": 4500,
+      "min_response_time_ms": 3500,
+      "max_response_time_ms": 6000,
+      "avg_quality_score": 0.85,
+      "total_cost_rub": 0.00,
+      "success_rate": 1.0
+    }
   ]
 }
 
@@ -338,9 +341,8 @@ GET /health
   "status": "healthy",
   "services": {
     "database": "connected",
-    "gigachat": "connected",
-    "cotype": "available",
-    "tpro": "unavailable"
+    "qwen": "available",
+    "llama": "available"
   }
 }
 
@@ -349,12 +351,24 @@ GET /health
   "status": "unhealthy",
   "services": {
     "database": "disconnected",
-    "gigachat": "error",
-    "cotype": "available",
-    "tpro": "unavailable"
+    "qwen": "unavailable",
+    "llama": "available"
   }
 }
 ```
+
+---
+
+## Model-specific endpoints
+
+Помимо общего `/optimize`, каждая модель имеет отдельный endpoint:
+
+| Endpoint | Модель | Описание |
+|----------|--------|----------|
+| POST /qwen/optimize | Qwen | Прямой вызов Qwen (Primary) |
+| POST /llama/optimize | Llama | Прямой вызов Llama (Fallback) |
+
+Формат запроса и ответа аналогичен `/optimize`, но без fallback.
 
 ---
 
@@ -399,6 +413,7 @@ const MOCK_ROUTES = [
     name: 'Маршрут 1',
     locations: [...],
     total_distance_km: 45.3,
+    model_used: 'qwen',
     // ... и т.д
   }
 ];
@@ -407,7 +422,7 @@ const MOCK_ROUTES = [
 api.interceptors.response.use((config) => {
   if (isDevelopment()) {
     const endpoint = config.url;
-    
+
     if (endpoint.includes('/optimize')) {
       return { data: generateMockRoute() };
     }
@@ -430,6 +445,7 @@ api.interceptors.response.use((config) => {
 
 **Для Backend**:
 - [ ] Реализовать все 7 endpoints
+- [ ] Реализовать model-specific endpoints (/qwen, /llama)
 - [ ] Возвращать точные модели данных
 - [ ] Обрабатывать все error case
 - [ ] Response times <2 сек
@@ -460,5 +476,5 @@ api.interceptors.response.use((config) => {
 4. **Расстояния**: В километрах
 5. **Время**: В HH:MM формате или часах (зависит от endpoint)
 6. **IDs**: UUIDs или простые строки (консистентность важна)
-
----
+7. **model_used**: Одно из: `"qwen"`, `"llama"`, `"greedy"`
+8. **fallback_reason**: `null` если основная модель справилась, строка с причиной если был fallback

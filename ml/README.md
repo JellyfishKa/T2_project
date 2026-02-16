@@ -1,28 +1,46 @@
-# ML Environment для работы с LLM моделями
+# ML: окружение для LLM
 
-Этот каталог содержит настройки и скрипты для работы с тремя LLM моделями:
-- **GigaChat3-10B-A1.8B** (ai-sage/GigaChat3-10B-A1.8B)
-- **Cotype-Nano** (MTSAIR/Cotype-Nano)
-- **T-Pro-it-1.0** (t-tech/T-pro-it-1.0)
+Каталог содержит конфигурацию и скрипты для работы с двумя LLM (Qwen, Llama): загрузка/проверка доступности, бенчмарки и использование в коде. Backend не изменяется — подключаем только его клиенты (QwenClient, LlamaClient) для тестов и бенчмарков.
 
-## Структура проекта
+> **Примечание**: изначально проект использовал 3 модели (Qwen, T-Pro, Llama). T-Pro была исключена на этапе подготовки к продакшену из-за нестабильной работы.
+
+---
+
+## Структура
 
 ```
 ml/
-├── benchmarks/      # Бенчмарки и тесты производительности
-├── models/          # Кэш моделей и результаты тестов
-├── notebooks/       # Jupyter notebooks для экспериментов
-├── requirements.txt # Зависимости Python
-├── test_models.py   # Скрипт для тестирования моделей
-└── README.md        # Эта документация
+├── benchmarks/       # бенчмарки (время ответа, качество, успешность, стоимость)
+├── models/           # артефакты: логи тестов, results, кэш по необходимости
+├── notebooks/        # эксперименты в Jupyter
+├── requirements.txt
+├── test_models.py    # проверка доступности HF-моделей и клиентов backend
+└── README.md
 ```
+
+---
+
+## Подключение backend
+
+В `backend/` определены клиенты с интерфейсом `generate(prompt: str) -> str`. Мы только добавляем `backend` в `sys.path` и вызываем их:
+
+- **test_models.py** — проверяет, что QwenClient и LlamaClient из backend импортируются и отвечают на тестовый промпт.
+- **llm_benchmark.py** — флаг `--backend`: бенчмарк гоняется по клиентам backend; вывод в тот же `results.json`.
+
+Запуск бенчмарка по клиентам backend (из корня репозитория):
+
+```bash
+python ml/benchmarks/llm_benchmark.py --backend --iterations 2
+```
+
+---
 
 ## Установка
 
-### 1. Создание виртуального окружения
+### Виртуальное окружение
 
 ```bash
-# Linux/Mac/Server
+# Linux / macOS
 python3 -m venv ml_env
 source ml_env/bin/activate
 
@@ -31,182 +49,111 @@ python -m venv ml_env
 ml_env\Scripts\activate
 ```
 
-### 2. Установка зависимостей
+### Зависимости
 
 ```bash
 pip install --upgrade pip
 pip install -r ml/requirements.txt
 ```
 
-**Примечание:** Для использования GPU установите PyTorch с поддержкой CUDA:
-```bash
-# CUDA 12.1
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+Для GPU — отдельно ставим PyTorch с нужной CUDA (см. [pytorch.org](https://pytorch.org)), например:
 
-# CUDA 11.8
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```bash
+# CUDA 12.x
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### 3. Настройка Hugging Face
+### Hugging Face
 
-Для загрузки моделей может потребоваться авторизация в Hugging Face:
+Для gated-моделей (например, Llama) нужны токен и принятие лицензии:
 
 ```bash
 pip install huggingface_hub
 huggingface-cli login
 ```
 
-## Требования к ресурсам
+При необходимости задайте `HF_TOKEN` в окружении или в `.env`.
 
-### GigaChat3-10B-A1.8B
-- **VRAM**: ~20GB (bf16) или ~10GB (fp8)
-- **RAM**: ~6GB для загрузки
-- **Особенности**: MoE архитектура, оптимизирована для высокой пропускной способности
-- **Ссылка**: https://huggingface.co/ai-sage/GigaChat3-10B-A1.8B
+---
 
-### Cotype-Nano
-- **VRAM**: ~3GB
-- **RAM**: ~2GB
-- **Особенности**: Легковесная модель, подходит для CPU/GPU
-- **Ссылка**: https://huggingface.co/MTSAIR/Cotype-Nano
+## Ресурсы по моделям
 
-### T-Pro-it-1.0
-- **VRAM**: ~64GB (bf16) или ~32GB (int8)
-- **RAM**: ~8GB для загрузки
-- **Особенности**: Большая модель, рекомендуется квантование или vLLM
-- **Ссылка**: https://huggingface.co/t-tech/T-pro-it-1.0
+| Модель | VRAM (ориентир) | RAM (загрузка) | Примечание |
+|--------|------------------|----------------|------------|
+| Qwen2-0.5B-Instruct | ~2 GB | ~4 GB | Удобна для локального инференса. |
+| Llama-3.2-1B-Instruct | ~4 GB | ~6 GB | Community GGUF, скачивается без логина. |
+
+Ссылки: [Qwen2-0.5B-Instruct](https://huggingface.co/Qwen/Qwen2-0.5B-Instruct), [Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct).
+
+---
 
 ## Использование
 
-### Тестирование моделей
+### Проверка моделей
 
-Запустите скрипт для проверки доступности всех моделей:
+Проверяет доступность HF-моделей (токенизатор/конфиг, при возможности — инференс) и клиентов backend:
 
 ```bash
 python ml/test_models.py
 ```
 
-Скрипт:
-- Проверяет доступность каждой модели
-- Загружает токенизаторы и конфигурации
-- Выполняет тестовый инференс (если возможно)
-- Сохраняет результаты в `ml/models/test_results.json`
-- Создает лог файл `ml/models/model_test.log`
+Результаты: `ml/models/test_results.json`, лог: `ml/models/model_test.log`.
 
-### Работа с моделями в коде
+### Бенчмарк
 
-#### GigaChat3
+Рекомендуется запуск из корня репозитория:
+
+```bash
+python ml/benchmarks/llm_benchmark.py
+python ml/benchmarks/llm_benchmark.py --iterations 3
+python ml/benchmarks/llm_benchmark.py --mock
+python ml/benchmarks/llm_benchmark.py --backend --iterations 2
+```
+
+Результаты: `ml/benchmarks/results.json`, лог: `ml/benchmarks/benchmark.log`. Подробнее — в `ml/benchmarks/README.md`.
+
+### Использование моделей в коде
+
+**Qwen2-0.5B-Instruct** (чат-шаблон):
 
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-model_name = "ai-sage/GigaChat3-10B-A1.8B"
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+name = "Qwen/Qwen2-0.5B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained(name, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    trust_remote_code=True
+    name, torch_dtype=torch.float16, device_map="auto", trust_remote_code=True
 )
-
 messages = [{"role": "user", "content": "Привет!"}]
-input_tensor = tokenizer.apply_chat_template(
-    messages, 
-    add_generation_prompt=True, 
-    return_tensors="pt"
-)
-outputs = model.generate(input_tensor.to(model.device), max_new_tokens=100)
-response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+inputs = tokenizer.apply_chat_template(
+    messages, add_generation_prompt=True, return_tensors="pt"
+).to(model.device)
+out = model.generate(inputs, max_new_tokens=100)
+print(tokenizer.decode(out[0], skip_special_tokens=True))
 ```
 
-#### Cotype-Nano
+**Llama-3.2-1B-Instruct** — тот же подход: `from_pretrained` + при необходимости `apply_chat_template` по документации модели.
 
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+---
 
-model_name = "MTSAIR/Cotype-Nano"
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.float16,
-    device_map="auto",
-    trust_remote_code=True
-)
+## Кэш и окружение
 
-text = "Привет, как дела?"
-inputs = tokenizer(text, return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=100)
-response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-```
+- Кэш Hugging Face по умолчанию: `~/.cache/huggingface/hub/`. Путь переопределяется через `HF_HOME`.
+- Таймауты загрузки: при необходимости задайте `HF_HUB_DOWNLOAD_TIMEOUT` (например, 300).
+- Токен для gated-моделей: `HF_TOKEN` в окружении или в `.env` (файл в git не коммитить).
 
-#### T-Pro
+---
 
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+## Логи
 
-model_name = "t-tech/T-pro-it-1.0"
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    trust_remote_code=True,
-    low_cpu_mem_usage=True
-)
+- Тесты моделей: `ml/models/model_test.log`, консоль.
+- Бенчмарк: `ml/benchmarks/benchmark.log`, консоль.
 
-# Использование аналогично другим моделям
-```
+---
 
-## Кэширование моделей
+## Кратко
 
-Модели автоматически кэшируются в `~/.cache/huggingface/hub/` после первой загрузки.
-
-Для изменения пути кэша установите переменную окружения:
-```bash
-export HF_HOME=/path/to/cache
-```
-
-## Логирование
-
-Все логи сохраняются в:
-- `ml/models/model_test.log` - детальные логи тестирования
-- Консольный вывод с информацией о статусе
-
-## Настройка на сервере
-
-### Установка PyTorch с CUDA (если есть GPU)
-
-```bash
-# Проверить версию CUDA
-nvidia-smi
-
-# Установить PyTorch с поддержкой CUDA
-# Для CUDA 12.1:
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Для CUDA 11.8:
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-```
-
-### Переменные окружения
-
-Создайте `.env` файл (не коммитится в git):
-
-```bash
-# Hugging Face токен (если требуется)
-HF_TOKEN=your_token_here
-
-# Путь к кэшу моделей
-HF_HOME=/path/to/cache
-```
-
-## Примечания
-
-- Первая загрузка моделей может занять значительное время
-- Убедитесь, что у вас достаточно места на диске (несколько десятков GB)
-- Для больших моделей (T-Pro) рекомендуется использовать квантование или vLLM
-- Некоторые модели требуют `trust_remote_code=True` из-за кастомных компонентов
-- Модели автоматически кэшируются в `~/.cache/huggingface/hub/`
+- Первая загрузка моделей может быть долгой; нужен запас по диску (десятки GB при полном кэше).
+- Модели с кастомным кодом требуют `trust_remote_code=True`.
+- Backend в этом репозитории не меняем; в ml только подключаем его клиенты и используем их в тестах и бенчмарках.
