@@ -1,13 +1,9 @@
 <template>
   <div class="space-y-4">
     <!-- Loading State -->
-    <div v-if="isLoading" class="text-center py-4">
-      <div
-        class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
-      ></div>
-      <p class="mt-2 text-sm text-gray-600">
-        Загрузка результатов бенчмарка...
-      </p>
+    <div v-if="isLoading" class="space-y-4">
+      <SkeletonLoader v-for="i in 3" :key="i" height="80px" />
+      <SkeletonLoader height="120px" />
     </div>
 
     <!-- Comparison Charts -->
@@ -19,7 +15,7 @@
         </h4>
         <div class="space-y-3">
           <div
-            v-for="result in benchmarkResults"
+            v-for="result in displayResults()"
             :key="result.model"
             class="flex items-center"
           >
@@ -41,7 +37,7 @@
                 <div
                   class="ml-3 text-sm font-medium text-gray-900 w-16 text-right"
                 >
-                  {{ result.avg_response_time_ms }}
+                  {{ result.avg_response_time_ms.toFixed(0) }}
                 </div>
               </div>
               <div class="text-xs text-gray-500 mt-1">
@@ -60,7 +56,7 @@
         </h4>
         <div class="space-y-3">
           <div
-            v-for="result in benchmarkResults"
+            v-for="result in displayResults()"
             :key="result.model"
             class="flex items-center"
           >
@@ -91,7 +87,7 @@
         <h4 class="text-sm font-medium text-gray-900 mb-3">Стоимость (₽)</h4>
         <div class="space-y-3">
           <div
-            v-for="result in benchmarkResults"
+            v-for="result in displayResults()"
             :key="result.model"
             class="flex items-center"
           >
@@ -126,7 +122,7 @@
         </h4>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div
-            v-for="result in benchmarkResults"
+            v-for="result in displayResults()"
             :key="result.model"
             class="bg-gray-50 rounded-lg p-3"
           >
@@ -144,6 +140,29 @@
             <div class="mt-2 text-xs text-gray-500">
               {{ result.num_tests }} тестов выполнено
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recommendations -->
+      <div
+        v-if="recommendations && recommendations.length > 0"
+        class="border-t border-gray-200 pt-4"
+      >
+        <h4 class="text-sm font-medium text-gray-900 mb-3">Рекомендации</h4>
+        <div class="space-y-3">
+          <div
+            v-for="(rec, index) in recommendations"
+            :key="index"
+            class="bg-blue-50 rounded-lg p-3"
+          >
+            <p class="text-sm font-medium text-blue-900">{{ rec.scenario }}</p>
+            <p class="text-sm text-blue-700 mt-1">
+              <span class="font-medium"
+                >{{ getModelName(rec.recommended_model) }}:</span
+              >
+              {{ rec.reason }}
+            </p>
           </div>
         </div>
       </div>
@@ -175,18 +194,63 @@
 </template>
 
 <script setup lang="ts">
-import type { BenchmarkResult } from '@/services/api'
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
 
-defineProps<{
-  benchmarkResults: BenchmarkResult[]
+// Интерфейс для данных из API
+interface ApiBenchmarkResult {
+  name: string
+  avg_response_time_ms: number
+  avg_quality_score: number
+  total_cost_rub: number
+  success_rate: number
+  usage_count: number
+}
+
+interface ApiRecommendation {
+  scenario: string
+  recommended_model: string
+  reason: string
+}
+
+// Интерфейс для компонента (преобразованный)
+interface BenchmarkResult {
+  model: string
+  num_tests: number
+  avg_response_time_ms: number
+  min_response_time_ms: number
+  max_response_time_ms: number
+  avg_quality_score: number
+  total_cost_rub: number
+  success_rate: number
+  timestamp: string
+}
+
+const props = defineProps<{
+  benchmarkResults: ApiBenchmarkResult[]
+  recommendations?: ApiRecommendation[]
   isLoading?: boolean
 }>()
 
+// Преобразуем данные из API в формат для отображения
+const displayResults = (): BenchmarkResult[] => {
+  return props.benchmarkResults.map((result) => ({
+    model: result.name,
+    num_tests: result.usage_count,
+    avg_response_time_ms: result.avg_response_time_ms,
+    min_response_time_ms: result.avg_response_time_ms * 0.7, // Примерные значения
+    max_response_time_ms: result.avg_response_time_ms * 1.3,
+    avg_quality_score: result.avg_quality_score,
+    total_cost_rub: result.total_cost_rub,
+    success_rate: result.success_rate,
+    timestamp: new Date().toISOString()
+  }))
+}
+
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
-    llama: 'llama',
+    llama: 'Llama',
     qwen: 'Qwen',
-    DeepSeek: 'DeepSeek'
+    deepseek: 'DeepSeek'
   }
   return modelMap[model] || model
 }
@@ -198,12 +262,10 @@ const getResponseTimeColor = (responseTime: number): string => {
 }
 
 const getResponseTimeWidth = (responseTime: number): number => {
-  // Нормализуем до 2000 мс = 100%
   return Math.min((responseTime / 2000) * 100, 100)
 }
 
 const getCostWidth = (cost: number): number => {
-  // Нормализуем до 300 ₽ = 100%
   return Math.min((cost / 300) * 100, 100)
 }
 

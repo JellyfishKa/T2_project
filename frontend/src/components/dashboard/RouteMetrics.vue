@@ -1,7 +1,16 @@
 <template>
   <div class="space-y-6">
+    <!-- Loading State -->
+    <template v-if="isLoading">
+      <SkeletonLoader height="120px" />
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <SkeletonLoader v-for="i in 3" :key="i" height="100px" />
+      </div>
+      <SkeletonLoader height="200px" />
+    </template>
+
     <!-- Selected Route Info -->
-    <div v-if="route" class="bg-gray-50 rounded-lg p-4">
+    <div v-else-if="route" class="bg-gray-50 rounded-lg p-4">
       <div class="flex items-center justify-between">
         <div>
           <h4 class="text-lg font-semibold text-gray-900">{{ route.name }}</h4>
@@ -28,6 +37,7 @@
         :value="route?.total_distance_km || 0"
         unit="км"
         color="blue"
+        :loading="isLoading"
       />
 
       <MetricCard
@@ -35,6 +45,7 @@
         :value="route?.total_time_hours || 0"
         unit="часов"
         color="green"
+        :loading="isLoading"
       />
 
       <MetricCard
@@ -42,11 +53,15 @@
         :value="route?.total_cost_rub || 0"
         unit="₽"
         color="purple"
+        :loading="isLoading"
       />
     </div>
 
     <!-- Model Performance Metrics -->
-    <div v-if="metrics.length > 0" class="border-t border-gray-200 pt-6">
+    <div
+      v-if="metrics.length > 0 && !isLoading"
+      class="border-t border-gray-200 pt-6"
+    >
       <h5 class="text-lg font-medium text-gray-900 mb-4">
         Производительность моделей для этого маршрута
       </h5>
@@ -93,9 +108,10 @@
               </td>
               <td class="px-4 py-4 whitespace-nowrap">
                 <div class="flex items-center">
-                  <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="w-24 bg-gray-200 rounded-full h-2.5">
                     <div
-                      class="bg-blue-600 h-2.5 rounded-full"
+                      class="h-2.5 rounded-full"
+                      :class="getResponseTimeColor(metric.response_time_ms)"
                       :style="{
                         width:
                           getResponseTimePercentage(metric.response_time_ms) +
@@ -110,7 +126,7 @@
               </td>
               <td class="px-4 py-4 whitespace-nowrap">
                 <div class="flex items-center">
-                  <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="w-24 bg-gray-200 rounded-full h-2.5">
                     <div
                       class="bg-green-600 h-2.5 rounded-full"
                       :style="{ width: metric.quality_score * 100 + '%' }"
@@ -131,7 +147,10 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else class="text-center py-8 border rounded-lg border-gray-200">
+    <div
+      v-else-if="!route && !isLoading"
+      class="text-center py-8 border rounded-lg border-gray-200"
+    >
       <svg
         class="mx-auto h-12 w-12 text-gray-400"
         fill="none"
@@ -155,29 +174,29 @@
 
 <script setup lang="ts">
 import MetricCard from './MetricCard.vue'
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
 import type { RouteDetails, Metric } from '@/services/api'
 
 defineProps<{
   route?: RouteDetails | null
   metrics: Metric[]
+  isLoading?: boolean
 }>()
 
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
-    gigachat: 'GigaChat',
+    llama: 'Llama',
     qwen: 'Qwen',
-    cotype: 'Cotype',
-    DeepSeek: 'DeepSeek'
+    deepseek: 'DeepSeek'
   }
   return modelMap[model] || model
 }
 
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
-    gigachat: 'bg-green-100 text-green-800',
+    llama: 'bg-blue-100 text-blue-800',
     qwen: 'bg-purple-100 text-purple-800',
-    cotype: 'bg-blue-100 text-blue-800',
-    DeepSeek: 'bg-yellow-100 text-yellow-800'
+    deepseek: 'bg-yellow-100 text-yellow-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }
@@ -193,8 +212,13 @@ const formatDate = (dateString: string): string => {
   }).format(date)
 }
 
+const getResponseTimeColor = (responseTime: number): string => {
+  if (responseTime < 800) return 'bg-green-500'
+  if (responseTime < 1500) return 'bg-yellow-500'
+  return 'bg-red-500'
+}
+
 const getResponseTimePercentage = (responseTime: number): number => {
-  // Нормализуем время ответа для прогресс-бара (0-2000 мс = 0-100%)
   return Math.min((responseTime / 2000) * 100, 100)
 }
 </script>

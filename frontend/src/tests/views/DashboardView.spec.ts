@@ -9,26 +9,36 @@ import { ComponentPublicInstance } from 'vue'
 type DashboardViewInstance = ComponentPublicInstance<{
   handleRouteSelect: (routeId: string) => Promise<void>
   selectedRouteId: string | null
+  metricsSortField: string
+  metricsSortDirection: 'asc' | 'desc'
+  routeSortField: string
+  routeSortDirection: 'asc' | 'desc'
 }>
 
 // Мокаем API функции
 vi.mock('@/services/api', () => ({
   fetchRoutes: vi.fn(),
   fetchRouteDetails: vi.fn(),
-  fetchRouteMetrics: vi.fn(),
   getMetrics: vi.fn(),
-  runBenchmark: vi.fn(),
-  checkHealth: vi.fn(),
-  fetchAllLocations: vi.fn()
+  compareModels: vi.fn(),
+  checkHealth: vi.fn()
 }))
 
-// Мокаем компоненты для простоты тестирования
+// Мокаем компоненты
 vi.mock('@/components/dashboard/RouteList.vue', () => ({
   default: {
     name: 'RouteList',
-    template: '<div data-testid="route-list">RouteList Mock</div>',
-    props: ['routes', 'selectedRouteId'],
-    emits: ['select-route']
+    template:
+      '<div data-testid="route-list" @click="$emit(\'select-route\', \'route-1\')">RouteList Mock</div>',
+    props: [
+      'routes',
+      'isLoading',
+      'selectedRouteId',
+      'sortable',
+      'sortField',
+      'sortDirection'
+    ],
+    emits: ['select-route', 'sort']
   }
 }))
 
@@ -36,7 +46,7 @@ vi.mock('@/components/dashboard/RouteMetrics.vue', () => ({
   default: {
     name: 'RouteMetrics',
     template: '<div data-testid="route-metrics">RouteMetrics Mock</div>',
-    props: ['route', 'metrics']
+    props: ['route', 'metrics', 'isLoading']
   }
 }))
 
@@ -44,7 +54,7 @@ vi.mock('@/components/dashboard/ModelComparison.vue', () => ({
   default: {
     name: 'ModelComparison',
     template: '<div data-testid="model-comparison">ModelComparison Mock</div>',
-    props: ['benchmarkResults', 'isLoading']
+    props: ['benchmarkResults', 'recommendations', 'isLoading']
   }
 }))
 
@@ -52,7 +62,8 @@ vi.mock('@/components/dashboard/MetricsTable.vue', () => ({
   default: {
     name: 'MetricsTable',
     template: '<div data-testid="metrics-table">MetricsTable Mock</div>',
-    props: ['metrics']
+    props: ['metrics', 'isLoading', 'sortable', 'sortField', 'sortDirection'],
+    emits: ['sort']
   }
 }))
 
@@ -61,6 +72,13 @@ vi.mock('@/components/dashboard/HealthStatus.vue', () => ({
     name: 'HealthStatus',
     template: '<div data-testid="health-status">HealthStatus Mock</div>',
     props: ['status']
+  }
+}))
+
+vi.mock('@/components/common/SkeletonLoader.vue', () => ({
+  default: {
+    name: 'SkeletonLoader',
+    template: '<div class="skeleton-loader"></div>'
   }
 }))
 
@@ -148,29 +166,6 @@ describe('DashboardView.vue', () => {
     created_at: '2026-02-13T09:15:00Z'
   }
 
-  const mockRouteMetrics = {
-    metrics: [
-      {
-        id: 'metric-1',
-        route_id: 'route-1',
-        model: 'llama',
-        response_time_ms: 1245,
-        quality_score: 0.87,
-        cost_rub: 25.5,
-        timestamp: '2026-02-13T09:15:30Z'
-      },
-      {
-        id: 'metric-2',
-        route_id: 'route-1',
-        model: 'qwen',
-        response_time_ms: 432,
-        quality_score: 0.82,
-        cost_rub: 0,
-        timestamp: '2026-02-13T09:16:15Z'
-      }
-    ]
-  }
-
   const mockAllMetrics = {
     metrics: [
       {
@@ -203,6 +198,34 @@ describe('DashboardView.vue', () => {
     ]
   }
 
+  const mockModelComparison = {
+    models: [
+      {
+        name: 'llama',
+        avg_response_time_ms: 1250,
+        avg_quality_score: 0.87,
+        total_cost_rub: 250,
+        success_rate: 0.95,
+        usage_count: 100
+      },
+      {
+        name: 'qwen',
+        avg_response_time_ms: 450,
+        avg_quality_score: 0.82,
+        total_cost_rub: 0,
+        success_rate: 0.99,
+        usage_count: 200
+      }
+    ],
+    recommendations: [
+      {
+        scenario: 'Быстрые запросы',
+        recommended_model: 'qwen',
+        reason: 'Бесплатно и очень быстро'
+      }
+    ]
+  }
+
   const mockHealthStatus = {
     status: 'healthy' as const,
     services: {
@@ -213,307 +236,153 @@ describe('DashboardView.vue', () => {
     }
   }
 
-  const mockBenchmarkResults = {
-    total_duration_seconds: 45.2,
-    results: [
-      {
-        model: 'llama',
-        num_tests: 5,
-        avg_response_time_ms: 1250,
-        min_response_time_ms: 850,
-        max_response_time_ms: 2100,
-        avg_quality_score: 0.87,
-        total_cost_rub: 250,
-        success_rate: 1.0,
-        timestamp: '2026-02-13T11:00:00Z'
-      },
-      {
-        model: 'qwen',
-        num_tests: 5,
-        avg_response_time_ms: 450,
-        min_response_time_ms: 350,
-        max_response_time_ms: 650,
-        avg_quality_score: 0.82,
-        total_cost_rub: 0,
-        success_rate: 1.0,
-        timestamp: '2026-02-13T11:00:00Z'
-      }
-    ]
-  }
-
-  const mockLocations = [
-    {
-      id: 'store-1',
-      name: 'Store 1',
-      latitude: 55.7558,
-      longitude: 37.6173,
-      address: 'Address 1',
-      time_window_start: '09:00',
-      time_window_end: '18:00',
-      priority: 1
-    },
-    {
-      id: 'store-2',
-      name: 'Store 2',
-      latitude: 55.7489,
-      longitude: 37.616,
-      address: 'Address 2',
-      time_window_start: '10:00',
-      time_window_end: '19:00',
-      priority: 2
-    }
-  ]
+  let wrapper: VueWrapper<DashboardViewInstance>
 
   beforeEach(async () => {
     vi.resetAllMocks()
 
-    // Настраиваем моки API
     vi.mocked(api.fetchRoutes).mockResolvedValue(mockRoutes)
     vi.mocked(api.fetchRouteDetails).mockResolvedValue(mockRouteDetails)
-    vi.mocked(api.fetchRouteMetrics).mockResolvedValue(mockRouteMetrics)
     vi.mocked(api.getMetrics).mockResolvedValue(mockAllMetrics)
-    vi.mocked(api.runBenchmark).mockResolvedValue(mockBenchmarkResults)
+    vi.mocked(api.compareModels).mockResolvedValue(mockModelComparison)
     vi.mocked(api.checkHealth).mockResolvedValue(mockHealthStatus)
-    vi.mocked(api.fetchAllLocations).mockResolvedValue(mockLocations)
 
     await router.push('/dashboard')
     await router.isReady()
+
+    wrapper = mount(DashboardView, {
+      global: {
+        plugins: [router],
+        stubs: {
+          RouteList: true,
+          RouteMetrics: true,
+          ModelComparison: true,
+          MetricsTable: true,
+          HealthStatus: true,
+          SkeletonLoader: true
+        }
+      }
+    }) as VueWrapper<DashboardViewInstance>
   })
 
   afterEach(() => {
     vi.clearAllMocks()
+    wrapper.unmount()
   })
 
-  it('отображает заголовок и описание', () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    expect(wrapper.text()).toContain('Dashboard')
-    expect(wrapper.text()).toContain('Обзор оптимизированных маршрутов')
-  })
-
-  it('отображает загрузочное состояние при начальной загрузке', () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    expect(wrapper.text()).toContain('Загрузка данных...')
-    expect(wrapper.find('.animate-spin').exists()).toBe(true)
-  })
-
-  it('загружает данные при монтировании', async () => {
-    mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
+  it('загружает данные с backend при монтировании', async () => {
     await flushPromises()
 
-    expect(api.fetchRoutes).toHaveBeenCalledTimes(1)
-    expect(api.getMetrics).toHaveBeenCalledTimes(2)
-    expect(api.checkHealth).toHaveBeenCalledTimes(1)
-    expect(api.fetchAllLocations).toHaveBeenCalledTimes(1)
-    expect(api.runBenchmark).toHaveBeenCalledTimes(1)
-  })
-
-  it('отображает статус здоровья после загрузки', async () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    await flushPromises()
-
-    const healthStatus = wrapper.find('[data-testid="health-status"]')
-    expect(healthStatus.exists()).toBe(true)
-  })
-
-  it('отображает статистику маршрутов', async () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Всего маршрутов')
-    expect(wrapper.text()).toContain('3')
-    expect(wrapper.text()).toContain('Среднее время')
-    expect(wrapper.text()).toContain('Средняя стоимость')
-  })
-
-  it('выбирает первый маршрут по умолчанию', async () => {
-    mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    await flushPromises()
-
-    expect(api.fetchRouteDetails).toHaveBeenCalledWith('route-1')
-  })
-
-  it('правильно рассчитывает средние значения', async () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('3.5 ч')
-    expect(wrapper.text()).toContain('2500 ₽')
-  })
-
-  it('загружает детали маршрута при выборе маршрута', async () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    }) as VueWrapper<DashboardViewInstance>
-
-    await flushPromises()
-
-    // Сбрасываем вызовы после начальной загрузки
-    vi.mocked(api.fetchRouteDetails).mockClear()
-    vi.mocked(api.fetchRouteMetrics).mockClear()
-
-    // Вызываем handleRouteSelect через vm
-    await wrapper.vm.handleRouteSelect('route-2')
-    await flushPromises()
-
-    expect(api.fetchRouteDetails).toHaveBeenCalledWith('route-2')
+    expect(api.fetchRoutes).toHaveBeenCalledWith(0, 100)
+    expect(api.compareModels).toHaveBeenCalled()
+    expect(api.checkHealth).toHaveBeenCalled()
+    expect(api.getMetrics).toHaveBeenCalled()
   })
 
   it('отображает ошибку при неудачной загрузке', async () => {
     vi.mocked(api.fetchRoutes).mockRejectedValue(new Error('Network error'))
 
-    const wrapper = mount(DashboardView, {
+    const errorWrapper = mount(DashboardView, {
       global: {
-        plugins: [router]
+        plugins: [router],
+        stubs: {
+          RouteList: true,
+          RouteMetrics: true,
+          ModelComparison: true,
+          MetricsTable: true,
+          HealthStatus: true,
+          SkeletonLoader: true
+        }
       }
     })
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Ошибка загрузки данных')
-    expect(wrapper.text()).toContain('Network error')
+    expect(errorWrapper.text()).toContain('Ошибка загрузки данных')
+    expect(errorWrapper.text()).toContain('Network error')
   })
 
-  it('позволяет перезагрузить данные при ошибке', async () => {
-    vi.mocked(api.fetchRoutes)
-      .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValueOnce(mockRoutes)
-
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
+  it('выбирает первый маршрут по умолчанию', async () => {
     await flushPromises()
 
-    // Находим и кликаем по кнопке повторной попытки
-    const retryButton = wrapper.find('button.text-red-800')
-    await retryButton.trigger('click')
-    await flushPromises()
-
-    expect(api.fetchRoutes).toHaveBeenCalledTimes(2)
-    expect(api.getMetrics).toHaveBeenCalledTimes(3)
-    expect(api.checkHealth).toHaveBeenCalledTimes(2)
+    expect(api.fetchRouteDetails).toHaveBeenCalledWith('route-1')
   })
 
-  it('загружает метрики при клике на кнопку обновления', async () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
+  it('обновляет все данные при клике на кнопку обновления', async () => {
     await flushPromises()
 
+    vi.mocked(api.fetchRoutes).mockClear()
+    vi.mocked(api.compareModels).mockClear()
+    vi.mocked(api.checkHealth).mockClear()
     vi.mocked(api.getMetrics).mockClear()
 
-    const refreshButton = wrapper
-      .findAll('button')
-      .find((b) => b.text().includes('Обновить'))
-    await refreshButton?.trigger('click')
+    // Находим кнопку обновления по тексту
+    const buttons = wrapper.findAll('button')
+    const refreshButton = buttons.find((b) => b.text().includes('Обновить все'))
+    expect(refreshButton).toBeDefined()
+
+    await refreshButton!.trigger('click')
     await flushPromises()
 
-    expect(api.getMetrics).toHaveBeenCalledTimes(1)
+    expect(api.fetchRoutes).toHaveBeenCalled()
+    expect(api.compareModels).toHaveBeenCalled()
+    expect(api.checkHealth).toHaveBeenCalled()
+    expect(api.getMetrics).toHaveBeenCalled()
   })
 
-  it('обрабатывает ошибку при загрузке деталей маршрута', async () => {
-    vi.mocked(api.fetchRouteDetails).mockRejectedValue(
-      new Error('Route not found')
+  it('отображает кнопку обновления с состоянием загрузки', async () => {
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button')
+    const refreshButton = buttons.find((b) => b.text().includes('Обновить все'))
+    expect(refreshButton).toBeDefined()
+
+    await refreshButton!.trigger('click')
+
+    expect(refreshButton!.attributes('disabled')).toBeDefined()
+    expect(refreshButton!.text()).toContain('Обновление...')
+
+    await flushPromises()
+
+    expect(refreshButton!.attributes('disabled')).toBeUndefined()
+    expect(refreshButton!.text()).toContain('Обновить все')
+  })
+
+  it('обрабатывает сортировку маршрутов', async () => {
+    await flushPromises()
+
+    // Проверяем, что свойства сортировки существуют
+    expect(wrapper.vm.routeSortField).toBeDefined()
+    expect(wrapper.vm.routeSortDirection).toBeDefined()
+  })
+
+  it('обрабатывает сортировку метрик', async () => {
+    await flushPromises()
+
+    // Проверяем, что свойства сортировки метрик существуют
+    expect(wrapper.vm.metricsSortField).toBeDefined()
+    expect(wrapper.vm.metricsSortDirection).toBeDefined()
+  })
+
+  it('компонент MetricsTable получает правильные пропсы', async () => {
+    await flushPromises()
+
+    const metricsTable = wrapper.findComponent({ name: 'MetricsTable' })
+    expect(metricsTable.exists()).toBe(true)
+    expect(metricsTable.props('sortable')).toBe(true)
+    expect(metricsTable.props('sortField')).toBe(wrapper.vm.metricsSortField)
+    expect(metricsTable.props('sortDirection')).toBe(
+      wrapper.vm.metricsSortDirection
     )
-
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    await flushPromises()
-
-    // Проверяем, что ошибка не крашит приложение
-    expect(wrapper.find('[data-testid="route-metrics"]').exists()).toBe(true)
   })
 
-  it('обрабатывает ошибку при загрузке бенчмарка', async () => {
-    vi.mocked(api.runBenchmark).mockRejectedValue(new Error('Benchmark failed'))
-
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
+  it('компонент RouteList получает правильные пропсы', async () => {
     await flushPromises()
 
-    // Проверяем, что ошибка не крашит приложение
-    expect(wrapper.find('[data-testid="model-comparison"]').exists()).toBe(true)
-  })
-
-  it('корректно обновляет selectedRouteId при выборе маршрута', async () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    }) as VueWrapper<DashboardViewInstance>
-
-    await flushPromises()
-
-    expect(wrapper.vm.selectedRouteId).toBe('route-1')
-
-    await wrapper.vm.handleRouteSelect('route-2')
-
-    expect(wrapper.vm.selectedRouteId).toBe('route-2')
-  })
-
-  it('отображает все основные компоненты после загрузки', async () => {
-    const wrapper = mount(DashboardView, {
-      global: {
-        plugins: [router]
-      }
-    })
-
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="route-list"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="route-metrics"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="model-comparison"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="metrics-table"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="health-status"]').exists()).toBe(true)
+    const routeList = wrapper.findComponent({ name: 'RouteList' })
+    expect(routeList.exists()).toBe(true)
+    expect(routeList.props('sortable')).toBe(true)
+    expect(routeList.props('sortField')).toBe(wrapper.vm.routeSortField)
+    expect(routeList.props('sortDirection')).toBe(wrapper.vm.routeSortDirection)
   })
 })

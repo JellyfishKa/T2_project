@@ -45,8 +45,7 @@ import {
   fetchRouteMetrics,
   runBenchmark,
   checkHealth,
-  fetchAllLocations,
-  api
+  fetchAllLocations
 } from '@/services/api'
 
 describe('API Service', () => {

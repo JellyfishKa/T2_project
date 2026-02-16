@@ -284,17 +284,18 @@ export const fetchAllLocations = async (): Promise<Location[]> => {
   const response = await withRetry(() => api.get('/locations'))
   return response.data
 }
-
 export { api }
 export type {
   Location,
   Route,
+  RouteDetails,
   Metric,
   BenchmarkResult,
   BenchmarkRequest,
   OptimizeRequest,
   PaginatedResponse,
   HealthStatus,
-  RouteDetails,
-  ApiError
+  ApiError,
+  Insights,
+  ModelComparison
 }

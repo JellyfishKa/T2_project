@@ -74,6 +74,7 @@ export const mockRoutes: Route[] = [
     total_time_hours: 3.2,
     total_cost_rub: 1850,
     model_used: 'llama',
+    fallback_reason: null,
     created_at: '2026-01-06T09:15:00Z'
   },
   {
@@ -84,6 +85,7 @@ export const mockRoutes: Route[] = [
     total_time_hours: 4.1,
     total_cost_rub: 2100,
     model_used: 'qwen',
+    fallback_reason: null,
     created_at: '2026-01-05T14:30:00Z'
   },
   {
@@ -93,7 +95,8 @@ export const mockRoutes: Route[] = [
     total_distance_km: 42.3,
     total_time_hours: 5.5,
     total_cost_rub: 2750,
-    model_used: 'tpro',
+    model_used: 'deepseek',
+    fallback_reason: 'Llama unavailable, using fallback',
     created_at: '2026-01-04T11:45:00Z'
   }
 ]
@@ -122,7 +125,7 @@ export const mockMetrics: Metric[] = [
   {
     id: 'metric-3',
     route_id: 'route-1',
-    model: 'tpro',
+    model: 'deepseek',
     response_time_ms: 1850,
     quality_score: 0.89,
     cost_rub: 18.0,
@@ -138,15 +141,33 @@ export const mockMetrics: Metric[] = [
     cost_rub: 22.0,
     timestamp: '2026-01-05T14:31:00Z'
   },
-  // Метрики для route-3
   {
     id: 'metric-5',
+    route_id: 'route-2',
+    model: 'qwen',
+    response_time_ms: 410,
+    quality_score: 0.81,
+    cost_rub: 0.0,
+    timestamp: '2026-01-05T14:32:00Z'
+  },
+  // Метрики для route-3
+  {
+    id: 'metric-6',
     route_id: 'route-3',
-    model: 'tpro',
+    model: 'deepseek',
     response_time_ms: 1950,
     quality_score: 0.88,
     cost_rub: 20.0,
     timestamp: '2026-01-04T11:46:00Z'
+  },
+  {
+    id: 'metric-7',
+    route_id: 'route-3',
+    model: 'llama',
+    response_time_ms: 1300,
+    quality_score: 0.86,
+    cost_rub: 24.0,
+    timestamp: '2026-01-04T11:47:00Z'
   }
 ]
 
@@ -175,7 +196,7 @@ export const mockBenchmarkResults: BenchmarkResult[] = [
     timestamp: '2026-01-06T11:00:00Z'
   },
   {
-    model: 'tpro',
+    model: 'deepseek',
     num_tests: 10,
     avg_response_time_ms: 1800,
     min_response_time_ms: 1200,
@@ -194,20 +215,24 @@ export const mockHealthStatus: HealthStatus = {
     database: 'connected',
     llama: 'connected',
     qwen: 'available',
-    tpro: 'unavailable'
+    deepseek: 'available'
   }
 }
 
 // Helper functions
-export const generateMockRoute = () => {
+export const generateMockRoute = (): Route => {
   const routeId = `route-${Date.now()}`
+  const useFallback = Math.random() > 0.7
+
   return {
-    route_id: routeId,
-    locations_sequence: ['store-1', 'store-2'],
+    id: routeId,
+    name: `Маршрут ${new Date().toLocaleTimeString()}`,
+    locations: ['store-1', 'store-2'],
     total_distance_km: 15.5 + Math.random() * 10,
     total_time_hours: 1.5 + Math.random() * 2,
     total_cost_rub: 1200 + Math.random() * 1000,
     model_used: 'llama',
+    fallback_reason: useFallback ? 'Primary model overloaded' : null,
     created_at: new Date().toISOString()
   }
 }
