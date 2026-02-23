@@ -175,14 +175,6 @@ const models = [
     color: 'bg-purple-100',
     textColor: 'text-purple-600'
   },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    label: 'D',
-    description: 'Баланс цены и качества',
-    color: 'bg-blue-100',
-    textColor: 'text-blue-600'
-  }
 ]
 
 // State

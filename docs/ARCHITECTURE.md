@@ -59,8 +59,8 @@ class LlamaClient(LLMClient):
 Пробуем Qwen (Primary)
   | (если fail)
 Пробуем Llama (Fallback)
-  | (если все fail)
-Greedy Algorithm (всегда работает)
+  | (если fail)
+Возвращаем ошибку
 ```
 
 **Почему такой дизайн**:
@@ -121,7 +121,7 @@ CREATE TABLE routes (
 CREATE TABLE metrics (
     id UUID PRIMARY KEY,
     route_id UUID REFERENCES routes(id),
-    model VARCHAR(50),  -- qwen, llama, greedy
+    model VARCHAR(50),  -- qwen, llama
     response_time_ms INTEGER,
     quality_score FLOAT,  -- 0-100
     cost FLOAT,  -- стоимость модели
@@ -190,7 +190,7 @@ Backend LLMClient.generate_route()
     |
 Qwen (попытка 1)
     | (fail? -> Llama)
-    | (fail? -> Greedy)
+    | (fail? -> ошибка)
     |
 Алгоритмическая оптимизация
     |

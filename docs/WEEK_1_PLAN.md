@@ -246,7 +246,7 @@ class QwenClient(LLMClient):
 - ARCHITECTURE.md: docs/ARCHITECTURE.md
 
 **Примечания**:
-- Llama это финальный fallback перед greedy алгоритмом
+- Llama это финальный fallback
 - Может быть локальная модель (llama-cpp-python) для максимальной надежности
 - Или облачный endpoint, но ОЧЕНЬ надежный
 - Надежность > производительность
@@ -550,7 +550,7 @@ class QwenClient(LLMClient):
   - **Qwen**: response_time_ms, quality_score, success_rate, cost_rub
   - **T-Pro**: response_time_ms, quality_score, success_rate, cost_rub
   - **Llama**: response_time_ms, quality_score, success_rate, cost_rub
-- ✅ Плюс baseline: Greedy алгоритм (для сравнения)
+- ✅ Плюс baseline для сравнения
 - ✅ Результаты сохраняются в ml/benchmarks/results.json
 - ✅ Логирование добавлено (прогресс бенчмарка, какая модель сейчас тестируется)
 - ✅ Обработка ошибок (если модель недоступна, используй mock)
@@ -647,9 +647,7 @@ TRY: T-Pro (fast) - SECONDARY
 
 TRY: Llama (reliable) - FALLBACK
   ├─ Works? Return ✓
-  └─ Fails → Last resort
-
-FALLBACK: Greedy algorithm (always works)
+  └─ Fails → Return error
 ```
 
 ---
@@ -676,7 +674,7 @@ FALLBACK: Greedy algorithm (always works)
   - Обработка ошибок (400, 401, 429, 500)
   - Timeout обработка
   - Invalid input обработка
-  - **NEW: Fallback механизм (если Qwen падает → T-Pro, если T-Pro падает → Llama, если Llama падает → Greedy)**
+  - **NEW: Fallback механизм (если Qwen падает → T-Pro, если T-Pro падает → Llama, если Llama падает → ошибка)**
   - **NEW: Model initialization test (все 3 модели инициализируются корректно)**
 - ✅ pytest установлен и настроен (pytest.ini создан)
 - ✅ Минимум 80% code coverage для LLM клиентов
@@ -701,7 +699,7 @@ FALLBACK: Greedy algorithm (always works)
   - Test: Qwen успешен → используется Qwen
   - Test: Qwen fails → T-Pro используется
   - Test: T-Pro fails → Llama используется
-  - Test: Все LLM fails → Greedy используется
+  - Test: Все LLM fails → возвращается ошибка
 
 **Testing Checklist**:
 - ✅ Локальные тесты запускаются успешно

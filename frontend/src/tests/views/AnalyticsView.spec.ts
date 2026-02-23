@@ -78,7 +78,7 @@ describe('AnalyticsView.vue', () => {
         total_distance_km: 45.8,
         total_time_hours: 5.7,
         total_cost_rub: 3750,
-        model_used: 'deepseek',
+        model_used: 'llama',
         fallback_reason: null,
         created_at: '2026-02-11T11:45:00Z'
       }
@@ -108,7 +108,7 @@ describe('AnalyticsView.vue', () => {
       {
         id: 'metric-3',
         route_id: 'route-3',
-        model: 'deepseek',
+        model: 'llama',
         response_time_ms: 1850,
         quality_score: 0.89,
         cost_rub: 18.0,
@@ -135,14 +135,6 @@ describe('AnalyticsView.vue', () => {
         success_rate: 0.99,
         usage_count: 200
       },
-      {
-        name: 'deepseek',
-        avg_response_time_ms: 1800,
-        avg_quality_score: 0.89,
-        total_cost_rub: 180,
-        success_rate: 0.9,
-        usage_count: 50
-      }
     ],
     recommendations: []
   }
@@ -217,7 +209,6 @@ describe('AnalyticsView.vue', () => {
     // Проверяем наличие названий моделей в таблице
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
-    expect(wrapper.text()).toContain('DeepSeek')
     expect(wrapper.text()).toContain('1245')
     expect(wrapper.text()).toContain('432')
     expect(wrapper.text()).toContain('1850')
@@ -294,7 +285,6 @@ describe('AnalyticsView.vue', () => {
     const vm = wrapper.vm as any
     expect(vm.getModelName('llama')).toBe('Llama')
     expect(vm.getModelName('qwen')).toBe('Qwen')
-    expect(vm.getModelName('deepseek')).toBe('DeepSeek')
     expect(vm.getModelName('unknown')).toBe('unknown')
   })
 
@@ -304,9 +294,6 @@ describe('AnalyticsView.vue', () => {
     const vm = wrapper.vm as any
     expect(vm.getModelBadgeClass('llama')).toBe('bg-blue-100 text-blue-800')
     expect(vm.getModelBadgeClass('qwen')).toBe('bg-purple-100 text-purple-800')
-    expect(vm.getModelBadgeClass('deepseek')).toBe(
-      'bg-green-100 text-green-800'
-    )
   })
 
   it('корректно строит данные для scatter plot', async () => {

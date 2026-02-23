@@ -95,8 +95,8 @@ export const mockRoutes: Route[] = [
     total_distance_km: 42.3,
     total_time_hours: 5.5,
     total_cost_rub: 2750,
-    model_used: 'deepseek',
-    fallback_reason: 'Llama unavailable, using fallback',
+    model_used: 'llama',
+    fallback_reason: null,
     created_at: '2026-01-04T11:45:00Z'
   }
 ]
@@ -122,15 +122,6 @@ export const mockMetrics: Metric[] = [
     cost_rub: 0.0,
     timestamp: '2026-01-06T09:16:15Z'
   },
-  {
-    id: 'metric-3',
-    route_id: 'route-1',
-    model: 'deepseek',
-    response_time_ms: 1850,
-    quality_score: 0.89,
-    cost_rub: 18.0,
-    timestamp: '2026-01-06T09:17:00Z'
-  },
   // Метрики для route-2
   {
     id: 'metric-4',
@@ -151,15 +142,6 @@ export const mockMetrics: Metric[] = [
     timestamp: '2026-01-05T14:32:00Z'
   },
   // Метрики для route-3
-  {
-    id: 'metric-6',
-    route_id: 'route-3',
-    model: 'deepseek',
-    response_time_ms: 1950,
-    quality_score: 0.88,
-    cost_rub: 20.0,
-    timestamp: '2026-01-04T11:46:00Z'
-  },
   {
     id: 'metric-7',
     route_id: 'route-3',
@@ -195,17 +177,6 @@ export const mockBenchmarkResults: BenchmarkResult[] = [
     success_rate: 1.0,
     timestamp: '2026-01-06T11:00:00Z'
   },
-  {
-    model: 'deepseek',
-    num_tests: 10,
-    avg_response_time_ms: 1800,
-    min_response_time_ms: 1200,
-    max_response_time_ms: 2400,
-    avg_quality_score: 0.89,
-    total_cost_rub: 180.0,
-    success_rate: 0.9,
-    timestamp: '2026-01-06T11:00:00Z'
-  }
 ]
 
 // Health status
@@ -215,7 +186,6 @@ export const mockHealthStatus: HealthStatus = {
     database: 'connected',
     llama: 'connected',
     qwen: 'available',
-    deepseek: 'available'
   }
 }
 

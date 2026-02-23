@@ -9,7 +9,6 @@
 | **Primary** | Qwen (основная) | Qwen (основная) |
 | **Secondary** | T-Pro (вторичная) | — удалена |
 | **Fallback** | Llama (резервная) | Llama (резервная) |
-| **Last resort** | Greedy Algorithm | Greedy Algorithm |
 
 ### Причины отказа от T-Pro
 
@@ -36,7 +35,7 @@
   ошибка
     |
     v
-[Greedy Algorithm] --> Ответ (model_used="greedy")
+Возвращаем ошибку
 ```
 
 ---
@@ -58,7 +57,7 @@
 - [x] Удалены неиспользуемые файлы (gigachat_client, cotype_client, tpro_client, tpro route)
 - [x] Удалён большой файл T-Pro модели (~15 GB)
 - [x] Qwen и Llama работают стабильно
-- [x] Fallback-цепочка (Qwen → Llama → Greedy) протестирована
+- [x] Fallback-цепочка (Qwen → Llama → ошибка) протестирована
 - [x] UI отображает только две модели
 - [x] Документация обновлена (переход с 3 на 2 модели)
 - [x] Production-ready тестирование завершено

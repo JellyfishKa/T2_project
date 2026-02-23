@@ -11,12 +11,11 @@
 | **Primary** | Qwen | Qwen |
 | **Secondary** | T-Pro | — удалена |
 | **Fallback** | Llama | Llama |
-| **Last resort** | Greedy | Greedy |
 
 ## 3. Объем тестирования (Scope)
 
 - **Компоненты**: QwenClient, LlamaClient, RouteOptimizer, Fallback chain
-- **Модели**: Qwen (Primary), Llama (Fallback), Greedy (Last resort)
+- **Модели**: Qwen (Primary), Llama (Fallback)
 - **Целевое покрытие кода (Coverage)**: > 85%
 
 ## 4. Тест-кейсы (Test Cases)
@@ -31,10 +30,10 @@
 - **Ожидаемый результат**: model_used="Llama", fallback_reason содержит описание ошибки
 - **Примечание**: T-Pro больше не используется
 
-#### TC-FB3-002: Qwen → Llama → Greedy fallback chain
+#### TC-FB3-002: Qwen → Llama → error fallback chain
 - **Описание**: Полная fallback-цепочка
 - **Вход**: Симуляция ошибки Qwen и Llama
-- **Ожидаемый результат**: model_used="Greedy", fallback_reason="All LLM models unavailable"
+- **Ожидаемый результат**: Возвращается ошибка с fallback_reason="All LLM models unavailable"
 
 #### TC-FB3-003: No T-Pro references
 - **Описание**: Проверить отсутствие ссылок на T-Pro в коде
@@ -72,21 +71,9 @@
 
 #### TC-LLAMA-003: Memory constraints
 - **Описание**: Работа при ограниченной памяти
-- **Ожидаемый результат**: Graceful degradation или fallback на Greedy
+- **Ожидаемый результат**: Graceful degradation или возврат ошибки
 
-### 4.4. Greedy Algorithm (Last Resort)
-
-*Цель*: Проверить Greedy algorithm как последнюю линию обороны.
-
-#### TC-GREEDY-001: Basic optimization
-- **Описание**: Базовая оптимизация через Greedy
-- **Ожидаемый результат**: Valid route, model_used="Greedy", quality_score ~70
-
-#### TC-GREEDY-002: Always available
-- **Описание**: Greedy всегда работает, даже при отсутствии LLM
-- **Ожидаемый результат**: Всегда возвращает валидный результат
-
-### 4.5. Production Readiness
+### 4.4. Production Readiness
 
 *Цель*: Проверить готовность к production.
 
@@ -107,7 +94,6 @@
 - **Ожидаемый результат**:
   - Qwen: ~2-3 сек для 50 locations
   - Llama: ~4-5 сек для 50 locations
-  - Greedy: ~0.1 сек для 50 locations
 
 ### 4.6. UI Updates
 
@@ -119,7 +105,7 @@
 
 #### TC-UI-002: Dashboard shows 2 models
 - **Описание**: Dashboard сравнивает только Qwen и Llama
-- **Ожидаемый результат**: Comparison table содержит 2 строки + Greedy
+- **Ожидаемый результат**: Comparison table содержит 2 строки (Qwen и Llama)
 
 #### TC-UI-003: No T-Pro in analytics
 - **Описание**: Analytics страница не показывает T-Pro
@@ -157,7 +143,7 @@
 ## 7. Критерии приёмки
 
 - [ ] T-Pro полностью удалён из тестов и кода
-- [ ] Fallback цепочка Qwen → Llama → Greedy работает
+- [ ] Fallback цепочка Qwen → Llama → ошибка работает
 - [ ] Все API endpoints работают корректно
 - [ ] UI показывает только 2 модели (Qwen, Llama)
 - [ ] Performance соответствует требованиям

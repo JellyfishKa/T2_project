@@ -101,7 +101,6 @@ describe('OptimizeView.vue', () => {
   it('отображает выбор модели', () => {
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
-    expect(wrapper.text()).toContain('DeepSeek')
   })
 
   it('выбирает Llama модель по умолчанию', () => {

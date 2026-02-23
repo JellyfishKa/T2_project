@@ -239,8 +239,7 @@ const handleSort = (field: SortField) => {
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
     llama: 'Llama',
-    qwen: 'Qwen',
-    deepseek: 'DeepSeek'
+    qwen: 'Qwen'
   }
   return modelMap[model] || model
 }
@@ -248,8 +247,7 @@ const getModelName = (model: string): string => {
 const getModelInitial = (model: string): string => {
   const initialMap: Record<string, string> = {
     llama: 'L',
-    qwen: 'Q',
-    deepseek: 'D'
+    qwen: 'Q'
   }
   return initialMap[model] || '?'
 }
@@ -257,8 +255,7 @@ const getModelInitial = (model: string): string => {
 const getModelColor = (model: string): string => {
   const colorMap: Record<string, string> = {
     llama: 'bg-blue-300',
-    qwen: 'bg-purple-500',
-    deepseek: 'bg-blue-500'
+    qwen: 'bg-purple-500'
   }
   return colorMap[model] || 'bg-gray-500'
 }
@@ -266,8 +263,7 @@ const getModelColor = (model: string): string => {
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
     llama: 'bg-blue-100 text-blue-800',
-    qwen: 'bg-purple-100 text-purple-800',
-    deepseek: 'bg-yellow-100 text-yellow-800'
+    qwen: 'bg-purple-100 text-purple-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

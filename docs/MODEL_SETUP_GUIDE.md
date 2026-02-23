@@ -50,7 +50,7 @@
   ошибка
     |
     v
-[Greedy Algorithm] --> Ответ (model_used="greedy")
+Возвращаем ошибку
 ```
 
 ---

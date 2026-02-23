@@ -60,7 +60,7 @@ describe('RouteMetrics.vue', () => {
     {
       id: 'metric-3',
       route_id: 'route-1',
-      model: 'deepseek',
+      model: 'llama',
       response_time_ms: 1850,
       quality_score: 0.89,
       cost_rub: 18.0,
@@ -185,7 +185,6 @@ describe('RouteMetrics.vue', () => {
 
     expect(vm.getModelName('llama')).toBe('Llama')
     expect(vm.getModelName('qwen')).toBe('Qwen')
-    expect(vm.getModelName('deepseek')).toBe('DeepSeek')
     expect(vm.getModelName('unknown')).toBe('unknown')
   })
 
@@ -194,9 +193,6 @@ describe('RouteMetrics.vue', () => {
 
     expect(vm.getModelBadgeClass('llama')).toBe('bg-blue-100 text-blue-800')
     expect(vm.getModelBadgeClass('qwen')).toBe('bg-purple-100 text-purple-800')
-    expect(vm.getModelBadgeClass('deepseek')).toBe(
-      'bg-yellow-100 text-yellow-800'
-    )
   })
 
   it('отображает сообщение об отсутствии метрик', () => {

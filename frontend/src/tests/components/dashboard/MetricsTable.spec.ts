@@ -79,21 +79,11 @@ describe('MetricsTable.vue', () => {
             cost_rub: 0,
             timestamp: '2024-01-06T09:16:00Z'
           },
-          {
-            id: 'metric-3',
-            route_id: 'route-3',
-            model: 'DeepSeek',
-            response_time_ms: 1500,
-            quality_score: 0.95,
-            cost_rub: 20,
-            timestamp: '2024-01-06T09:17:00Z'
-          }
         ]
       }
     })
 
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
-    expect(wrapper.text()).toContain('DeepSeek')
   })
 })

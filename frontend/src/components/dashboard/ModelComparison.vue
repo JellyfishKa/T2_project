@@ -249,8 +249,7 @@ const displayResults = (): BenchmarkResult[] => {
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
     llama: 'Llama',
-    qwen: 'Qwen',
-    deepseek: 'DeepSeek'
+    qwen: 'Qwen'
   }
   return modelMap[model] || model
 }

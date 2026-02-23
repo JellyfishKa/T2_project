@@ -9,8 +9,7 @@ describe('HealthStatus.vue', () => {
     services: {
       database: 'connected',
       llama: 'connected',
-      qwen: 'available',
-      deepseek: 'unavailable'
+      qwen: 'available'
     }
   }
 
@@ -19,8 +18,7 @@ describe('HealthStatus.vue', () => {
     services: {
       database: 'disconnected',
       llama: 'error',
-      qwen: 'unavailable',
-      deepseek: 'error'
+      qwen: 'unavailable'
     }
   }
 
@@ -54,10 +52,8 @@ describe('HealthStatus.vue', () => {
     expect(wrapper.text()).toContain('database')
     expect(wrapper.text()).toContain('llama')
     expect(wrapper.text()).toContain('qwen')
-    expect(wrapper.text()).toContain('deepseek')
     expect(wrapper.text()).toContain('Подключено')
     expect(wrapper.text()).toContain('Доступно')
-    expect(wrapper.text()).toContain('Недоступно')
   })
 
   it('правильно определяет цвета статусов сервисов', () => {
@@ -73,8 +69,6 @@ describe('HealthStatus.vue', () => {
     expect(dots[1].classes()).toContain('bg-green-500')
     // qwen: available -> blue
     expect(dots[2].classes()).toContain('bg-blue-500')
-    // DeepSeek: unavailable -> yellow
-    expect(dots[3].classes()).toContain('bg-yellow-500')
   })
 
   it('правильно определяет цвета границы', () => {
@@ -98,7 +92,6 @@ describe('HealthStatus.vue', () => {
     expect(serviceTexts[0].text()).toBe('Подключено')
     expect(serviceTexts[1].text()).toBe('Подключено')
     expect(serviceTexts[2].text()).toBe('Доступно')
-    expect(serviceTexts[3].text()).toBe('Недоступно')
   })
 
   it('отображает правильные иконки', () => {

@@ -7,7 +7,7 @@
 ## 2. Объем тестирования (Scope)
 
 - **Компоненты**: API endpoints, RouteOptimizer, Model Selector, Frontend-Backend интеграция
-- **Модели**: Qwen (Primary), T-Pro (Secondary), Llama (Fallback), Greedy (Last resort)
+- **Модели**: Qwen (Primary), T-Pro (Secondary), Llama (Fallback)
 - **Целевое покрытие кода (Coverage)**: > 80%
 
 ## 3. Тест-кейсы (Test Cases)
@@ -37,7 +37,7 @@
 #### TC-API-004: GET /api/v1/benchmark/compare
 - **Описание**: Сравнение результатов всех 3 моделей
 - **Вход**: route_id
-- **Ожидаемый результат**: comparisons array с данными по Qwen, T-Pro, Llama, Greedy
+- **Ожидаемый результат**: comparisons array с данными по Qwen, T-Pro, Llama
 
 ### 3.2. Fallback Mechanism
 
@@ -53,10 +53,10 @@
 - **Вход**: Симуляция ошибки Qwen и T-Pro
 - **Ожидаемый результат**: model_used="Llama", fallback_reason содержит описание ошибки
 
-#### TC-FB-003: All LLM → Greedy fallback
-- **Описание**: При недоступности всех LLM используется Greedy algorithm
+#### TC-FB-003: All LLM → error
+- **Описание**: При недоступности всех LLM возвращается ошибка
 - **Вход**: Симуляция ошибки всех LLM
-- **Ожидаемый результат**: model_used="Greedy", fallback_reason="All LLM models unavailable"
+- **Ожидаемый результат**: Возвращается ошибка с fallback_reason="All LLM models unavailable"
 
 ### 3.3. Model Selection
 

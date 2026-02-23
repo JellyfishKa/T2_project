@@ -170,8 +170,7 @@ describe('API Service', () => {
         average_quality_score: 0.87,
         popular_models: [
           { model: 'qwen', count: 25 },
-          { model: 'llama', count: 12 },
-          { model: 'deepseek', count: 5 }
+          { model: 'llama', count: 12 }
         ],
         cost_savings: {
           estimated_savings_rub: 12500,
@@ -190,7 +189,7 @@ describe('API Service', () => {
       const result = await getInsights()
 
       expect(result.total_routes).toBe(42)
-      expect(result.popular_models).toHaveLength(3)
+      expect(result.popular_models).toHaveLength(2)
       expect(mockedAxios.get).toHaveBeenCalledWith('/insights')
     })
   })
@@ -429,7 +428,6 @@ describe('API Service', () => {
         services: {
           database: 'connected',
           qwen: 'available',
-          deepseek: 'available',
           llama: 'connected'
         }
       }
@@ -449,7 +447,6 @@ describe('API Service', () => {
         services: {
           database: 'connected',
           qwen: 'unavailable',
-          deepseek: 'available',
           llama: 'available'
         }
       }

@@ -476,5 +476,5 @@ api.interceptors.response.use((config) => {
 4. **Расстояния**: В километрах
 5. **Время**: В HH:MM формате или часах (зависит от endpoint)
 6. **IDs**: UUIDs или простые строки (консистентность важна)
-7. **model_used**: Одно из: `"qwen"`, `"llama"`, `"greedy"`
+7. **model_used**: Одно из: `"qwen"`, `"llama"`
 8. **fallback_reason**: `null` если основная модель справилась, строка с причиной если был fallback

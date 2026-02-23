@@ -619,8 +619,6 @@ const scatterData = computed(() => {
               return '#3b82f6'
             case 'qwen':
               return '#8b5cf6'
-            case 'deepseek':
-              return '#10b981'
             default:
               return '#6b7280'
           }
@@ -687,8 +685,7 @@ const timeSeriesData = computed(() => {
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
     llama: 'Llama',
-    qwen: 'Qwen',
-    deepseek: 'DeepSeek'
+    qwen: 'Qwen'
   }
   return modelMap[model] || model
 }
@@ -696,8 +693,7 @@ const getModelName = (model: string): string => {
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
     llama: 'bg-blue-100 text-blue-800',
-    qwen: 'bg-purple-100 text-purple-800',
-    deepseek: 'bg-green-100 text-green-800'
+    qwen: 'bg-purple-100 text-purple-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

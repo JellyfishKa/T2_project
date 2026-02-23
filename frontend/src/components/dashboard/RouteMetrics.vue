@@ -186,8 +186,7 @@ defineProps<{
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
     llama: 'Llama',
-    qwen: 'Qwen',
-    deepseek: 'DeepSeek'
+    qwen: 'Qwen'
   }
   return modelMap[model] || model
 }
@@ -195,8 +194,7 @@ const getModelName = (model: string): string => {
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
     llama: 'bg-blue-100 text-blue-800',
-    qwen: 'bg-purple-100 text-purple-800',
-    deepseek: 'bg-yellow-100 text-yellow-800'
+    qwen: 'bg-purple-100 text-purple-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

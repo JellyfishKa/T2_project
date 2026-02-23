@@ -42,7 +42,7 @@ Llama (Fallback) - will be tested
 - ✅ **Llama** Client работает (новое)
 - ✅ Docker setup готов
 - ✅ PostgreSQL доступна
-- ✅ LLM fallback механизм готов (Qwen → T-Pro → Llama → Greedy)
+- ✅ LLM fallback механизм готов (Qwen → T-Pro → Llama)
 
 **Frontend** ✅:
 - ✅ Vue 3 проект работает
@@ -77,7 +77,7 @@ Llama (Fallback) - will be tested
   - locations (id, name, lat, lon, time_window_start, time_window_end)
   - routes (id, name, locations_order, total_distance, total_time, total_cost)
   - metrics (id, route_id, model_name, response_time_ms, quality_score, cost)
-    - **model_name поддерживает**: "Qwen", "T-Pro", "Llama" (+ "Greedy")
+    - **model_name поддерживает**: "Qwen", "T-Pro", "Llama"
   - optimization_results (id, original_route, optimized_route, improvement_percentage, model_used)
 - ✅ Relationships настроены (foreign keys, cascades)
 - ✅ Indices созданы для поиска (на id, route_id, model_name)
@@ -89,7 +89,6 @@ Llama (Fallback) - will be tested
 'Qwen' → Alibaba Qwen (Primary)
 'T-Pro' → T-Pro (Secondary)
 'Llama' → Open-source Llama (Fallback)
-'Greedy' → Built-in greedy algorithm (Last resort)
 ```
 
 ---
@@ -140,7 +139,7 @@ Llama (Fallback) - will be tested
   4. Повтори пока все не visited
   5. Используй LLM для проверки и улучшения (попробуй все 3 модели с fallback)
 - ✅ Использование LLM моделей (НОВОЕ):
-  - **Priority order**: Qwen (try first) → T-Pro (if Qwen fails) → Llama (if T-Pro fails) → Greedy (never fail)
+  - **Priority order**: Qwen (try first) → T-Pro (if Qwen fails) → Llama (if T-Pro fails) → error
   - Логируй какую модель используешь
   - Сохраняй в БД какая модель использовалась
   - Если `preferred_model` указана, начни с неё (потом fallback chain)
@@ -148,7 +147,7 @@ Llama (Fallback) - will be tested
 - ✅ Результат включает:
   - Optimized order of locations
   - Total distance, time, cost
-  - **model_used**: какую модель использовали (Qwen/T-Pro/Llama/Greedy)
+  - **model_used**: какую модель использовали (Qwen/T-Pro/Llama)
   - LLM insights (опционально)
 - ✅ Unit тесты (простой маршрут, constraints, fallback от Qwen к T-Pro, fallback к Llama)
 - ✅ Response time документирован (goal: < 5 sec для 50 магазинов)
@@ -174,8 +173,8 @@ class RouteOptimizer:
             except Exception as e:
                 logger.warning(f"Model {model.name} failed, trying next...")
                 continue
-        # Last resort: greedy
-        return self._greedy_route(locations, 'Greedy')
+        # All models failed
+        raise Exception("All LLM models unavailable")
 ```
 
 ---
@@ -207,13 +206,13 @@ class RouteOptimizer:
     "total_time": 120,
     "total_cost": 850,
     "improvement_vs_original": "25%",
-    "model_used": "Qwen",  // или "T-Pro", "Llama", "Greedy"
+    "model_used": "Qwen",  // или "T-Pro", "Llama"
     "response_time_ms": 2345,
     "fallback_reason": null  // если используется fallback, указать почему
   }
   ```
 - ✅ Асинхронная обработка (не блокирует)
-- ✅ Fallback механизм (Qwen → T-Pro → Llama → Greedy) ✅ **НОВОЕ**
+- ✅ Fallback механизм (Qwen → T-Pro → Llama) ✅ **НОВОЕ**
 - ✅ Логирование всех шагов (включая какая модель использовалась)
 - ✅ Error handling (invalid constraints, too many locations)
 - ✅ Unit тесты (success, fallback from Qwen to T-Pro, fallback to Llama, error cases)
@@ -241,11 +240,10 @@ class RouteOptimizer:
   "response_time_ms": 5000
 }
 
-// Last resort: Greedy algorithm
+// All models failed: error returned
 {
-  "model_used": "Greedy",
-  "fallback_reason": "All LLM models unavailable",
-  "response_time_ms": 100
+  "error": "All LLM models unavailable",
+  "fallback_reason": "All LLM models unavailable"
 }
 ```
 
@@ -269,7 +267,7 @@ class RouteOptimizer:
     "total_distance": 42.5,
     "total_time": 120,
     "total_cost": 850,
-    "model_used": "Qwen",  // или "T-Pro", "Llama", "Greedy" - НОВОЕ
+    "model_used": "Qwen",  // или "T-Pro", "Llama" - НОВОЕ
     "fallback_reason": null,  // если использовался fallback - НОВОЕ
     "response_time_ms": 2345,
     "quality_score": 92,
@@ -341,13 +339,6 @@ class RouteOptimizer:
         "cost_rub": 0,  // local, free
         "status": "success"
       },
-      {
-        "model": "Greedy",
-        "response_time_ms": 100,
-        "quality_score": 70,
-        "cost_rub": 0,
-        "status": "success"
-      }
     ]
   }
   ```
@@ -362,7 +353,6 @@ class RouteOptimizer:
 | Qwen | Medium (2.3s) | High (92) | $0.45 | Good |
 | T-Pro | Fast (1.8s) | Medium (88) | $0.60 | Better |
 | Llama | Slow (4.5s) | Medium (85) | $0 | Best |
-| Greedy | Very fast (0.1s) | Low (70) | $0 | 100% |
 ```
 
 ---
@@ -415,7 +405,7 @@ class RouteOptimizer:
   - Записать response time
   - Записать любые ошибки
   - **Запиши fallback reason если была цепочка fallback**
-- ✅ **Плюс Greedy** как baseline для сравнения
+- ✅ Baseline для сравнения
 - ✅ Результаты сохранить в JSON: ml/benchmarks/optimization_results.json
 - ✅ Генерируй отчёт: ml/benchmarks/optimization_report.md с таблицей сравнения
 - ✅ Unit тесты
@@ -434,13 +424,11 @@ class RouteOptimizer:
 | Qwen | 42.5 | 120 | 92 | 2345ms | $0.45 |
 | T-Pro | 44.2 | 125 | 88 | 1800ms | $0.60 |
 | Llama | 45.1 | 130 | 85 | 4500ms | $0.00 |
-| Greedy | 68.3 | 200 | 70 | 100ms | $0.00 |
 
 ### Findings:
 - Qwen best quality (92)
 - T-Pro fastest (1800ms)
 - Llama most reliable
-- Greedy is backup only
 ```
 
 ---
@@ -500,7 +488,7 @@ def select_best_model(num_locations, time_constraint):
   - T2: Optimize with **Qwen** → Returns optimized route → Frontend displays
   - T3: Fallback mechanism: **Qwen fails → T-Pro is used → Result is returned**
   - T4: Fallback chain: **T-Pro fails → Llama is used**
-  - T5: Fallback to greedy: **All LLM models unavailable → Greedy algo used**
+  - T5: All models fail: **All LLM models unavailable → error returned**
   - T6: Compare models → **All 3 models (Qwen, T-Pro, Llama) run → Results returned**
   - T7: Error scenario: Invalid locations → Backend rejects → Frontend shows error
   - T8: Performance: Optimize 50 locations → Response < 5 sec
@@ -525,13 +513,13 @@ def test_qwen_fallback_to_tpro():
         assert response["model_used"] == "T-Pro"
         assert "timeout" in response["fallback_reason"]
 
-def test_all_models_fail_fallback_to_greedy():
-    # If all LLM models fail, use greedy
+def test_all_models_fail_returns_error():
+    # If all LLM models fail, return error
     with mock.patch('qwen.error'), \
          mock.patch('tpro.error'), \
          mock.patch('llama.error'):
         response = client.post("/api/v1/optimize", json=payload)
-        assert response["model_used"] == "Greedy"
+        assert response.status_code == 503
         assert response["fallback_reason"] == "All LLM models unavailable"
 ```
 

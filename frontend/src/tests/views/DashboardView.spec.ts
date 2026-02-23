@@ -124,8 +124,8 @@ describe('DashboardView.vue', () => {
         total_distance_km: 45.8,
         total_time_hours: 5.7,
         total_cost_rub: 3750,
-        model_used: 'deepseek',
-        fallback_reason: 'Llama unavailable, using fallback',
+        model_used: 'llama',
+        fallback_reason: null,
         created_at: '2026-02-11T11:45:00Z'
       }
     ]
@@ -189,7 +189,7 @@ describe('DashboardView.vue', () => {
       {
         id: 'metric-3',
         route_id: 'route-3',
-        model: 'deepseek',
+        model: 'llama',
         response_time_ms: 1850,
         quality_score: 0.89,
         cost_rub: 18.0,
@@ -231,7 +231,6 @@ describe('DashboardView.vue', () => {
     services: {
       database: 'connected' as const,
       qwen: 'available' as const,
-      deepseek: 'available' as const,
       llama: 'connected' as const
     }
   }

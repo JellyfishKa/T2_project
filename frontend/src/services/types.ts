@@ -86,7 +86,6 @@ export interface HealthStatus {
   services: {
     database: 'connected' | 'disconnected'
     qwen: 'connected' | 'available' | 'unavailable' | 'error'
-    deepseek: 'connected' | 'available' | 'unavailable' | 'error'
     llama: 'connected' | 'available' | 'unavailable' | 'error'
   }
 }
