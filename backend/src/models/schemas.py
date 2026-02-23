@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -23,3 +24,5 @@ class Route(BaseModel):
     total_cost_rub: float
     model_used: str
     created_at: datetime
+    # ML-6: опциональная рекомендация селектора моделей (model + reason)
+    recommendation: Optional[dict] = None
