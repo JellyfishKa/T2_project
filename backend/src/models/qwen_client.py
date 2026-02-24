@@ -23,6 +23,15 @@ from src.models.exceptions import (
     QwenValidationError,
 )
 from src.models.llm_client import LLMClient
+from src.models.geo_utils import (
+    build_constraints_text,
+    build_nearest_neighbors,
+    compute_distance_matrix,
+    detect_region_info,
+    estimate_fuel_cost,
+    format_locations_compact,
+    format_nearest_neighbors,
+)
 from src.models.schemas import (
     Location,
     Route,
@@ -142,8 +151,8 @@ class QwenClient(LLMClient):
             {
                 "role": "system",
                 "content": (
-                    "You are a logistics expert. "
-                    "Return ONLY valid JSON."
+                    "You are a route optimizer. "
+                    "Output ONLY valid JSON, no text."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -178,35 +187,34 @@ class QwenClient(LLMClient):
         locations: List[Dict],
         constraints: Dict,
     ) -> str:
-        locations_json = json.dumps(locations, ensure_ascii=False)
-        constraints_str = json.dumps(constraints) if constraints else "{}"
+        region = detect_region_info(locations)
+        dm = compute_distance_matrix(locations)
+        nn = build_nearest_neighbors(dm, k=3)
 
-        return f"""
-        Role: You are a professional logistics expert specializing
-        in route optimization in Russia.
-        Task:
-        1. Optimize the route for the provided locations.
-        2. Prioritize high-priority points.
-        3. Estimate the total cost in RUB based on average petrol prices
-        for the region identified in the addresses.
+        locations_text = format_locations_compact(locations)
+        nn_text = format_nearest_neighbors(locations, nn)
+        constraints_text = build_constraints_text(constraints)
 
-        Input Data:
-        Locations: {locations_json}
-        Constraints: {constraints_str}
+        fuel_rate = (constraints or {}).get("fuel_rate", 7.0)
+        speed = 25 if region["classification"] == "urban" else 40
 
-        Output Format:
-        Return ONLY a valid JSON object matching exactly this schema
-        (no markdown, no comments):
-        {{
-            "route_id": "string",
-            "locations_sequence": ["id_from_input", ...],
-            "total_distance_km": float,
-            "total_time_hours": float,
-            "total_cost_rub": float,
-            "model_used": "{self.model_name}",
-            "created_at": "{datetime.now().isoformat()}"
-        }}
-        """
+        return (
+            f"LOCATIONS ({len(locations)} points, "
+            f"{region['classification']} area, "
+            f"{region['area_km2']}km2):\n"
+            f"{locations_text}\n\n"
+            f"DISTANCES (nearest neighbors):\n{nn_text}\n\n"
+            f"RULES: {constraints_text}\n"
+            f"Order by priority (high=A>B>C>D). Minimize total km.\n"
+            f"Speed: {speed}km/h + 15min per visit. "
+            f"Cost = distance * {fuel_rate} rub/km.\n\n"
+            f"OUTPUT: single JSON, no markdown:\n"
+            f'{{"route_id":"id","locations_sequence":["id1","id2"],'
+            f'"total_distance_km":0.0,"total_time_hours":0.0,'
+            f'"total_cost_rub":0.0,'
+            f'"model_used":"{self.model_name}",'
+            f'"created_at":"{datetime.now().isoformat()}"}}'
+        )
 
     def _parse_response(
         self,

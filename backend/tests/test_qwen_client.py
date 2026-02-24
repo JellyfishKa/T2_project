@@ -12,11 +12,12 @@ import asyncio
 
 class MockLocation:
     """Mock для Location."""
-    def __init__(self, id, name, lat, lon):
+    def __init__(self, id, name, lat, lon, priority="B"):
         self.ID = id
         self.name = name
         self.lat = lat
         self.lon = lon
+        self.priority = priority
 
     def model_dump(self):
         return {
@@ -24,6 +25,7 @@ class MockLocation:
             "name": self.name,
             "lat": self.lat,
             "lon": self.lon,
+            "priority": self.priority,
         }
 
 
@@ -31,9 +33,9 @@ class MockLocation:
 def sample_locations():
     """Минимальный набор локаций для тестов."""
     return [
-        MockLocation("loc-1", "Store A", 55.75, 37.62),
-        MockLocation("loc-2", "Store B", 55.76, 37.63),
-        MockLocation("loc-3", "Store C", 55.74, 37.61),
+        MockLocation("loc-1", "Store A", 55.75, 37.62, "A"),
+        MockLocation("loc-2", "Store B", 55.76, 37.63, "B"),
+        MockLocation("loc-3", "Store C", 55.74, 37.61, "C"),
     ]
 
 
@@ -168,7 +170,7 @@ class TestQwenClientPromptConstruction:
     """Тесты конструирования промптов."""
 
     def test_construct_prompt_includes_locations(self, sample_locations):
-        """Промпт включает информацию о локациях."""
+        """Промпт включает информацию о локациях в компактном формате."""
         with patch("src.models.qwen_client.settings") as mock_settings:
             mock_settings.qwen_model_id = "qwen.gguf"
             mock_settings.get_model_path.return_value = "/path/to/qwen.gguf"
@@ -182,6 +184,8 @@ class TestQwenClientPromptConstruction:
             assert "Store A" in prompt
             assert "Store B" in prompt
             assert "55.75" in prompt
+            assert "LOCATIONS" in prompt
+            assert "nearest" in prompt.lower()
 
     def test_construct_prompt_includes_constraints(self, sample_locations):
         """Промпт включает ограничения."""
@@ -193,11 +197,27 @@ class TestQwenClientPromptConstruction:
             client = QwenClient()
 
             locations_data = [loc.model_dump() for loc in sample_locations]
-            constraints = {"max_distance": 100, "priority": "high"}
+            constraints = {"team_size": 4, "fuel_rate": 8.0}
             prompt = client._construct_prompt(locations_data, constraints)
 
-            assert "max_distance" in prompt
-            assert "priority" in prompt
+            assert "Team: 4" in prompt
+            assert "8.0" in prompt
+
+    def test_construct_prompt_has_json_example(self, sample_locations):
+        """Промпт включает JSON few-shot пример."""
+        with patch("src.models.qwen_client.settings") as mock_settings:
+            mock_settings.qwen_model_id = "qwen.gguf"
+            mock_settings.get_model_path.return_value = "/path/to/qwen.gguf"
+
+            from src.models.qwen_client import QwenClient
+            client = QwenClient()
+
+            locations_data = [loc.model_dump() for loc in sample_locations]
+            prompt = client._construct_prompt(locations_data, None)
+
+            assert "route_id" in prompt
+            assert "total_distance_km" in prompt
+            assert "Minimize total km" in prompt
 
 
 class TestQwenClientResponseParsing:

@@ -12,11 +12,12 @@ import json
 
 class MockLocation:
     """Mock для Location."""
-    def __init__(self, id, name, lat, lon):
+    def __init__(self, id, name, lat, lon, priority="B"):
         self.ID = id
         self.name = name
         self.lat = lat
         self.lon = lon
+        self.priority = priority
 
     def model_dump(self):
         return {
@@ -24,6 +25,7 @@ class MockLocation:
             "name": self.name,
             "lat": self.lat,
             "lon": self.lon,
+            "priority": self.priority,
         }
 
 
@@ -31,9 +33,9 @@ class MockLocation:
 def sample_locations():
     """Минимальный набор локаций для тестов."""
     return [
-        MockLocation("loc-1", "Store A", 55.75, 37.62),
-        MockLocation("loc-2", "Store B", 55.76, 37.63),
-        MockLocation("loc-3", "Store C", 55.74, 37.61),
+        MockLocation("loc-1", "Store A", 55.75, 37.62, "A"),
+        MockLocation("loc-2", "Store B", 55.76, 37.63, "B"),
+        MockLocation("loc-3", "Store C", 55.74, 37.61, "C"),
     ]
 
 
@@ -262,3 +264,56 @@ class TestLlamaClientAsFallback:
 
             assert result is not None
             assert "llama" in result.model_used.lower()
+
+
+class TestLlamaClientPromptConstruction:
+    """Тесты конструирования промптов."""
+
+    def test_construct_prompt_includes_locations(self, sample_locations):
+        """Промпт включает информацию о локациях."""
+        with patch("src.models.llama_client.settings") as mock_settings:
+            mock_settings.llama_model_id = "llama.gguf"
+            mock_settings.get_model_path.return_value = "/path/to/llama.gguf"
+
+            from src.models.llama_client import LlamaClient
+            client = LlamaClient()
+
+            locations_data = [loc.model_dump() for loc in sample_locations]
+            prompt = client._construct_prompt(locations_data, None)
+
+            assert "Store A" in prompt
+            assert "Store B" in prompt
+            assert "LOCATIONS" in prompt
+            assert "DISTANCE MATRIX" in prompt
+
+    def test_construct_prompt_includes_region_info(self, sample_locations):
+        """Промпт включает информацию о регионе."""
+        with patch("src.models.llama_client.settings") as mock_settings:
+            mock_settings.llama_model_id = "llama.gguf"
+            mock_settings.get_model_path.return_value = "/path/to/llama.gguf"
+
+            from src.models.llama_client import LlamaClient
+            client = LlamaClient()
+
+            locations_data = [loc.model_dump() for loc in sample_locations]
+            prompt = client._construct_prompt(locations_data, None)
+
+            assert "REGION:" in prompt
+            assert "km2" in prompt
+
+    def test_construct_prompt_with_constraints(self, sample_locations):
+        """Промпт включает ограничения."""
+        with patch("src.models.llama_client.settings") as mock_settings:
+            mock_settings.llama_model_id = "llama.gguf"
+            mock_settings.get_model_path.return_value = "/path/to/llama.gguf"
+
+            from src.models.llama_client import LlamaClient
+            client = LlamaClient()
+
+            locations_data = [loc.model_dump() for loc in sample_locations]
+            constraints = {"team_size": 4, "fuel_rate": 8.0}
+            prompt = client._construct_prompt(locations_data, constraints)
+
+            assert "Team: 4" in prompt
+            assert "8.0" in prompt
+            assert "minimize distance" in prompt
