@@ -209,9 +209,10 @@ describe('AnalyticsView.vue', () => {
     // Проверяем наличие названий моделей в таблице
     expect(wrapper.text()).toContain('Llama')
     expect(wrapper.text()).toContain('Qwen')
-    expect(wrapper.text()).toContain('1245')
+    // Таблица отображает агрегированные средние, а не индивидуальные значения:
+    // llama: (1245+1850)/2 = 1548, qwen: 432/1 = 432
+    expect(wrapper.text()).toContain('1548')
     expect(wrapper.text()).toContain('432')
-    expect(wrapper.text()).toContain('1850')
   })
 
   it('отображает ошибку при неудачной загрузке', async () => {
