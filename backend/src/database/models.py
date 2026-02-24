@@ -57,7 +57,8 @@ class Route(Base):
     total_distance = Column(Float, nullable=False)
     total_time = Column(Float, nullable=False)
     total_cost = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
 
     metrics = relationship("Metric", back_populates="route",
                            cascade="all, delete-orphan")
@@ -78,7 +79,8 @@ class Metric(Base):
     response_time_ms = Column(Integer, nullable=False)
     quality_score = Column(Float, nullable=False)
     cost = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime(timezone=True),
+                       default=lambda: datetime.now(timezone.utc))
 
     route = relationship("Route", back_populates="metrics")
 
@@ -96,7 +98,8 @@ class OptimizationResult(Base):
     optimized_route = Column(JSON, nullable=False)
     improvement_percentage = Column(Float, nullable=False)
     model_used = Column(String, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):
         return "<OptimizationResult(imp={self.improvement_percentage}%)>"
