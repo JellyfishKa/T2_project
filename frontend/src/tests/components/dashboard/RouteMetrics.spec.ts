@@ -153,15 +153,16 @@ describe('RouteMetrics.vue', () => {
   it('применяет правильные классы для бейджей моделей', () => {
     const badges = wrapper.findAll('span.inline-flex')
 
-    // Первый бейдж - модель маршрута, следующие - модели в таблице
+    // Первый бейдж - модель маршрута (llama), следующие - модели в таблице
+    // Метрики: llama, qwen, llama — все получают цвет по своей модели
     expect(badges[1].classes()).toContain('bg-blue-100')
     expect(badges[1].classes()).toContain('text-blue-800')
 
     expect(badges[2].classes()).toContain('bg-purple-100')
     expect(badges[2].classes()).toContain('text-purple-800')
 
-    expect(badges[3].classes()).toContain('bg-yellow-100')
-    expect(badges[3].classes()).toContain('text-yellow-800')
+    expect(badges[3].classes()).toContain('bg-blue-100')
+    expect(badges[3].classes()).toContain('text-blue-800')
   })
 
   it('правильно определяет цвет для времени ответа', async () => {
