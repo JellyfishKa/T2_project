@@ -30,6 +30,15 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up: Creating database tables...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Добавляем колонку model_used если её нет (для существующих БД)
+        try:
+            await conn.execute(text(
+                "ALTER TABLE routes ADD COLUMN IF NOT EXISTS "
+                "model_used VARCHAR DEFAULT 'unknown'"
+            ))
+            logger.info("Column routes.model_used ensured.")
+        except Exception as e:
+            logger.warning(f"Could not alter routes table: {e}")
     yield
     logger.info("Shutting down: Closing database engine...")
     await engine.dispose()

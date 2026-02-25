@@ -58,7 +58,10 @@
               перетащите его сюда
             </p>
             <p class="text-sm text-gray-500">
-              Поддерживаемые форматы: CSV, JSON
+              Поддерживаемые форматы: CSV, JSON, XLSX
+            </p>
+            <p class="text-xs text-gray-400">
+              Колонки: name, lat, lon (и опционально time_window_start, time_window_end)
             </p>
           </div>
 
@@ -68,7 +71,7 @@
         <input
           ref="fileInput"
           type="file"
-          accept=".csv,.json,.txt,text/csv,application/json"
+          accept=".csv,.json,.xlsx,.xls,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           @change="handleFileSelect"
           class="hidden"
         />
@@ -288,8 +291,8 @@
                   {{ location.name }}
                 </p>
                 <p class="text-xs text-gray-500">
-                  {{ location.city }}, {{ location.street }}, д.
-                  {{ location.houseNumber }}
+                  {{ location.latitude.toFixed(4) }}, {{ location.longitude.toFixed(4) }}
+                  &nbsp;·&nbsp;{{ location.timeWindowStart }}–{{ location.timeWindowEnd }}
                 </p>
               </div>
             </div>
@@ -308,17 +311,11 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { uploadLocations } from '@/services/api'
 import type { Location } from './types'
 
 interface FilePreviewRow {
   [key: string]: string | number
-}
-
-interface UploadResponse {
-  success: boolean
-  message: string
-  locations?: Location[]
-  errors?: string[]
 }
 
 // Props & Emits
@@ -328,12 +325,11 @@ const emit = defineEmits<{
 
 // Refs
 const fileInput = ref<HTMLInputElement>()
-const dropZone = ref<HTMLElement>()
 const isDragging = ref(false)
 const isUploading = ref(false)
 const selectedFile = ref<File | null>(null)
 const previewData = ref<FilePreviewRow[]>([])
-const allFileData = ref<FilePreviewRow[]>([]) // Храним все данные
+const allFileData = ref<FilePreviewRow[]>([])
 const previewHeaders = ref<string[]>([])
 const error = ref<string>('')
 const successMessage = ref<string>('')
@@ -341,14 +337,12 @@ const validationErrors = ref<string[]>([])
 const uploadedLocations = ref<Location[]>([])
 
 // Computed
-const canUpload = computed(() => {
-  return allFileData.value.length > 0 && validationErrors.value.length === 0
-})
+const canUpload = computed(
+  () => allFileData.value.length > 0 && validationErrors.value.length === 0
+)
 
 // Methods
-const triggerFileInput = () => {
-  fileInput.value?.click()
-}
+const triggerFileInput = () => fileInput.value?.click()
 
 const handleDragOver = (event: DragEvent) => {
   event.preventDefault()
@@ -358,209 +352,123 @@ const handleDragOver = (event: DragEvent) => {
 const handleDrop = (event: DragEvent) => {
   isDragging.value = false
   const files = event.dataTransfer?.files
-  if (files && files.length > 0) {
-    processFile(files[0])
-  }
+  if (files && files.length > 0) processFile(files[0])
 }
 
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
-  if (files && files.length > 0) {
-    processFile(files[0])
-  }
+  if (files && files.length > 0) processFile(files[0])
 }
 
 const processFile = (file: File) => {
-  // Reset state
   resetState()
   selectedFile.value = file
 
-  // Check file size (max 5MB)
   if (file.size > 5 * 1024 * 1024) {
     error.value = 'Файл слишком большой. Максимальный размер: 5MB'
     return
   }
 
-  // Check file type
-  const fileExtension = file.name.split('.').pop()?.toLowerCase()
-  const mimeType = file.type
+  const ext = file.name.split('.').pop()?.toLowerCase()
 
-  if (
-    fileExtension === 'csv' ||
-    mimeType === 'text/csv' ||
-    mimeType === 'application/vnd.ms-excel'
-  ) {
+  if (ext === 'csv') {
     parseCSV(file)
-  } else if (fileExtension === 'json' || mimeType === 'application/json') {
+  } else if (ext === 'json') {
     parseJSON(file)
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    // XLSX — предпросмотр недоступен в браузере без библиотеки,
+    // сразу выставляем файл как готовый к загрузке
+    previewHeaders.value = ['name', 'lat', 'lon', 'time_window_start', 'time_window_end']
+    allFileData.value = [{ name: '(данные из XLSX)', lat: 0, lon: 0, time_window_start: '', time_window_end: '' }]
+    previewData.value = allFileData.value
+    successMessage.value = `Файл ${file.name} готов к загрузке. Нажмите "Загрузить на сервер".`
   } else {
-    error.value = 'Неподдерживаемый формат файла. Используйте CSV или JSON.'
+    error.value = 'Неподдерживаемый формат. Используйте CSV, JSON или XLSX.'
   }
 }
 
 const parseCSV = (file: File) => {
   const reader = new FileReader()
-
   reader.onload = (event) => {
     try {
       const content = event.target?.result as string
-      const lines = content.split('\n').filter((line) => line.trim())
-
+      const lines = content.split('\n').filter((l) => l.trim())
       if (lines.length < 2) {
         error.value = 'Файл должен содержать хотя бы одну строку данных'
         return
       }
-
-      // Parse headers
       const headers = lines[0].split(',').map((h) => h.trim())
       previewHeaders.value = headers
-
-      // Parse ALL data rows
-      const allDataRows: FilePreviewRow[] = []
-
+      const rows: FilePreviewRow[] = []
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',').map((v) => v.trim())
         const row: FilePreviewRow = {}
-
-        headers.forEach((header, idx) => {
-          row[header] = values[idx] || ''
-        })
-
-        allDataRows.push(row)
+        headers.forEach((h, idx) => { row[h] = values[idx] || '' })
+        rows.push(row)
       }
-
-      // Store all data
-      allFileData.value = allDataRows
-
-      // For preview, show first 5 rows
-      previewData.value = allDataRows.slice(0, 5)
-
-      // Validate all data, not just preview
-      validateData(allDataRows)
-
-      console.log(`Parsed ${allDataRows.length} rows from CSV`)
-    } catch (err) {
+      allFileData.value = rows
+      previewData.value = rows.slice(0, 5)
+      validateData(rows)
+    } catch {
       error.value = 'Ошибка при чтении CSV файла'
-      console.error('CSV parsing error:', err)
     }
   }
-
-  reader.onerror = () => {
-    error.value = 'Ошибка при чтении файла'
-  }
-
+  reader.onerror = () => { error.value = 'Ошибка при чтении файла' }
   reader.readAsText(file, 'UTF-8')
 }
 
 const parseJSON = (file: File) => {
   const reader = new FileReader()
-
   reader.onload = (event) => {
     try {
-      const content = event.target?.result as string
-      const data = JSON.parse(content)
-
-      // Check if data is an array
-      if (!Array.isArray(data)) {
-        error.value = 'JSON должен содержать массив объектов'
+      const data = JSON.parse(event.target?.result as string)
+      if (!Array.isArray(data) || data.length === 0) {
+        error.value = 'JSON должен содержать непустой массив объектов'
         return
       }
-
-      if (data.length === 0) {
-        error.value = 'Файл не содержит данных'
-        return
-      }
-
-      // Get headers from first object
-      const firstItem = data[0]
-      previewHeaders.value = Object.keys(firstItem)
-
-      // Store ALL data
+      previewHeaders.value = Object.keys(data[0])
       allFileData.value = data
-
-      // Get first 5 items for preview
-      previewData.value = data.slice(0, 5).map((item) => {
-        const row: FilePreviewRow = {}
-        previewHeaders.value.forEach((header) => {
-          row[header] = item[header] || ''
-        })
-        return row
-      })
-
-      // Validate all data, not just preview
+      previewData.value = data.slice(0, 5)
       validateData(data)
-
-      console.log(`Parsed ${data.length} rows from JSON`)
-    } catch (err) {
+    } catch {
       error.value = 'Ошибка при чтении JSON файла'
-      console.error('JSON parsing error:', err)
     }
   }
-
-  reader.onerror = () => {
-    error.value = 'Ошибка при чтении файла'
-  }
-
+  reader.onerror = () => { error.value = 'Ошибка при чтении файла' }
   reader.readAsText(file, 'UTF-8')
 }
 
+/**
+ * Валидация: обязательные поля name + координаты (lat/lon или latitude/longitude).
+ * Поля city/street/houseNumber — необязательны, файл их не содержит.
+ */
 const validateData = (data: FilePreviewRow[]) => {
   validationErrors.value = []
-
-  data.forEach((row, index) => {
-    const rowNumber = index + 2 // +1 for header, +1 for 0-based index
-
-    // Check required fields
-    const requiredFields = [
-      'name',
-      'city',
-      'street',
-      'houseNumber',
-      'latitude',
-      'longitude'
-    ]
-
-    requiredFields.forEach((field) => {
-      if (!row[field] || String(row[field]).trim() === '') {
-        validationErrors.value.push(
-          `Строка ${rowNumber}: Отсутствует обязательное поле "${field}"`
-        )
-      }
-    })
-
-    // Validate latitude
-    if (row.latitude) {
-      const lat = parseFloat(String(row.latitude))
-      if (isNaN(lat) || lat < -90 || lat > 90) {
-        validationErrors.value.push(
-          `Строка ${rowNumber}: Некорректная широта "${row.latitude}"`
-        )
-      }
+  data.forEach((row, idx) => {
+    const rowNum = idx + 2
+    if (!row['name'] && !row['название'] && !row['наименование точки']) {
+      validationErrors.value.push(`Строка ${rowNum}: отсутствует поле "name"`)
     }
-
-    // Validate longitude
-    if (row.longitude) {
-      const lon = parseFloat(String(row.longitude))
-      if (isNaN(lon) || lon < -180 || lon > 180) {
-        validationErrors.value.push(
-          `Строка ${rowNumber}: Некорректная долгота "${row.longitude}"`
-        )
-      }
+    const lat = row['lat'] ?? row['latitude'] ?? row['широта']
+    const lon = row['lon'] ?? row['longitude'] ?? row['долгота']
+    if (lat !== undefined && lat !== '') {
+      const v = parseFloat(String(lat))
+      if (isNaN(v) || v < -90 || v > 90)
+        validationErrors.value.push(`Строка ${rowNum}: некорректная широта "${lat}"`)
     }
-
-    // Validate house number
-    if (row.houseNumber) {
-      const houseNum = String(row.houseNumber).trim()
-      if (!/^[1-9]\d*[а-яА-Я]?(\/\d+)?$/.test(houseNum)) {
-        validationErrors.value.push(
-          `Строка ${rowNumber}: Некорректный номер дома "${houseNum}"`
-        )
-      }
+    if (lon !== undefined && lon !== '') {
+      const v = parseFloat(String(lon))
+      if (isNaN(v) || v < -180 || v > 180)
+        validationErrors.value.push(`Строка ${rowNum}: некорректная долгота "${lon}"`)
     }
   })
 }
 
+/**
+ * Загружает файл на сервер через реальный API POST /api/v1/locations/upload.
+ * Бэкенд сам парсит CSV/JSON/XLSX и возвращает {created: [...], errors: [...]}.
+ */
 const uploadToServer = async () => {
   if (!selectedFile.value || !canUpload.value) return
 
@@ -569,72 +477,57 @@ const uploadToServer = async () => {
   successMessage.value = ''
 
   try {
-    // Create FormData
-    const formData = new FormData()
-    formData.append('file', selectedFile.value)
+    const result = await uploadLocations(selectedFile.value)
 
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Бэкенд возвращает {created: Location[], errors: [], total_processed: N}
+    const created = (result as any).created ?? result.locations ?? []
+    const errors = (result as any).errors ?? []
 
-    const mockResponse: UploadResponse = {
-      success: true,
-      message: `Успешно загружено ${allFileData.value.length} магазинов`,
-      locations: generateMockLocationsFromFile()
-    }
+    if (created.length > 0) {
+      successMessage.value = `Загружено ${created.length} магазинов.`
+      if (errors.length > 0)
+        successMessage.value += ` Пропущено строк с ошибками: ${errors.length}.`
 
-    if (mockResponse.success && mockResponse.locations) {
-      successMessage.value = mockResponse.message
-      uploadedLocations.value = mockResponse.locations
+      // Конвертируем формат бэкенда → формат фронтенда
+      const locations: Location[] = created.map((loc: any, i: number) => ({
+        id: loc.id ?? `srv-${Date.now()}-${i}`,
+        name: loc.name ?? '',
+        city: '',
+        street: '',
+        houseNumber: '',
+        latitude: loc.lat ?? loc.latitude ?? 0,
+        longitude: loc.lon ?? loc.longitude ?? 0,
+        timeWindowStart: loc.time_window_start ?? '09:00',
+        timeWindowEnd: loc.time_window_end ?? '18:00',
+        priority: 'medium' as const
+      }))
 
-      // Auto-add all locations to form starting from FIRST location
-      emit('add-locations', mockResponse.locations)
+      uploadedLocations.value = locations
+      emit('add-locations', locations)
     } else {
-      error.value = mockResponse.message || 'Ошибка при загрузке'
+      error.value = 'Сервер не вернул ни одной локации. Проверьте формат файла.'
+      if (errors.length > 0) {
+        error.value += ` Ошибки: ${errors.slice(0, 3).map((e: any) => e.error ?? JSON.stringify(e)).join('; ')}`
+      }
     }
-  } catch (err) {
-    error.value = 'Ошибка сети при загрузке файла'
+  } catch (err: any) {
+    error.value = err?.message ?? err?.detail ?? 'Ошибка при загрузке файла на сервер'
     console.error('Upload error:', err)
   } finally {
     isUploading.value = false
   }
 }
 
-const generateMockLocationsFromFile = (): Location[] => {
-  return allFileData.value.map((row, index) => {
-    // Function to capitalize first letter
-    const capitalize = (str: string): string => {
-      return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
-    }
-
-    return {
-      id: `uploaded-${Date.now()}-${index}`,
-      name: String(row.name || `Магазин ${index + 1}`),
-      city: capitalize(String(row.city || 'Москва')),
-      street: String(row.street || 'Тверская'),
-      houseNumber: String(row.houseNumber || '1'),
-      latitude: parseFloat(String(row.latitude || '55.7558')),
-      longitude: parseFloat(String(row.longitude || '37.6173')),
-      timeWindowStart: String(row.timeWindowStart || '09:00'),
-      timeWindowEnd: String(row.timeWindowEnd || '18:00'),
-      priority: String(row.priority || 'medium') as 'low' | 'medium' | 'high'
-    }
-  })
-}
-
 const addLocationToForm = (location: Location) => {
   emit('add-locations', [location])
-
   successMessage.value = `Магазин "${location.name}" добавлен в форму`
-  setTimeout(() => {
-    successMessage.value = ''
-  }, 3000)
+  setTimeout(() => { successMessage.value = '' }, 3000)
 }
 
 const clearUploadedData = () => {
   uploadedLocations.value = []
   successMessage.value = 'Загруженные данные очищены'
-  setTimeout(() => {
-    successMessage.value = ''
-  }, 3000)
+  setTimeout(() => { successMessage.value = '' }, 3000)
 }
 
 const resetState = () => {
@@ -645,5 +538,6 @@ const resetState = () => {
   error.value = ''
   successMessage.value = ''
   validationErrors.value = []
+  uploadedLocations.value = []
 }
 </script>

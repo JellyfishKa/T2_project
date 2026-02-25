@@ -15,7 +15,7 @@ router = APIRouter(prefix="/routes", tags=["Routes"])
 
 
 @router.get(
-    "/",
+    "",
     response_model=PaginatedRoutes,
     status_code=status.HTTP_200_OK,
     responses={
