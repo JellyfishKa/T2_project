@@ -151,11 +151,11 @@ const formData = reactive<OptimizationFormData>({
     {
       id: generateId(),
       name: '',
-      city: 'Москва',
+      city: 'Саранск',
       street: '',
       houseNumber: '',
-      latitude: 55.7558,
-      longitude: 37.6173,
+      latitude: 54.1871,
+      longitude: 45.1749,
       timeWindowStart: '09:00',
       timeWindowEnd: '18:00',
       priority: 'medium'
@@ -163,11 +163,11 @@ const formData = reactive<OptimizationFormData>({
     {
       id: generateId(),
       name: '',
-      city: 'Москва',
+      city: 'Саранск',
       street: '',
       houseNumber: '',
-      latitude: 55.7489,
-      longitude: 37.616,
+      latitude: 54.1902,
+      longitude: 45.1685,
       timeWindowStart: '09:00',
       timeWindowEnd: '18:00',
       priority: 'medium'
@@ -192,11 +192,11 @@ const addLocation = () => {
   formData.locations.push({
     id: generateId(),
     name: '',
-    city: 'Москва',
+    city: 'Саранск',
     street: '',
     houseNumber: '',
-    latitude: 55.7558 + (Math.random() - 0.5) * 0.01,
-    longitude: 37.6173 + (Math.random() - 0.5) * 0.01,
+    latitude: 54.1871 + (Math.random() - 0.5) * 0.02,
+    longitude: 45.1749 + (Math.random() - 0.5) * 0.02,
     timeWindowStart: '09:00',
     timeWindowEnd: '18:00',
     priority: 'medium'
@@ -234,24 +234,19 @@ const validateForm = (): boolean => {
     errors.locations = 'Добавьте минимум 2 магазина'
     isValid = false
   } else {
-    // Check if any location has validation errors
+    // Обязательные: name, city, timeWindowStart, timeWindowEnd, координаты.
+    // street и houseNumber — опциональны (координаты достаточны для маршрута).
     const hasInvalidLocation = formData.locations.some((loc) => {
-      // Проверяем основные обязательные поля
-      if (
+      return (
         !loc.name.trim() ||
         !loc.city.trim() ||
-        !loc.street.trim() ||
-        !loc.houseNumber.trim() ||
         !loc.timeWindowStart ||
         !loc.timeWindowEnd
-      ) {
-        return true
-      }
-      return false
+      )
     })
 
     if (hasInvalidLocation) {
-      errors.locations = 'Заполните все обязательные поля для каждого магазина'
+      errors.locations = 'Заполните название, город и временные окна для каждого магазина'
       isValid = false
     }
   }
@@ -281,11 +276,11 @@ const resetForm = () => {
     {
       id: generateId(),
       name: '',
-      city: 'Москва',
+      city: 'Саранск',
       street: '',
       houseNumber: '',
-      latitude: 55.7558,
-      longitude: 37.6173,
+      latitude: 54.1871,
+      longitude: 45.1749,
       timeWindowStart: '09:00',
       timeWindowEnd: '18:00',
       priority: 'medium'
@@ -293,11 +288,11 @@ const resetForm = () => {
     {
       id: generateId(),
       name: '',
-      city: 'Москва',
+      city: 'Саранск',
       street: '',
       houseNumber: '',
-      latitude: 55.7489,
-      longitude: 37.616,
+      latitude: 54.1902,
+      longitude: 45.1685,
       timeWindowStart: '09:00',
       timeWindowEnd: '18:00',
       priority: 'medium'

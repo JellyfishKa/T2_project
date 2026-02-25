@@ -86,10 +86,11 @@
         </p>
       </div>
 
-      <!-- Street -->
+      <!-- Street (опционально) -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">
-          Улица *
+          Улица
+          <span class="text-gray-400 font-normal text-xs ml-1">(необязательно)</span>
         </label>
         <input
           type="text"
@@ -97,24 +98,20 @@
           @input="updateLocation"
           :class="[
             'block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm',
-            !localLocation.street.trim() || streetError
-              ? 'border-red-300'
-              : 'border-gray-300'
+            streetError ? 'border-red-300' : 'border-gray-300'
           ]"
-          placeholder="ул. Тверская, пр. Ленина"
+          placeholder="ул. Советская, пр. Ленина"
         />
         <p v-if="streetError" class="mt-1 text-xs text-red-600">
           {{ streetError }}
         </p>
-        <p class="mt-1 text-xs text-gray-500">
-          Примеры: ул. Тверская, пр. Ленина, ул. Р. Люксембург
-        </p>
       </div>
 
-      <!-- House Number -->
+      <!-- House Number (опционально) -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">
-          Номер дома *
+          Номер дома
+          <span class="text-gray-400 font-normal text-xs ml-1">(необязательно)</span>
         </label>
         <input
           type="text"
@@ -122,11 +119,9 @@
           @input="updateLocation"
           :class="[
             'block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm',
-            !localLocation.houseNumber.trim() || houseNumberError
-              ? 'border-red-300'
-              : 'border-gray-300'
+            houseNumberError ? 'border-red-300' : 'border-gray-300'
           ]"
-          placeholder="15"
+          placeholder="35"
         />
         <p v-if="houseNumberError" class="mt-1 text-xs text-red-600">
           {{ houseNumberError }}
@@ -323,32 +318,33 @@ const validateName = (name: string): string => {
 
 const validateCity = (city: string): string => {
   if (!city.trim()) return 'Город обязателен'
-  if (!/^[А-ЯЁ][а-яё\s-]+$/.test(city))
-    return 'Название города должно начинаться с заглавной буквы и содержать только русские буквы'
+  // Допускаем: буквы (в т.ч. заглавные в середине для "Большие Березники"),
+  // пробелы, дефисы, точки (для сокращений).
+  if (!/^[А-ЯЁа-яё][А-ЯЁа-яё\s.\-]+$/.test(city))
+    return 'Введите название города русскими буквами'
   return ''
 }
 
+// Улица — необязательное поле. Валидируем только если заполнено.
 const validateStreet = (street: string): string => {
-  if (!street.trim()) return 'Улица обязательна'
-
-  const streetPatterns = [
-    /^(аллея|ал\.|бульвар|б-р|взвоз|взв\.|въезд|взд.|дорога|дор\.|заезд|ззд\.|километр|км|кольцо|к-цо|коса|коса|линия|лн\.|магистраль|мгстр\.|набережная|наб\.|переезд|пер-д|переулок|пер\.|площадка|пл-ка|площадь|пл.|проезд|пр-д|просек|пр-к|просека|пр-ка|просёлок|пр-лок|проспект|пр\.|пр-кт|проулок|проул.|разъезд|рзд.|ряд(ы)|ряд|сквер|с-р|спуск|с-к|съезд|сзд.|тракт|тракт|тупик|туп.|улица|ул.|шоссе|ш.)\s+[А-ЯЁ0-9][А-ЯЁ0-9а-яё\s\.-]+$/,
-    /^[А-ЯЁ0-9][А-ЯЁ0-9а-яё\s\.-]+$/
+  if (!street.trim()) return '' // необязательное поле
+  const patterns = [
+    // с типом улицы в начале: "ул. Ленина", "пр. Победы", "пер. Школьный"
+    /^(ул\.|пр\.|пр-кт|пер\.|б-р|наб\.|ш\.|пл\.|туп\.|проезд|просек|тракт|бульвар|набережная|площадь|переулок|проспект|улица|шоссе)\s+.+$/i,
+    // без типа, с заглавной: "Центральная", "50 лет Октября"
+    /^[А-ЯЁ0-9].+$/
   ]
-
-  const isValid = streetPatterns.some((pattern) => pattern.test(street))
-
-  if (!isValid) {
-    return 'Улица должна начинаться с заглавной буквы. Примеры: "ул. Тверская", "пр. Ленина", "ул. Р. Люксембург"'
+  if (!patterns.some((p) => p.test(street))) {
+    return 'Примеры: "ул. Советская", "пр. Ленина", "Центральная"'
   }
-
   return ''
 }
 
+// Номер дома — необязательное поле. Валидируем только если заполнено.
 const validateHouseNumber = (houseNumber: string): string => {
-  if (!houseNumber.trim()) return 'Номер дома обязателен'
-  if (!/^[1-9]\d*[а-яА-Я]?(\/\d+)?$/.test(houseNumber))
-    return 'Номер дома должен быть числом (может содержать букву или дробь)'
+  if (!houseNumber.trim()) return '' // необязательное поле
+  if (!/^[1-9]\d{0,4}[а-яА-Яa-zA-Z]?(\/\d+)?$/.test(houseNumber))
+    return 'Примеры: 16, 101А, 11/4'
   return ''
 }
 

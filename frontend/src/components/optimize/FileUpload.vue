@@ -251,57 +251,91 @@
         </div>
       </div>
 
-      <!-- Uploaded Locations -->
+      <!-- Uploaded Locations — выбор и добавление в форму -->
       <div v-if="uploadedLocations.length > 0" class="mt-8">
-        <div class="flex items-center justify-between mb-4">
-          <h4 class="text-sm font-medium text-gray-900">
-            Загруженные магазины
-          </h4>
-          <span class="text-sm text-gray-500"
-            >{{ uploadedLocations.length }} магазинов</span
-          >
+        <!-- Заголовок + кнопки действий -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div class="flex items-center gap-3">
+            <h4 class="text-sm font-medium text-gray-900">
+              Загруженные магазины
+            </h4>
+            <span class="text-sm text-gray-500">
+              {{ uploadedLocations.length }} шт., выбрано: {{ selectedIds.size }}
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              @click="toggleSelectAll"
+              class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              {{ selectedIds.size === uploadedLocations.length ? 'Снять все' : 'Выбрать все' }}
+            </button>
+            <button
+              @click="addSelectedToForm"
+              :disabled="selectedIds.size === 0"
+              class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Добавить выделенные ({{ selectedIds.size }})
+            </button>
+            <button
+              @click="addAllToForm"
+              class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+            >
+              Добавить все ({{ uploadedLocations.length }})
+            </button>
+          </div>
         </div>
 
-        <div class="space-y-3">
+        <!-- Список с чекбоксами -->
+        <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
           <div
             v-for="location in uploadedLocations"
             :key="location.id"
-            class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+            @click="toggleSelect(location.id)"
+            :class="[
+              'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+              selectedIds.has(location.id)
+                ? 'bg-blue-50 border-blue-300'
+                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+            ]"
           >
-            <div class="flex items-center">
-              <div
-                class="flex-shrink-0 h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center"
-              >
-                <svg
-                  class="h-5 w-5 text-green-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <div class="ml-3">
-                <p class="text-sm font-medium text-gray-900">
-                  {{ location.name }}
-                </p>
-                <p class="text-xs text-gray-500">
-                  {{ location.latitude.toFixed(4) }}, {{ location.longitude.toFixed(4) }}
-                  &nbsp;·&nbsp;{{ location.timeWindowStart }}–{{ location.timeWindowEnd }}
-                </p>
-              </div>
+            <!-- Чекбокс -->
+            <input
+              type="checkbox"
+              :checked="selectedIds.has(location.id)"
+              @click.stop="toggleSelect(location.id)"
+              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <!-- Иконка -->
+            <div class="flex-shrink-0 h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
+              <svg class="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
             </div>
-            <button
-              @click="addLocationToForm(location)"
-              class="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            <!-- Данные -->
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-medium text-gray-900 truncate">
+                {{ location.name }}
+              </p>
+              <p class="text-xs text-gray-500">
+                {{ location.city }}
+                <template v-if="location.street"> · {{ location.street }}<template v-if="location.houseNumber">, {{ location.houseNumber }}</template></template>
+                &nbsp;·&nbsp;{{ location.latitude.toFixed(4) }}, {{ location.longitude.toFixed(4) }}
+                &nbsp;·&nbsp;{{ location.timeWindowStart }}–{{ location.timeWindowEnd }}
+              </p>
+            </div>
+            <!-- Приоритет -->
+            <span
+              :class="[
+                'flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium',
+                location.priority === 'high' ? 'bg-red-100 text-red-700' :
+                location.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-gray-100 text-gray-600'
+              ]"
             >
-              Добавить в форму
-            </button>
+              {{ location.priority === 'high' ? 'Высокий' : location.priority === 'medium' ? 'Средний' : 'Низкий' }}
+            </span>
           </div>
         </div>
       </div>
@@ -335,6 +369,8 @@ const error = ref<string>('')
 const successMessage = ref<string>('')
 const validationErrors = ref<string[]>([])
 const uploadedLocations = ref<Location[]>([])
+// Множество выбранных id для чекбоксов
+const selectedIds = ref<Set<string>>(new Set())
 
 // Computed
 const canUpload = computed(
@@ -488,22 +524,34 @@ const uploadToServer = async () => {
       if (errors.length > 0)
         successMessage.value += ` Пропущено строк с ошибками: ${errors.length}.`
 
-      // Конвертируем формат бэкенда → формат фронтенда
-      const locations: Location[] = created.map((loc: any, i: number) => ({
-        id: loc.id ?? `srv-${Date.now()}-${i}`,
-        name: loc.name ?? '',
-        city: '',
-        street: '',
-        houseNumber: '',
-        latitude: loc.lat ?? loc.latitude ?? 0,
-        longitude: loc.lon ?? loc.longitude ?? 0,
-        timeWindowStart: loc.time_window_start ?? '09:00',
-        timeWindowEnd: loc.time_window_end ?? '18:00',
-        priority: 'medium' as const
-      }))
+      // Конвертируем формат бэкенда → формат фронтенда.
+      // city: берём из данных файла если есть, иначе извлекаем из name.
+      const locations: Location[] = created.map((loc: any, i: number) => {
+        const cityFromData = loc.city ?? ''
+        // Пытаемся определить город из названия (последнее слово или известный список)
+        const cityGuess = cityFromData || guessCityFromName(loc.name ?? '')
+        const streetFromData = loc.street ?? ''
+        const houseFromData = loc.houseNumber ?? loc.house_number ?? ''
+
+        return {
+          id: loc.id ?? `srv-${Date.now()}-${i}`,
+          name: loc.name ?? '',
+          city: cityGuess || 'Саранск',
+          street: streetFromData,
+          houseNumber: houseFromData,
+          latitude: loc.lat ?? loc.latitude ?? 0,
+          longitude: loc.lon ?? loc.longitude ?? 0,
+          timeWindowStart: loc.time_window_start ?? '09:00',
+          timeWindowEnd: loc.time_window_end ?? '18:00',
+          priority: (loc.priority === 'high' || loc.priority === 'low'
+            ? loc.priority
+            : 'medium') as 'low' | 'medium' | 'high'
+        }
+      })
 
       uploadedLocations.value = locations
-      emit('add-locations', locations)
+      selectedIds.value = new Set()
+      // НЕ эмитим автоматически — пусть пользователь сам выберет
     } else {
       error.value = 'Сервер не вернул ни одной локации. Проверьте формат файла.'
       if (errors.length > 0) {
@@ -518,14 +566,39 @@ const uploadToServer = async () => {
   }
 }
 
-const addLocationToForm = (location: Location) => {
-  emit('add-locations', [location])
-  successMessage.value = `Магазин "${location.name}" добавлен в форму`
+// ─── Выбор чекбоксами ───────────────────────────────────────────────────────
+const toggleSelect = (id: string) => {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+const toggleSelectAll = () => {
+  if (selectedIds.value.size === uploadedLocations.value.length) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(uploadedLocations.value.map((l) => l.id))
+  }
+}
+
+const addSelectedToForm = () => {
+  const toAdd = uploadedLocations.value.filter((l) => selectedIds.value.has(l.id))
+  if (toAdd.length === 0) return
+  emit('add-locations', toAdd)
+  successMessage.value = `Добавлено ${toAdd.length} магазин(ов) в форму`
+  setTimeout(() => { successMessage.value = '' }, 3000)
+}
+
+const addAllToForm = () => {
+  emit('add-locations', uploadedLocations.value)
+  successMessage.value = `Все ${uploadedLocations.value.length} магазинов добавлены в форму`
   setTimeout(() => { successMessage.value = '' }, 3000)
 }
 
 const clearUploadedData = () => {
   uploadedLocations.value = []
+  selectedIds.value = new Set()
   successMessage.value = 'Загруженные данные очищены'
   setTimeout(() => { successMessage.value = '' }, 3000)
 }
@@ -539,5 +612,32 @@ const resetState = () => {
   successMessage.value = ''
   validationErrors.value = []
   uploadedLocations.value = []
+  selectedIds.value = new Set()
+}
+
+// ─── Вспомогательная: угадать город из названия магазина ─────────────────────
+const KNOWN_CITIES: Record<string, string> = {
+  'саранск': 'Саранск',
+  'рузаевка': 'Рузаевка',
+  'ковылкино': 'Ковылкино',
+  'краснослободск': 'Краснослободск',
+  'темников': 'Темников',
+  'ардатов': 'Ардатов',
+  'чамзинка': 'Чамзинка',
+  'инсар': 'Инсар',
+  'торбеево': 'Торбеево',
+  'зубова поляна': 'Зубова Поляна',
+  'ельники': 'Ельники',
+  'атяшево': 'Атяшево',
+  'лямбирь': 'Лямбирь',
+  'комсомольский': 'Комсомольский',
+}
+
+const guessCityFromName = (name: string): string => {
+  const lower = name.toLowerCase()
+  for (const [key, city] of Object.entries(KNOWN_CITIES)) {
+    if (lower.includes(key)) return city
+  }
+  return ''
 }
 </script>

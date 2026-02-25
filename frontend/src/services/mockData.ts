@@ -1,103 +1,103 @@
 import { Location, Route, Metric, BenchmarkResult, HealthStatus } from './types'
 
-// 5+ магазинов с координатами Москвы
+// Салоны Т2 в Саранске и районах Мордовии
 export const mockLocations: Location[] = [
   {
     id: 'store-1',
-    name: 'ТЦ Авиапарк',
-    latitude: 55.7979,
-    longitude: 37.5352,
-    address: 'Ходынский бульвар, 4, Москва',
+    name: 'Салон Т2 Саранск Центр',
+    latitude: 54.1871,
+    longitude: 45.1749,
+    address: 'ул. Советская, 35, Саранск',
     time_window_start: '09:00',
-    time_window_end: '22:00',
+    time_window_end: '18:00',
     priority: 1
   },
   {
     id: 'store-2',
-    name: 'ТЦ Европейский',
-    latitude: 55.7358,
-    longitude: 37.524,
-    address: 'Площадь Киевского Вокзала, 2, Москва',
-    time_window_start: '10:00',
-    time_window_end: '22:00',
+    name: 'Салон Т2 Проспект Ленина',
+    latitude: 54.1902,
+    longitude: 45.1685,
+    address: 'пр. Ленина, 15, Саранск',
+    time_window_start: '09:00',
+    time_window_end: '18:00',
     priority: 1
   },
   {
     id: 'store-3',
-    name: 'ТЦ Метрополис',
-    latitude: 55.8286,
-    longitude: 37.3945,
-    address: 'Ленинградское ш., 16А, стр. 4, Москва',
+    name: 'Салон Т2 Огарев Plaza',
+    latitude: 54.1845,
+    longitude: 45.1695,
+    address: 'ул. Большевистская, 84, Саранск',
+    time_window_start: '10:00',
+    time_window_end: '20:00',
+    priority: 1
+  },
+  {
+    id: 'store-4',
+    name: 'Салон Т2 Победы',
+    latitude: 54.1935,
+    longitude: 45.1620,
+    address: 'ул. Победы, 120, Саранск',
     time_window_start: '10:00',
     time_window_end: '21:00',
     priority: 2
   },
   {
-    id: 'store-4',
-    name: 'ТЦ Афимолл Сити',
-    latitude: 55.7486,
-    longitude: 37.5388,
-    address: 'Пресненская наб., 2, Москва',
-    time_window_start: '10:00',
-    time_window_end: '22:00',
-    priority: 1
-  },
-  {
     id: 'store-5',
-    name: 'ТЦ Вегас',
-    latitude: 55.5697,
-    longitude: 37.8023,
-    address: 'МКАД, 24-й км, вл. 1, Москва',
+    name: 'Салон Т2 Рузаевка',
+    latitude: 54.0620,
+    longitude: 44.9500,
+    address: 'ул. Ленина, 1, Рузаевка',
     time_window_start: '09:00',
-    time_window_end: '23:00',
-    priority: 3
+    time_window_end: '17:00',
+    priority: 2
   },
   {
     id: 'store-6',
-    name: 'ТЦ Ривьера',
-    latitude: 55.7066,
-    longitude: 37.6402,
-    address: 'Автозаводская ул., 18, Москва',
-    time_window_start: '10:00',
-    time_window_end: '22:00',
+    name: 'Салон Т2 Ковылкино',
+    latitude: 54.0380,
+    longitude: 43.9190,
+    address: 'ул. Свердлова, 12, Ковылкино',
+    time_window_start: '09:00',
+    time_window_end: '17:00',
     priority: 2
   }
 ]
 
-// 2-3 оптимизированных маршрутов
+// Оптимизированные маршруты по Мордовии
 export const mockRoutes: Route[] = [
   {
     id: 'route-1',
-    name: 'Центральный маршрут',
-    locations: ['store-1', 'store-2', 'store-4'],
-    total_distance_km: 28.5,
-    total_time_hours: 3.2,
-    total_cost_rub: 1850,
-    model_used: 'llama',
+    name: 'Центральный Саранск',
+    locations: ['store-1', 'store-2', 'store-3'],
+    total_distance_km: 4.2,
+    total_time_hours: 1.5,
+    total_cost_rub: 294,
+    model_used: 'qwen',
     fallback_reason: null,
-    created_at: '2026-01-06T09:15:00Z'
+    created_at: '2026-02-20T09:15:00Z'
   },
   {
     id: 'route-2',
-    name: 'Северо-Западный маршрут',
-    locations: ['store-3', 'store-1'],
-    total_distance_km: 35.7,
-    total_time_hours: 4.1,
-    total_cost_rub: 2100,
+    name: 'Саранск — Рузаевка',
+    locations: ['store-1', 'store-5'],
+    total_distance_km: 25.4,
+    total_time_hours: 2.8,
+    total_cost_rub: 1778,
     model_used: 'qwen',
     fallback_reason: null,
-    created_at: '2026-01-05T14:30:00Z'
+    created_at: '2026-02-19T14:30:00Z'
   },
   {
     id: 'route-3',
-    name: 'Южный маршрут',
+    name: 'Западный маршрут',
     locations: ['store-5', 'store-6'],
     total_distance_km: 42.3,
-    total_time_hours: 5.5,
-    total_cost_rub: 2750,
+    total_time_hours: 5.0,
+    total_cost_rub: 2961,
     model_used: 'llama',
     fallback_reason: null,
-    created_at: '2026-01-04T11:45:00Z'
+    created_at: '2026-02-18T11:45:00Z'
   }
 ]
 

@@ -163,6 +163,8 @@ _XLSX_COLUMN_MAP = {
     "наименование": "name",
     "наименование точки": "name",
     "наименование торговой точки": "name",
+    "наименование района": "name",       # формат тестового файла организаторов
+    "район": "name",
     "торговая точка": "name",
     "тт": "name",
     "адрес": "name",
@@ -183,77 +185,143 @@ _XLSX_COLUMN_MAP = {
     "закрытие": "time_window_end",
 }
 
-# Центр Саранска — дефолтные координаты для строк без lat/lon
+# Справочник координат районов и городов Республики Мордовия.
+# Используется когда в файле есть название района, но нет координат.
+_MORDOVIA_COORDS: dict[str, tuple[float, float]] = {
+    # Городской округ
+    "г.о. саранск":         (54.1871, 45.1749),
+    "саранск":              (54.1871, 45.1749),
+    # Районы
+    "ардатовский":          (54.8490, 46.2360),
+    "ардатовский район":    (54.8490, 46.2360),
+    "атюрьевский":          (54.0310, 43.6820),
+    "атюрьевский район":    (54.0310, 43.6820),
+    "атяшевский":           (54.5980, 45.8880),
+    "атяшевский район":     (54.5980, 45.8880),
+    "большеберезниковский": (54.2670, 45.7650),
+    "большеберезниковский район": (54.2670, 45.7650),
+    "большеигнатовский":    (54.4810, 44.8710),
+    "большеигнатовский район": (54.4810, 44.8710),
+    "дубёнский":            (54.2650, 46.0880),
+    "дубенский":            (54.2650, 46.0880),
+    "дубёнский район":      (54.2650, 46.0880),
+    "дубенский район":      (54.2650, 46.0880),
+    "ельниковский":         (54.3900, 43.5550),
+    "ельниковский район":   (54.3900, 43.5550),
+    "зубово-полянский":     (54.0520, 42.8310),
+    "зубово-полянский район": (54.0520, 42.8310),
+    "инсарский":            (53.8760, 44.3770),
+    "инсарский район":      (53.8760, 44.3770),
+    "ичалковский":          (54.1260, 46.5840),
+    "ичалковский район":    (54.1260, 46.5840),
+    "кадошкинский":         (54.0200, 43.5360),
+    "кадошкинский район":   (54.0200, 43.5360),
+    "ковылкинский":         (53.9060, 43.9190),
+    "ковылкинский район":   (53.9060, 43.9190),
+    "кочкуровский":         (54.0500, 45.5710),
+    "кочкуровский район":   (54.0500, 45.5710),
+    "краснослободский":     (54.4190, 43.7770),
+    "краснослободский район": (54.4190, 43.7770),
+    "лямбирский":           (54.2350, 45.6250),
+    "лямбирский район":     (54.2350, 45.6250),
+    "ромодановский":        (54.4300, 45.3710),
+    "ромодановский район":  (54.4300, 45.3710),
+    "рузаевский":           (54.0570, 44.9520),
+    "рузаевский район":     (54.0570, 44.9520),
+    "старошайговский":      (54.3500, 44.2580),
+    "старошайговский район": (54.3500, 44.2580),
+    "темниковский":         (54.6360, 43.1990),
+    "темниковский район":   (54.6360, 43.1990),
+    "теньгушевский":        (54.8440, 43.6140),
+    "теньгушевский район":  (54.8440, 43.6140),
+    "торбеевский":          (54.0880, 43.0920),
+    "торбеевский район":    (54.0880, 43.0920),
+    "чамзинский":           (54.2310, 46.2890),
+    "чамзинский район":     (54.2310, 46.2890),
+}
+
+# Центр Саранска — запасные координаты если район не найден в справочнике
 _DEFAULT_LAT = 54.1871
 _DEFAULT_LON = 45.1749
-# Небольшое смещение чтобы точки не накладывались
-_COORD_SPREAD = 0.002
+
+
+def _lookup_coords(name: str) -> tuple[float, float] | None:
+    """Ищет координаты по нормализованному названию района."""
+    key = name.strip().lower()
+    if key in _MORDOVIA_COORDS:
+        return _MORDOVIA_COORDS[key]
+    # Попытка частичного совпадения (без слова "район")
+    for k, v in _MORDOVIA_COORDS.items():
+        if key in k or k in key:
+            return v
+    return None
 
 
 def _parse_xlsx(content: bytes) -> list[dict]:
     """Parse XLSX file content into list of dicts.
 
-    Reads the first sheet, treats the first row as headers.
-    Supports Russian column name aliases.
-    Если координаты отсутствуют — расставляет точки вокруг центра Саранска.
+    Читает первый лист, первая строка = заголовки.
+    Поддерживает русские псевдонимы колонок.
+    Если координаты отсутствуют — ищет в справочнике районов Мордовии,
+    при отсутствии совпадения — расставляет точки вокруг центра Саранска.
     """
     import random
     wb = load_workbook(filename=io.BytesIO(content), read_only=True)
-    ws = wb.active
+    # Берём первый лист по индексу, не wb.active (может быть неверным)
+    ws = wb.worksheets[0]
     rows_iter = ws.iter_rows(values_only=True)
 
-    # First row = headers
     raw_headers = next(rows_iter, None)
     if not raw_headers:
         wb.close()
         return []
 
-    # Normalize headers: strip, lowercase, map aliases
     headers = []
     for h in raw_headers:
         h_str = str(h).strip().lower() if h else ""
         headers.append(_XLSX_COLUMN_MAP.get(h_str, h_str))
 
     rows = []
-    row_index = 0
     for row_values in rows_iter:
         if all(v is None for v in row_values):
             continue
-        parsed = {}
+
+        parsed: dict = {}
         for header, value in zip(headers, row_values):
-            if header in ("lat", "lon") and value is not None:
+            if value is None:
+                continue
+            if header in ("lat", "lon"):
                 try:
                     parsed[header] = float(value)
                 except (ValueError, TypeError):
                     pass
-            elif value is not None:
-                parsed[header] = str(value).strip()
+            else:
+                str_val = str(value).strip()
+                # Пропускаем Excel-формулы
+                if str_val.startswith("="):
+                    continue
+                if str_val:
+                    parsed[header] = str_val
 
-        # Пропускаем строки без имени
         if "name" not in parsed or not parsed["name"]:
-            row_index += 1
             continue
 
-        # Если нет координат — генерируем случайное смещение вокруг центра
-        if "lat" not in parsed:
-            parsed["lat"] = round(
-                _DEFAULT_LAT + random.uniform(
-                    -_COORD_SPREAD * 10, _COORD_SPREAD * 10
-                ),
-                6,
-            )
-        if "lon" not in parsed:
-            parsed["lon"] = round(
-                _DEFAULT_LON + random.uniform(
-                    -_COORD_SPREAD * 10, _COORD_SPREAD * 10
-                ),
-                6,
-            )
+        # Координаты: сначала справочник, потом случайный разброс
+        if "lat" not in parsed or "lon" not in parsed:
+            coords = _lookup_coords(parsed["name"])
+            if coords:
+                parsed["lat"], parsed["lon"] = coords
+            else:
+                parsed["lat"] = round(
+                    _DEFAULT_LAT + random.uniform(-0.02, 0.02), 6
+                )
+                parsed["lon"] = round(
+                    _DEFAULT_LON + random.uniform(-0.02, 0.02), 6
+                )
 
         parsed.setdefault("time_window_start", "09:00")
         parsed.setdefault("time_window_end", "18:00")
         rows.append(parsed)
-        row_index += 1
 
     wb.close()
     return rows
