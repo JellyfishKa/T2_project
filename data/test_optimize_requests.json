@@ -1,0 +1,59 @@
+{
+  "description": "Готовые запросы для тестирования POST /api/v1/qwen/optimize и /api/v1/llama/optimize",
+  "requests": [
+    {
+      "name": "2 точки (минимальный тест)",
+      "body": {
+        "locations": [
+          {"ID": "m1", "name": "Салон связи Саранск Центр", "address": "Саранск, ул. Советская", "lat": 54.1871, "lon": 45.1749, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "A"},
+          {"ID": "m2", "name": "МТС Офис Саранск", "address": "Саранск, ул. Большевистская", "lat": 54.1835, "lon": 45.1812, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "B"}
+        ],
+        "constraints": {}
+      }
+    },
+    {
+      "name": "4 точки (Саранск центр)",
+      "body": {
+        "locations": [
+          {"ID": "m1", "name": "Салон связи Саранск Центр", "address": "Саранск, ул. Советская", "lat": 54.1871, "lon": 45.1749, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "A"},
+          {"ID": "m2", "name": "МТС Офис Саранск", "address": "Саранск, ул. Большевистская", "lat": 54.1835, "lon": 45.1812, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "B"},
+          {"ID": "m3", "name": "Связной Проспект Ленина", "address": "Саранск, пр. Ленина", "lat": 54.1902, "lon": 45.1685, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "A"},
+          {"ID": "m4", "name": "Евросеть Светотехника", "address": "Саранск, ул. Рабочая", "lat": 54.1756, "lon": 45.1834, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "C"}
+        ],
+        "constraints": {}
+      }
+    },
+    {
+      "name": "6 точек (Саранск + пригород)",
+      "body": {
+        "locations": [
+          {"ID": "m1", "name": "Салон связи Саранск Центр", "address": "Саранск, ул. Советская", "lat": 54.1871, "lon": 45.1749, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "A"},
+          {"ID": "m2", "name": "ТЦ Огарев Plaza", "address": "Саранск, ул. Б. Хмельницкого", "lat": 54.1845, "lon": 45.1695, "time_window_start": "10:00", "time_window_end": "20:00", "priority": "A"},
+          {"ID": "m3", "name": "DNS Саранск", "address": "Саранск, ул. Волгоградская", "lat": 54.1935, "lon": 45.1620, "time_window_start": "10:00", "time_window_end": "21:00", "priority": "B"},
+          {"ID": "m4", "name": "Салон связи Химмаш", "address": "Саранск, Химмаш", "lat": 54.1710, "lon": 45.1950, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "C"},
+          {"ID": "m5", "name": "Салон связи Рузаевка", "address": "Рузаевка, ул. Ленина", "lat": 54.0620, "lon": 44.9500, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "D"},
+          {"ID": "m6", "name": "Салон связи Лямбирь", "address": "Лямбирь, ул. Центральная", "lat": 54.2800, "lon": 45.3700, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "D"}
+        ],
+        "constraints": {}
+      }
+    },
+    {
+      "name": "10 точек (Мордовия полный маршрут)",
+      "body": {
+        "locations": [
+          {"ID": "m1", "name": "Салон связи Саранск Центр", "address": "Саранск, ул. Советская", "lat": 54.1871, "lon": 45.1749, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "A"},
+          {"ID": "m2", "name": "МТС Офис Саранск", "address": "Саранск, ул. Большевистская", "lat": 54.1835, "lon": 45.1812, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "A"},
+          {"ID": "m3", "name": "Связной Проспект Ленина", "address": "Саранск, пр. Ленина", "lat": 54.1902, "lon": 45.1685, "time_window_start": "09:00", "time_window_end": "18:00", "priority": "B"},
+          {"ID": "m4", "name": "ТЦ Огарев Plaza", "address": "Саранск, ул. Б. Хмельницкого", "lat": 54.1845, "lon": 45.1695, "time_window_start": "10:00", "time_window_end": "20:00", "priority": "B"},
+          {"ID": "m5", "name": "Салон связи Рузаевка", "address": "Рузаевка, ул. Ленина", "lat": 54.0620, "lon": 44.9500, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "C"},
+          {"ID": "m6", "name": "Салон связи Ковылкино", "address": "Ковылкино, ул. Советская", "lat": 54.0380, "lon": 43.9190, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "C"},
+          {"ID": "m7", "name": "Салон связи Краснослободск", "address": "Краснослободск, ул. Интернациональная", "lat": 54.4270, "lon": 43.7780, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "D"},
+          {"ID": "m8", "name": "Салон связи Чамзинка", "address": "Чамзинка, ул. Ленина", "lat": 54.4010, "lon": 45.7560, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "D"},
+          {"ID": "m9", "name": "Салон связи Ардатов", "address": "Ардатов, ул. Комсомольская", "lat": 54.8460, "lon": 46.2370, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "D"},
+          {"ID": "m10", "name": "Салон связи Инсар", "address": "Инсар, ул. Советская", "lat": 53.8700, "lon": 44.3700, "time_window_start": "09:00", "time_window_end": "17:00", "priority": "D"}
+        ],
+        "constraints": {}
+      }
+    }
+  ]
+}

@@ -25,6 +25,36 @@ curl -X POST http://localhost:8000/api/v1/llama/optimize \
 
 ---
 
+## Шаг 0.5: Загрузка тестовых данных (2 мин)
+
+**Что показываем:** Автоматическая загрузка тестовых данных из файлов.
+
+```bash
+# Вариант 1: Bash-скрипт
+bash scripts/seed_data.sh
+
+# Вариант 2: Python-скрипт
+python3 scripts/seed_data.py --host localhost --port 8000
+
+# Вариант 3: Ручная загрузка CSV
+curl -X POST http://localhost:8000/api/v1/locations/upload \
+  -F "file=@data/locations_mordovia.csv"
+
+# Вариант 4: Загрузка XLSX (файл организаторов)
+curl -X POST http://localhost:8000/api/v1/locations/upload \
+  -F "file=@data/organizer_example.xlsx"
+```
+
+**Говорим:**
+> «Seed-скрипт автоматически загружает 30 торговых точек Мордовии, проверяет здоровье сервера и запускает тестовые оптимизации. Система поддерживает загрузку из CSV, JSON и XLSX файлов.»
+
+**Доступные датасеты:**
+- `data/locations_mordovia.csv` — 30 точек Мордовии (Саранск + районы)
+- `data/locations_moscow.csv` — 15 точек Москвы
+- `data/organizer_example.xlsx` — файл от организаторов
+
+---
+
 ## Шаг 1: Проверка здоровья системы (2 мин)
 
 **Что показываем:** Все компоненты запущены и работают.
@@ -212,6 +242,7 @@ curl "http://localhost:8000/api/v1/insights?num_locations=5" | python -m json.to
 | Шаг | Действие | Длительность |
 |-----|----------|-------------|
 | 0 | Подготовка (до демо) | 5 мин |
+| 0.5 | Загрузка тестовых данных | 2 мин |
 | 1 | Health check | 2 мин |
 | 2 | Создание локаций | 2 мин |
 | 3 | Оптимизация маршрута | 3 мин |

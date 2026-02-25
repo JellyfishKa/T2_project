@@ -3,6 +3,8 @@ import io
 import json
 from typing import List
 
+from openpyxl import load_workbook
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,10 +84,11 @@ async def upload_locations(
     file: UploadFile,
     session: AsyncSession = Depends(get_session),
 ):
-    """Upload locations from a CSV or JSON file.
+    """Upload locations from a CSV, JSON, or XLSX file.
 
     CSV format: name,lat,lon,time_window_start,time_window_end
     JSON format: array of objects with the same fields.
+    XLSX format: first row = headers, columns matching CSV fields.
     """
     filename = (file.filename or "").lower()
     content = await file.read()
@@ -94,10 +97,12 @@ async def upload_locations(
         rows = _parse_json(content)
     elif filename.endswith(".csv"):
         rows = _parse_csv(content)
+    elif filename.endswith(".xlsx"):
+        rows = _parse_xlsx(content)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported file format. Use .csv or .json",
+            detail="Unsupported file format. Use .csv, .json, or .xlsx",
         )
 
     created: list[Location] = []
@@ -148,4 +153,67 @@ def _parse_csv(content: bytes) -> list[dict]:
             else:
                 parsed[key] = value
         rows.append(parsed)
+    return rows
+
+
+# Column name aliases for XLSX files (Russian -> English)
+_XLSX_COLUMN_MAP = {
+    "name": "name",
+    "название": "name",
+    "наименование": "name",
+    "торговая точка": "name",
+    "lat": "lat",
+    "latitude": "lat",
+    "широта": "lat",
+    "lon": "lon",
+    "lng": "lon",
+    "longitude": "lon",
+    "долгота": "lon",
+    "time_window_start": "time_window_start",
+    "начало": "time_window_start",
+    "время начала": "time_window_start",
+    "time_window_end": "time_window_end",
+    "конец": "time_window_end",
+    "время окончания": "time_window_end",
+}
+
+
+def _parse_xlsx(content: bytes) -> list[dict]:
+    """Parse XLSX file content into list of dicts.
+
+    Reads the first sheet, treats the first row as headers.
+    Supports Russian column name aliases.
+    """
+    wb = load_workbook(filename=io.BytesIO(content), read_only=True)
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+
+    # First row = headers
+    raw_headers = next(rows_iter, None)
+    if not raw_headers:
+        return []
+
+    # Normalize headers: strip, lowercase, map aliases
+    headers = []
+    for h in raw_headers:
+        h_str = str(h).strip().lower() if h else ""
+        headers.append(_XLSX_COLUMN_MAP.get(h_str, h_str))
+
+    rows = []
+    for row_values in rows_iter:
+        if all(v is None for v in row_values):
+            continue
+        parsed = {}
+        for header, value in zip(headers, row_values):
+            if header in ("lat", "lon") and value is not None:
+                parsed[header] = float(value)
+            elif value is not None:
+                parsed[header] = str(value).strip()
+        # Only include rows that have at least name and coordinates
+        if "name" in parsed and "lat" in parsed and "lon" in parsed:
+            parsed.setdefault("time_window_start", "09:00")
+            parsed.setdefault("time_window_end", "18:00")
+            rows.append(parsed)
+
+    wb.close()
     return rows
