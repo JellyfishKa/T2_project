@@ -15,7 +15,7 @@ load_dotenv()
 
 DATABASE_URL = (
     f"postgresql+asyncpg://{os.getenv('DATABASE_USER', 'postgres')}:"
-    f"{os.getenv('DATABASE_PASSWORD', 'postgres')}@"
+    f"{os.getenv('DATABASE_PASSWORD', os.getenv('DATABASE_HOST', 'localhost'),}@"
     f"{os.getenv('DATABASE_HOST', 'localhost')}:"
     f"{os.getenv('DATABASE_PORT', '5432')}/"
     f"{os.getenv('DATABASE_NAME', 't2')}"
