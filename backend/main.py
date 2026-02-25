@@ -74,56 +74,49 @@ app.include_router(benchmark_router)
 app.include_router(api_v1_router)
 
 
-@app.get(
-    "/health",
-    tags=["System"],
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_200_OK: {
-            "description": "System is healthy",
-            "content": {
-                "application/json": {
-                    "example": {"status": "ok",
-                                "database": "connected",
-                                "models": {"qwen": "loaded",
-                                           "llama": "loaded"}},
-                },
-            },
-        },
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "Database connection failed",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Database disconnected"},
-                },
-            },
-        },
-    },
-)
-async def health_check(session: AsyncSession = Depends(get_session)):
-    """
-    Health check endpoint that verifies database connectivity.
-    """
+async def _health_response(session: AsyncSession):
+    """Общая логика health check — используется двумя эндпоинтами."""
     try:
         await session.execute(text("SELECT 1"))
         from src.models.qwen_client import QwenClient
         from src.models.llama_client import LlamaClient
         qwen_loaded = QwenClient._llm is not None
         llama_loaded = LlamaClient._llm is not None
+        # Формат совместим и с Docker healthcheck, и с фронтендом
         return {
-            "status": "ok",
+            "status": "healthy",
             "database": "connected",
-            "models": {
-                "qwen": "loaded" if qwen_loaded else "not_loaded",
-                "llama": "loaded" if llama_loaded else "not_loaded",
+            "services": {
+                "database": "connected",
+                "qwen": "available" if qwen_loaded else "unavailable",
+                "llama": "available" if llama_loaded else "unavailable",
             },
         }
     except Exception as exc:
         logger.error(f"Health check failed: {exc}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database disconnected",
+            detail={
+                "status": "unhealthy",
+                "services": {
+                    "database": "disconnected",
+                    "qwen": "unavailable",
+                    "llama": "unavailable",
+                },
+            },
         )
+
+
+@app.get("/health", tags=["System"], status_code=status.HTTP_200_OK)
+async def health_check(session: AsyncSession = Depends(get_session)):
+    """Health check — для Docker и прямых обращений."""
+    return await _health_response(session)
+
+
+@api_v1_router.get("/health", tags=["System"], status_code=status.HTTP_200_OK)
+async def health_check_v1(session: AsyncSession = Depends(get_session)):
+    """Health check — для фронтенда (GET /api/v1/health)."""
+    return await _health_response(session)
 
 
 if __name__ == "__main__":

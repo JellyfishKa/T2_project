@@ -161,7 +161,11 @@ _XLSX_COLUMN_MAP = {
     "name": "name",
     "название": "name",
     "наименование": "name",
+    "наименование точки": "name",
+    "наименование торговой точки": "name",
     "торговая точка": "name",
+    "тт": "name",
+    "адрес": "name",
     "lat": "lat",
     "latitude": "lat",
     "широта": "lat",
@@ -172,10 +176,18 @@ _XLSX_COLUMN_MAP = {
     "time_window_start": "time_window_start",
     "начало": "time_window_start",
     "время начала": "time_window_start",
+    "открытие": "time_window_start",
     "time_window_end": "time_window_end",
     "конец": "time_window_end",
     "время окончания": "time_window_end",
+    "закрытие": "time_window_end",
 }
+
+# Центр Саранска — дефолтные координаты для строк без lat/lon
+_DEFAULT_LAT = 54.1871
+_DEFAULT_LON = 45.1749
+# Небольшое смещение чтобы точки не накладывались
+_COORD_SPREAD = 0.002
 
 
 def _parse_xlsx(content: bytes) -> list[dict]:
@@ -183,7 +195,9 @@ def _parse_xlsx(content: bytes) -> list[dict]:
 
     Reads the first sheet, treats the first row as headers.
     Supports Russian column name aliases.
+    Если координаты отсутствуют — расставляет точки вокруг центра Саранска.
     """
+    import random
     wb = load_workbook(filename=io.BytesIO(content), read_only=True)
     ws = wb.active
     rows_iter = ws.iter_rows(values_only=True)
@@ -191,6 +205,7 @@ def _parse_xlsx(content: bytes) -> list[dict]:
     # First row = headers
     raw_headers = next(rows_iter, None)
     if not raw_headers:
+        wb.close()
         return []
 
     # Normalize headers: strip, lowercase, map aliases
@@ -200,20 +215,45 @@ def _parse_xlsx(content: bytes) -> list[dict]:
         headers.append(_XLSX_COLUMN_MAP.get(h_str, h_str))
 
     rows = []
+    row_index = 0
     for row_values in rows_iter:
         if all(v is None for v in row_values):
             continue
         parsed = {}
         for header, value in zip(headers, row_values):
             if header in ("lat", "lon") and value is not None:
-                parsed[header] = float(value)
+                try:
+                    parsed[header] = float(value)
+                except (ValueError, TypeError):
+                    pass
             elif value is not None:
                 parsed[header] = str(value).strip()
-        # Only include rows that have at least name and coordinates
-        if "name" in parsed and "lat" in parsed and "lon" in parsed:
-            parsed.setdefault("time_window_start", "09:00")
-            parsed.setdefault("time_window_end", "18:00")
-            rows.append(parsed)
+
+        # Пропускаем строки без имени
+        if "name" not in parsed or not parsed["name"]:
+            row_index += 1
+            continue
+
+        # Если нет координат — генерируем случайное смещение вокруг центра
+        if "lat" not in parsed:
+            parsed["lat"] = round(
+                _DEFAULT_LAT + random.uniform(
+                    -_COORD_SPREAD * 10, _COORD_SPREAD * 10
+                ),
+                6,
+            )
+        if "lon" not in parsed:
+            parsed["lon"] = round(
+                _DEFAULT_LON + random.uniform(
+                    -_COORD_SPREAD * 10, _COORD_SPREAD * 10
+                ),
+                6,
+            )
+
+        parsed.setdefault("time_window_start", "09:00")
+        parsed.setdefault("time_window_end", "18:00")
+        rows.append(parsed)
+        row_index += 1
 
     wb.close()
     return rows

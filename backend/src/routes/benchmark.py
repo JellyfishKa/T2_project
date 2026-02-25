@@ -113,29 +113,52 @@ async def get_benchmark_status():
 
 @router.get("/api/v1/benchmark/compare")
 async def compare_models():
-    if not LOG_FILE.exists():
-        return {
-            "status": "success",
-            "count": 0,
-            "data": [],
-            "message": "No logs yet",
-        }
+    """
+    Возвращает сравнение моделей в формате, совместимом с фронтендом:
+    {models: [{name, avg_response_time_ms, avg_quality_score,
+               total_cost_rub, success_rate, usage_count}],
+     recommendations: []}
+    """
+    # Пробуем загрузить результаты последнего бенчмарка
+    if RESULTS_FILE.exists():
+        try:
+            with open(RESULTS_FILE, "r", encoding="utf-8") as f:
+                results = json.load(f)
 
-    try:
-        with open(LOG_FILE, "r", encoding="utf-8") as file:
-            history = json.load(file)
+            models_list = []
+            for model_id, model_data in results.get("models", {}).items():
+                metrics = model_data.get("metrics", {})
+                models_list.append({
+                    "name": model_id,
+                    "avg_response_time_ms": metrics.get(
+                        "response_time_ms", 0.0
+                    ),
+                    "avg_quality_score": metrics.get("quality_score", 0.0),
+                    "total_cost_rub": metrics.get("cost_rub", 0.0),
+                    "success_rate": metrics.get("success_rate", 0.0),
+                    "usage_count": metrics.get("total_tests", 0),
+                })
 
-        return {
-            "status": "success",
-            "count": len(history),
-            "data": history,
-        }
+            return {
+                "models": models_list,
+                "recommendations": [
+                    {
+                        "scenario": "general",
+                        "recommended_model": "qwen",
+                        "reason": (
+                            "Primary model; Llama as fallback"
+                        ),
+                    }
+                ],
+            }
+        except (json.JSONDecodeError, KeyError):
+            pass
 
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Ошибка чтения файла логов (битый JSON)",
-        ) from exc
+    # Нет данных — возвращаем пустую структуру нужного формата
+    return {
+        "models": [],
+        "recommendations": [],
+    }
 
 
 @router.get("/api/v1/benchmark/latest")

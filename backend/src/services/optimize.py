@@ -157,6 +157,7 @@ class Optimizer:
                 total_distance=optimized_route.total_distance_km,
                 total_time=optimized_route.total_time_hours,
                 total_cost=optimized_route.total_cost_rub,
+                model_used=optimized_route.model_used or "unknown",
             )
             self.db.add(new_route)
 

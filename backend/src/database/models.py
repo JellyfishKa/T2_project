@@ -15,7 +15,7 @@ load_dotenv()
 
 DATABASE_URL = (
     f"postgresql+asyncpg://{os.getenv('DATABASE_USER', 'postgres')}:"
-    f"{os.getenv('DATABASE_PASSWORD', os.getenv('DATABASE_HOST', 'localhost'),}@"
+    f"{os.getenv('DATABASE_PASSWORD', 'postgres')}@"
     f"{os.getenv('DATABASE_HOST', 'localhost')}:"
     f"{os.getenv('DATABASE_PORT', '5432')}/"
     f"{os.getenv('DATABASE_NAME', 't2')}"
@@ -58,6 +58,7 @@ class Route(Base):
     total_distance = Column(Float, nullable=False)
     total_time = Column(Float, nullable=False)
     total_cost = Column(Float, nullable=False)
+    model_used = Column(String, nullable=False, default="unknown")
     created_at = Column(DateTime(timezone=True),
                         default=lambda: datetime.now(timezone.utc))
 
