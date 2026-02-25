@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
@@ -41,9 +42,20 @@ app = FastAPI(
 
 app.add_middleware(AdvancedMiddleware)
 
+cors_origins = os.getenv("CORS_ORIGINS", "").strip()
+if cors_origins:
+    allowed_origins = [o.strip() for o in cors_origins.split(",")]
+else:
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost",
+        "http://100.120.184.98",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
