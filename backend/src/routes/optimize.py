@@ -12,7 +12,7 @@ from src.services.optimize import Optimizer
 router = APIRouter(tags=['Optimization'])
 
 
-@router.post('/api/v1/optimize', response_model=OptimizeResponse)
+@router.post('/optimize', response_model=OptimizeResponse)
 async def run_optimization(
     payload: OptimizeRequest,
     db: AsyncSession = Depends(get_session),

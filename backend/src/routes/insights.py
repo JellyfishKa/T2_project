@@ -7,7 +7,7 @@ from src.services.model_selector import get_model_recommendation
 router = APIRouter(tags=['Insights'])
 
 
-@router.get('/api/v1/insights')
+@router.get('/insights')
 async def get_optimization_insights(
     num_locations: int = Query(..., description='Количество локаций'),
     time_constraint: Optional[str] = Query(

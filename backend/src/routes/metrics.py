@@ -12,7 +12,7 @@ from src.services.quality_evaluator import get_route_quality_metrics
 router = APIRouter(tags=["Metrics"])
 
 
-@router.get("/api/v1/metrics")
+@router.get("/metrics")
 async def get_all_metrics(
     db: AsyncSession = Depends(get_session),
 ):
