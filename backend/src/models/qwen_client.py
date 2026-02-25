@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime
 from time import time
 from typing import (
@@ -22,20 +23,20 @@ from src.models.exceptions import (
     QwenTimeoutError,
     QwenValidationError,
 )
-from src.models.llm_client import LLMClient
 from src.models.geo_utils import (
     build_constraints_text,
     build_nearest_neighbors,
     compute_distance_matrix,
     detect_region_info,
-    estimate_fuel_cost,
     format_locations_compact,
     format_nearest_neighbors,
 )
+from src.models.llm_client import LLMClient
 from src.models.schemas import (
     Location,
     Route,
 )
+
 
 logger = logging.getLogger("qwen_client")
 
@@ -105,7 +106,8 @@ class QwenClient(LLMClient):
                     locations_data,
                     constraints,
                 )
-                logger.info(f"RAW MODEL RESPONSE (Attempt {attempt}):\n{response_text}")
+                logger.info("RAW MODEL RESPONSE"
+                            f"(Attempt {attempt}):\n{response_text}")
                 print(response_text)
                 result = self._parse_response(response_text, locations)
 
@@ -241,9 +243,9 @@ class QwenClient(LLMClient):
                     return float(val) if val is not None else 0.0
                 except Exception:
                     return 0.0
-
+            new_route_id = str(uuid.uuid4())
             return Route(
-                ID=str(data.get("route_id", f"route-{int(time())}")),
+                ID=new_route_id,
                 name=f"Оптимизированный маршрут ({self.model_name})",
                 locations=original_locations,
                 total_distance_km=to_float(data.get("total_distance_km")),

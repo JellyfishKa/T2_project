@@ -42,7 +42,8 @@ def compute_distance_matrix(
 
 
 def detect_region_info(locations: List[Dict]) -> Dict:
-    """Detect center, bounding box, area, density, classification from points."""
+    """Detect center, bounding box, area,
+    density, classification from points."""
     if not locations:
         return {
             "center": (0.0, 0.0),
@@ -79,7 +80,8 @@ def detect_region_info(locations: List[Dict]) -> Dict:
 
 
 def estimate_fuel_cost(distance_km: float, rate: float = 7.0) -> float:
-    """Fuel cost = distance * rate (rub/km). Rate overridable via constraints."""
+    """Fuel cost = distance * rate (rub/km).
+    Rate overridable via constraints."""
     return round(distance_km * rate, 2)
 
 
@@ -120,7 +122,8 @@ def format_locations_compact(locations: List[Dict]) -> str:
     for loc in locations:
         cat = infer_category(loc.get("priority", "C"))
         lines.append(
-            f"{loc['ID']}|{loc['name']}|{loc['lat']},{loc['lon']}|priority={cat}"
+            f"{loc['ID']}|{loc['name']}|"
+            f"{loc['lat']},{loc['lon']}|priority={cat}",
         )
     return "\n".join(lines)
 
@@ -135,7 +138,8 @@ def format_distance_pairs(
     for i in range(n):
         for j in range(i + 1, n):
             lines.append(
-                f"{locations[i]['ID']}->{locations[j]['ID']}:{distance_matrix[i][j]}km"
+                f"{locations[i]['ID']}->"
+                f"{locations[j]['ID']}:{distance_matrix[i][j]}km",
             )
     return "\n".join(lines)
 
@@ -178,7 +182,8 @@ def build_constraints_text(constraints: Optional[Dict]) -> str:
             if "visits_per_month" in rules:
                 parts.append(f"Cat {cat}: {rules['visits_per_month']}x/month")
             elif "visits_per_quarter" in rules:
-                parts.append(f"Cat {cat}: {rules['visits_per_quarter']}x/quarter")
+                parts.append(f"Cat {cat}:"
+                             f"{rules['visits_per_quarter']}x/quarter")
 
     max_dist = constraints.get("maxDistance")
     if max_dist:

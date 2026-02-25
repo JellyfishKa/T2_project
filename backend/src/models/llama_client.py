@@ -1,34 +1,31 @@
 import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime
 from time import time
-from typing import (
-    Dict,
-    List,
-)
+from typing import Dict, List
 
 try:
     from llama_cpp import Llama
-except ImportError:
+except ImportError as exc:
     raise ImportError(
         "Please install llama-cpp-python: pip install llama-cpp-python",
-    )
+    ) from exc
 
 from src.config import settings
 from src.models.exceptions import (
     LlamaServerError,
     LlamaValidationError,
 )
-from src.models.llm_client import LLMClient
 from src.models.geo_utils import (
     build_constraints_text,
     compute_distance_matrix,
     detect_region_info,
-    estimate_fuel_cost,
     format_distance_pairs,
     format_locations_compact,
 )
+from src.models.llm_client import LLMClient
 from src.models.schemas import (
     Location,
     Route,
@@ -44,13 +41,15 @@ class LlamaClient(LLMClient):
         self.model_name = settings.llama_model_id
         self.timeout = 120
         try:
-            self.model_path = settings.get_model_path(settings.llama_model_id)
-        except FileNotFoundError as e:
-            logger.error(str(e))
+            self.model_path = settings.get_model_path(
+                settings.llama_model_id,
+            )
+        except FileNotFoundError as exc:
+            logger.error(str(exc))
             self.model_path = None
 
     def _get_generator(self):
-        """Lazy Loading модели через llama.cpp."""
+        """Lazy loading модели через llama.cpp."""
         if LlamaClient._llm is None:
             if not self.model_path:
                 raise LlamaServerError(
@@ -59,7 +58,10 @@ class LlamaClient(LLMClient):
                 )
 
             try:
-                logger.info(f"Loading GGUF model from {self.model_path}...")
+                logger.info(
+                    "Loading GGUF model from %s...",
+                    self.model_path,
+                )
                 LlamaClient._llm = Llama(
                     model_path=self.model_path,
                     n_threads=8,
@@ -70,16 +72,21 @@ class LlamaClient(LLMClient):
                     verbose=True,
                 )
                 logger.info("Llama GGUF model loaded successfully.")
-            except Exception as e:
-                logger.error(f"Critical error loading GGUF model: {e}")
-                raise LlamaServerError(f"Failed to load GGUF model: {e}")
+            except Exception as exc:
+                logger.error(
+                    "Critical error loading GGUF model: %s",
+                    exc,
+                )
+                raise LlamaServerError(
+                    f"Failed to load GGUF model: {exc}",
+                ) from exc
 
         return LlamaClient._llm
 
     async def generate_route(
         self,
         locations: List[Location],
-        constraints: Dict = None,
+        constraints: Dict | None = None,
     ) -> Route:
         if not locations:
             raise LlamaValidationError("Locations list is empty")
@@ -95,33 +102,56 @@ class LlamaClient(LLMClient):
                     locations_data,
                     constraints,
                 )
-                logger.info(f"RAW MODEL RESPONSE (Attempt {attempt}):\n{response_text}")
-                result = self._parse_response(response_text, locations)
+
+                logger.info(
+                    "RAW MODEL RESPONSE (Attempt %s):\n%s",
+                    attempt,
+                    response_text,
+                )
+
+                result = self._parse_response(
+                    response_text,
+                    locations,
+                )
 
                 duration = time() - start_time
                 if duration > 5.0:
-                    logger.warning(f"Llama slow response: {duration:.2f}s")
+                    logger.warning(
+                        "Llama slow response: %.2fs",
+                        duration,
+                    )
 
                 return result
 
-            except Exception as e:
+            except Exception as exc:
                 if attempt <= max_retries:
                     logger.warning(
-                        f"Retry {attempt}/{max_retries} due to: {e}",
+                        "Retry %s/%s due to: %s",
+                        attempt,
+                        max_retries,
+                        exc,
                     )
                 else:
                     logger.error("All retries exhausted.")
-                    raise LlamaServerError(f"Generation failed: {e}")
+                    raise LlamaServerError(
+                        f"Generation failed: {exc}",
+                    ) from exc
 
-    async def _run_inference(self, locations_data: List[Dict],
-                             constraints: Dict) -> str:
+    async def _run_inference(
+        self,
+        locations_data: List[Dict],
+        constraints: Dict | None,
+    ) -> str:
         llm = self._get_generator()
 
         system_prompt = (
             "You are a route optimizer. "
             "Output ONLY valid JSON, no text."
         )
-        user_prompt = self._construct_prompt(locations_data, constraints)
+        user_prompt = self._construct_prompt(
+            locations_data,
+            constraints,
+        )
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -144,20 +174,25 @@ class LlamaClient(LLMClient):
         )
 
         content = output["choices"][0]["message"]["content"]
+
         if not content.endswith("}") and "{" in content:
             content += "}"
+
         return content
 
     def _construct_prompt(
         self,
         locations: List[Dict],
-        constraints: Dict,
+        constraints: Dict | None,
     ) -> str:
         region = detect_region_info(locations)
-        dm = compute_distance_matrix(locations)
+        distance_matrix = compute_distance_matrix(locations)
 
         locations_text = format_locations_compact(locations)
-        distances_text = format_distance_pairs(locations, dm)
+        distances_text = format_distance_pairs(
+            locations,
+            distance_matrix,
+        )
         constraints_text = build_constraints_text(constraints)
 
         fuel_rate = (constraints or {}).get("fuel_rate", 7.0)
@@ -175,7 +210,8 @@ class LlamaClient(LLMClient):
             f"RULES:\n"
             f"- Sequence locations to minimize distance "
             f"while respecting priority order (A>B>C>D)\n"
-            f"- Estimate time: avg speed {speed}km/h + 15min per visit\n"
+            f"- Estimate time: avg speed {speed}km/h "
+            f"+ 15min per visit\n"
             f"- Cost = total_distance * {fuel_rate} rub/km\n"
             f"- All locations must be visited\n\n"
             f"OUTPUT: Return ONLY a valid JSON object (no markdown):\n"
@@ -192,9 +228,9 @@ class LlamaClient(LLMClient):
         original_locations: List[Location],
     ) -> Route:
         try:
-            logger.info(f"content: {text_content}")
-            print(text_content)
+            logger.info("content: %s", text_content)
             text_content = text_content.strip()
+
             if text_content.startswith("```json"):
                 text_content = text_content[7:]
             if text_content.endswith("```"):
@@ -202,25 +238,40 @@ class LlamaClient(LLMClient):
 
             json_start = text_content.find("{")
             json_end = text_content.rfind("}") + 1
+
             if json_start == -1 or json_end == 0:
                 raise ValueError("No JSON brackets found")
 
             clean_json = text_content[json_start:json_end]
             data = json.loads(clean_json)
 
+            new_route_id = str(uuid.uuid4())
+
             return Route(
-                ID=str(data.get("route_id", f"llama-{int(time())}")),
+                ID=new_route_id,
                 name="Optimized Route (Llama GGUF)",
                 locations=original_locations,
-                total_distance_km=float(data.get("total_distance_km", 0)),
-                total_time_hours=float(data.get("total_time_hours", 0)),
-                total_cost_rub=float(data.get("total_cost_rub", 0)),
+                total_distance_km=float(
+                    data.get("total_distance_km", 0),
+                ),
+                total_time_hours=float(
+                    data.get("total_time_hours", 0),
+                ),
+                total_cost_rub=float(
+                    data.get("total_cost_rub", 0),
+                ),
                 model_used="llama-gguf-local",
                 created_at=datetime.now(),
             )
-        except Exception as e:
-            logger.error(f"JSON Parse Error. Raw text: {text_content}")
-            raise LlamaServerError(f"Failed to parse model response: {e}")
+
+        except Exception as exc:
+            logger.error(
+                "JSON Parse Error. Raw text: %s",
+                text_content,
+            )
+            raise LlamaServerError(
+                f"Failed to parse model response: {exc}",
+            ) from exc
 
     async def analyze_metrics(self, data: Dict) -> str:
         return "Not implemented"

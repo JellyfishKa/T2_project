@@ -1,5 +1,4 @@
 import logging
-
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
@@ -10,8 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Base, engine, get_session
 from src.middleware.main import AdvancedMiddleware
+from src.routes.benchmark import router as benchmark_router
+from src.routes.insights import router as insights_router
 from src.routes.llama import router as llama_router
 from src.routes.locations import router as locations_router
+from src.routes.metrics import router as metrics_router
+from src.routes.optimize import router as optimize_router
 from src.routes.qwen import router as qwen_router
 
 import uvicorn
@@ -47,9 +50,13 @@ app.add_middleware(
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(locations_router)
+api_v1_router.include_router(optimize_router)
 api_v1_router.include_router(qwen_router)
 api_v1_router.include_router(llama_router)
+api_v1_router.include_router(metrics_router)
+api_v1_router.include_router(insights_router)
 
+app.include_router(benchmark_router)
 app.include_router(api_v1_router)
 
 
@@ -62,7 +69,10 @@ app.include_router(api_v1_router)
             "description": "System is healthy",
             "content": {
                 "application/json": {
-                    "example": {"status": "ok", "database": "connected", "models": {"qwen": "loaded", "llama": "loaded"}},
+                    "example": {"status": "ok",
+                                "database": "connected",
+                                "models": {"qwen": "loaded",
+                                           "llama": "loaded"}},
                 },
             },
         },
@@ -100,6 +110,7 @@ async def health_check(session: AsyncSession = Depends(get_session)):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database disconnected",
         )
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
