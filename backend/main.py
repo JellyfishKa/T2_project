@@ -16,6 +16,7 @@ from src.routes.locations import router as locations_router
 from src.routes.metrics import router as metrics_router
 from src.routes.optimize import router as optimize_router
 from src.routes.qwen import router as qwen_router
+from src.routes.routes import router as routes_router
 
 import uvicorn
 
@@ -55,6 +56,7 @@ api_v1_router.include_router(qwen_router)
 api_v1_router.include_router(llama_router)
 api_v1_router.include_router(metrics_router)
 api_v1_router.include_router(insights_router)
+api_v1_router.include_router(routes_router)
 
 app.include_router(benchmark_router)
 app.include_router(api_v1_router)

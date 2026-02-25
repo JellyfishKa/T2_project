@@ -18,6 +18,14 @@ class LocationResponse(LocationCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UploadLocationsResponse(BaseModel):
+    """Schema for bulk location upload results."""
+
+    created: list[LocationResponse] = []
+    errors: list[dict] = []
+    total_processed: int = 0
+
+
 class ErrorResponse(BaseModel):
     """Schema for error responses."""
 
