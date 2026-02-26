@@ -67,7 +67,7 @@ class QwenClient(LLMClient):
                     model_path=self.model_path,
                     n_threads=4,
                     n_gpu_layers=0,
-                    n_ctx=2048,
+                    n_ctx=8192,   # 8K — достаточно для 50 точек с запасом
                     n_batch=512,
                     verbose=True,
                 )
@@ -200,22 +200,23 @@ class QwenClient(LLMClient):
         fuel_rate = (constraints or {}).get("fuel_rate", 7.0)
         speed = 25 if region["classification"] == "urban" else 40
 
+        n = len(locations)
+        first_id = locations[0]["ID"] if locations else "?"
+        last_id = locations[-1]["ID"] if locations else "?"
+
         return (
-            f"LOCATIONS ({len(locations)} points, "
-            f"{region['classification']} area, "
-            f"{region['area_km2']}km2):\n"
-            f"{locations_text}\n\n"
-            f"DISTANCES (nearest neighbors):\n{nn_text}\n\n"
-            f"RULES: {constraints_text}\n"
-            f"Order by priority (high=A>B>C>D). Minimize total km.\n"
-            f"Speed: {speed}km/h + 15min per visit. "
-            f"Cost = distance * {fuel_rate} rub/km.\n\n"
-            f"OUTPUT: single JSON, no markdown:\n"
-            f'{{"route_id":"id","locations_sequence":["id1","id2"],'
-            f'"total_distance_km":0.0,"total_time_hours":0.0,'
-            f'"total_cost_rub":0.0,'
-            f'"model_used":"{self.model_name}",'
-            f'"created_at":"{datetime.now().isoformat()}"}}'
+            f"Route optimization: {n} stops, "
+            f"{region['classification']} ({region['area_km2']} km2).\n\n"
+            f"STOPS (ID|name|lat,lon|priority):\n{locations_text}\n\n"
+            f"NEAREST 3 NEIGHBORS:\n{nn_text}\n\n"
+            f"RULES: {constraints_text} "
+            f"Speed={speed}km/h+15min/stop. "
+            f"Cost=dist*{fuel_rate}rub/km. A>B>C>D priority.\n\n"
+            f"OUTPUT (JSON only, no text):\n"
+            f'{{"locations_sequence":["{first_id}",...,"{last_id}"],'
+            f'"total_distance_km":COMPUTE,'
+            f'"total_time_hours":COMPUTE,'
+            f'"total_cost_rub":COMPUTE}}'
         )
 
     def _parse_response(

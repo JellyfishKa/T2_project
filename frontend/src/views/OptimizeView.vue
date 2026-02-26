@@ -255,8 +255,17 @@ const handleOptimize = async () => {
 
   const formData = optimizationForm.value.getFormData()
 
+  // Сохраняем локации для отображения имён в результатах
+  formLocations.value = (formData.locations ?? []).map((loc: any) => ({
+    id: loc.id,
+    name: loc.name,
+    address: `г. ${loc.city ?? ''}, ул. ${loc.street ?? ''}, д. ${loc.houseNumber ?? ''}`,
+    time_window_start: loc.timeWindowStart ?? '',
+    time_window_end: loc.timeWindowEnd ?? ''
+  }))
+
   // Сохраняем исходные метрики для расчета улучшения
-  const locationIds = formData.locations.map((loc: any) => loc.id)
+  const locationIds = (formData.locations ?? []).map((loc: any) => loc.id)
 
   // Рассчитываем примерные исходные метрики (можно заменить на реальные от бэкенда)
   originalMetrics.value = {

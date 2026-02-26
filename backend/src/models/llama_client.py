@@ -20,10 +20,11 @@ from src.models.exceptions import (
 )
 from src.models.geo_utils import (
     build_constraints_text,
+    build_nearest_neighbors,
     compute_distance_matrix,
     detect_region_info,
-    format_distance_pairs,
     format_locations_compact,
+    format_nearest_neighbors,
 )
 from src.models.llm_client import LLMClient
 from src.models.schemas import (
@@ -67,8 +68,8 @@ class LlamaClient(LLMClient):
                     n_threads=8,
                     n_threads_batch=8,
                     n_gpu_layers=-1,
-                    n_batch=256,
-                    n_ctx=4096,
+                    n_batch=512,
+                    n_ctx=49152,  # 48K — достаточно для 50 точек (~40K токенов)
                     verbose=True,
                 )
                 logger.info("Llama GGUF model loaded successfully.")
@@ -185,41 +186,38 @@ class LlamaClient(LLMClient):
         locations: List[Dict],
         constraints: Dict | None,
     ) -> str:
+        # Используем nearest-neighbors вместо всех пар:
+        # 50 точек × 3 соседа = 150 строк вместо 1225 (O(n²) → O(n·k))
         region = detect_region_info(locations)
-        distance_matrix = compute_distance_matrix(locations)
+        dm = compute_distance_matrix(locations)
+        nn = build_nearest_neighbors(dm, k=3)
 
         locations_text = format_locations_compact(locations)
-        distances_text = format_distance_pairs(
-            locations,
-            distance_matrix,
-        )
+        nn_text = format_nearest_neighbors(locations, nn)
         constraints_text = build_constraints_text(constraints)
 
         fuel_rate = (constraints or {}).get("fuel_rate", 7.0)
         speed = 25 if region["classification"] == "urban" else 40
+        n = len(locations)
+
+        # Предвычисляем первый и последний ID для примера
+        first_id = locations[0]["ID"] if locations else "id_first"
+        last_id = locations[-1]["ID"] if locations else "id_last"
 
         return (
-            f"TASK: Optimize route for {len(locations)} locations.\n\n"
-            f"REGION: center={region['center']}, "
-            f"area={region['area_km2']}km2, "
-            f"type={region['classification']}, "
-            f"density={region['point_density']} pts/km2\n\n"
-            f"LOCATIONS:\n{locations_text}\n\n"
-            f"DISTANCE MATRIX (all pairs):\n{distances_text}\n\n"
-            f"CONSTRAINTS: {constraints_text}\n\n"
-            f"RULES:\n"
-            f"- Sequence locations to minimize distance "
-            f"while respecting priority order (A>B>C>D)\n"
-            f"- Estimate time: avg speed {speed}km/h "
-            f"+ 15min per visit\n"
-            f"- Cost = total_distance * {fuel_rate} rub/km\n"
-            f"- All locations must be visited\n\n"
-            f"OUTPUT: Return ONLY a valid JSON object (no markdown):\n"
-            f'{{"route_id":"string","locations_sequence":["id1","id2",...],'
-            f'"total_distance_km":float,"total_time_hours":float,'
-            f'"total_cost_rub":float,'
-            f'"model_used":"{self.model_name}",'
-            f'"created_at":"{datetime.now().isoformat()}"}}'
+            f"Optimize delivery route: {n} stops, "
+            f"{region['classification']} area ({region['area_km2']} km2).\n\n"
+            f"STOPS (ID|name|lat,lon|priority):\n{locations_text}\n\n"
+            f"NEAREST 3 NEIGHBORS per stop:\n{nn_text}\n\n"
+            f"RULES: {constraints_text} "
+            f"Speed={speed}km/h + 15min/stop. "
+            f"Cost=dist*{fuel_rate}rub/km. "
+            f"Priority A>B>C>D. Visit ALL stops once.\n\n"
+            f"Return ONLY valid JSON, no markdown, no explanation:\n"
+            f'{{"locations_sequence":["{first_id}",...,"{last_id}"],'
+            f'"total_distance_km":0.0,'
+            f'"total_time_hours":0.0,'
+            f'"total_cost_rub":0.0}}'
         )
 
     def _parse_response(

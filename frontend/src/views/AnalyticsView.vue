@@ -368,6 +368,7 @@ import {
   LineElement,
   Filler
 } from 'chart.js'
+import { Bar as BarChart, Scatter as ScatterChart, Line as LineChart } from 'vue-chartjs'
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
 import {
   fetchRoutes,
@@ -517,12 +518,12 @@ const stats = computed<Stats>(() => {
   }
 
   const totalDistance = routes.value.reduce(
-    (sum, r) => sum + r.total_distance_km,
+    (sum, r) => sum + (r.total_distance_km ?? 0),
     0
   )
-  const totalCost = routes.value.reduce((sum, r) => sum + r.total_cost_rub, 0)
+  const totalCost = routes.value.reduce((sum, r) => sum + (r.total_cost_rub ?? 0), 0)
   const avgQuality = metrics.value.length
-    ? metrics.value.reduce((sum, m) => sum + m.quality_score, 0) /
+    ? metrics.value.reduce((sum, m) => sum + (m.quality_score ?? 0), 0) /
       metrics.value.length
     : 0
 
@@ -709,8 +710,8 @@ const loadAnalyticsData = async () => {
       compareModels()
     ])
 
-    routes.value = routesData.items
-    metrics.value = metricsData.metrics
+    routes.value = routesData.items ?? []
+    metrics.value = metricsData?.metrics ?? []
     modelComparison.value = comparisonData
   } catch (err: any) {
     error.value = err.message || 'Не удалось загрузить данные аналитики'

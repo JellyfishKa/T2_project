@@ -447,41 +447,48 @@ const handleRouteSelect = async (routeId: string) => {
 
 // Data loading functions
 const loadDashboardData = async () => {
-  try {
-    isLoadingStats.value = true
-    isLoadingRoutes.value = true
-    isLoadingComparison.value = true
-    error.value = null
+  isLoadingStats.value = true
+  isLoadingRoutes.value = true
+  isLoadingComparison.value = true
+  error.value = null
 
-    // Загружаем данные параллельно для скорости
-    const [routesData, comparisonData, healthData] = await Promise.all([
-      fetchRoutes(0, 100),
-      compareModels(),
-      checkHealth()
-    ])
+  // Загружаем данные независимо — ошибка одного не блокирует остальные
+  const [routesResult, comparisonResult, healthResult] = await Promise.allSettled([
+    fetchRoutes(0, 100),
+    compareModels(),
+    checkHealth()
+  ])
 
-    // Применяем сортировку к маршрутам
+  if (routesResult.status === 'fulfilled') {
+    const routesData = routesResult.value
     routes.value = {
       total: routesData.total,
-      items: sortRoutes(routesData.items)
+      items: sortRoutes(routesData.items ?? [])
     }
-
-    modelComparison.value = comparisonData
-    healthStatus.value = healthData
-
-    // Выбираем первый маршрут по умолчанию
-    if (routesData.items.length > 0) {
+    if ((routesData.items?.length ?? 0) > 0) {
       selectedRouteId.value = routesData.items[0].id
       await loadRouteDetails(routesData.items[0].id)
     }
-  } catch (err: any) {
-    error.value = err.message || 'Не удалось загрузить данные'
-    console.error('Dashboard data loading error:', err)
-  } finally {
-    isLoadingStats.value = false
-    isLoadingRoutes.value = false
-    isLoadingComparison.value = false
+  } else {
+    error.value = routesResult.reason?.message || 'Не удалось загрузить данные'
+    console.error('Routes loading error:', routesResult.reason)
   }
+
+  if (comparisonResult.status === 'fulfilled') {
+    modelComparison.value = comparisonResult.value
+  } else {
+    console.error('Comparison loading error:', comparisonResult.reason)
+  }
+
+  if (healthResult.status === 'fulfilled') {
+    healthStatus.value = healthResult.value
+  } else {
+    console.error('Health check error:', healthResult.reason)
+  }
+
+  isLoadingStats.value = false
+  isLoadingRoutes.value = false
+  isLoadingComparison.value = false
 }
 
 const loadRouteDetails = async (routeId: string) => {
@@ -490,14 +497,13 @@ const loadRouteDetails = async (routeId: string) => {
   try {
     isLoadingRouteDetails.value = true
 
-    // Загружаем детали маршрута и метрики параллельно
     const [details, metricsData] = await Promise.all([
       fetchRouteDetails(routeId),
       getMetrics()
     ])
 
     selectedRouteDetails.value = details
-    routeMetrics.value = metricsData.metrics.filter(
+    routeMetrics.value = (metricsData?.metrics ?? []).filter(
       (m) => m.route_id === routeId
     )
   } catch (err: any) {
@@ -511,7 +517,7 @@ const loadMetrics = async () => {
   try {
     isLoadingMetrics.value = true
     const metricsData = await getMetrics()
-    allMetrics.value = sortMetrics(metricsData.metrics)
+    allMetrics.value = sortMetrics(metricsData?.metrics ?? [])
   } catch (err: any) {
     console.error('Metrics loading error:', err)
   } finally {

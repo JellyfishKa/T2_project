@@ -84,7 +84,7 @@
     </div>
 
     <!-- Mobile Cards (only shown when not loading and has data) -->
-    <div v-else-if="routes.length > 0" class="sm:hidden space-y-3">
+    <div v-if="!isLoading && routes.length > 0" class="sm:hidden space-y-3">
       <div
         v-for="route in sortedRoutes"
         :key="route.id"

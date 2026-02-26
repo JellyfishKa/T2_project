@@ -7,19 +7,22 @@ from pydantic import BaseModel, ConfigDict, Field
 class RouteResponse(BaseModel):
     """Schema for route list items.
 
-    Поля total_distance_km / total_time_hours / total_cost_rub —
-    алиасы для совместимости с фронтендом; в БД хранятся как
-    total_distance / total_time / total_cost.
+    Алиасы читают поля из ORM (DB column names),
+    JSON-ответ использует field names (что ожидает фронтенд).
     """
 
     id: str
     name: str
-    locations_order: List[str]
-    # Алиасы: фронтенд ожидает _km / _hours / _rub
+    # DB: locations_order → JSON: locations
+    locations: List[str] = Field(alias="locations_order", default_factory=list)
+    # DB: total_distance → JSON: total_distance_km
     total_distance_km: float = Field(alias="total_distance", default=0.0)
+    # DB: total_time → JSON: total_time_hours
     total_time_hours: float = Field(alias="total_time", default=0.0)
+    # DB: total_cost → JSON: total_cost_rub
     total_cost_rub: float = Field(alias="total_cost", default=0.0)
     model_used: str = "unknown"
+    fallback_reason: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

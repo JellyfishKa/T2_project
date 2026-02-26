@@ -16,6 +16,7 @@ from src.models.geo_utils import (
     compute_distance_matrix,
     detect_region_info,
     estimate_fuel_cost,
+    infer_category,
 )
 from src.models.llama_client import LlamaClient
 from src.models.qwen_client import QwenClient
@@ -204,30 +205,101 @@ class Optimizer:
         )
         return optimized_route
 
+    def _greedy_reorder(
+        self,
+        locations: List[PydanticLocation],
+    ) -> List[PydanticLocation]:
+        """
+        Жадный алгоритм ближайшего соседа.
+        Начинаем с точки наивысшего приоритета (A>B>C>D),
+        далее выбираем ближайшую ещё не посещённую точку.
+        """
+        if len(locations) <= 1:
+            return locations
+
+        loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
+        matrix = compute_distance_matrix(loc_dicts)
+        n = len(locations)
+
+        # Старт — точка с наивысшим приоритетом
+        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+        start = min(
+            range(n),
+            key=lambda i: priority_rank.get(
+                infer_category(getattr(locations[i], "priority", "C")), 3
+            ),
+        )
+
+        visited = [False] * n
+        order = [start]
+        visited[start] = True
+
+        for _ in range(n - 1):
+            cur = order[-1]
+            nearest = min(
+                (j for j in range(n) if not visited[j]),
+                key=lambda j: matrix[cur][j],
+            )
+            order.append(nearest)
+            visited[nearest] = True
+
+        return [locations[i] for i in order]
+
     async def _generate_with_fallback(
         self,
         locs: List[PydanticLocation],
         constr: Dict[str, Any],
         model_name: str,
     ) -> PydanticRoute:
-        client = (
-            self.qwen_client
-            if model_name == MODEL_QWEN
-            else self.llama_client
+        """
+        Пытается получить маршрут от основной модели, затем от запасной,
+        затем использует чистый greedy-алгоритм как последний fallback.
+        Всегда применяет greedy для определения реального порядка точек —
+        результат LLM используется только для логирования/метрик.
+        """
+        valid_ids = {loc.ID for loc in locs}
+
+        async def _try_model(client) -> PydanticRoute | None:
+            try:
+                return await client.generate_route(locs, constr)
+            except Exception as exc:
+                logger.warning("Model %s failed: %s", type(client).__name__, exc)
+                return None
+
+        primary = (
+            self.qwen_client if model_name == MODEL_QWEN else self.llama_client
+        )
+        alt = (
+            self.llama_client if model_name == MODEL_QWEN else self.qwen_client
         )
 
-        try:
-            return await client.generate_route(locs, constr)
-        except Exception as exc:
-            logger.warning(
-                "Primary model %s failed: %s. Switching to fallback.",
-                model_name,
-                exc,
-            )
+        route = await _try_model(primary)
+        if route is None:
+            logger.warning("Primary model failed, trying alternative.")
+            route = await _try_model(alt)
 
-            alt_client = (
-                self.llama_client
-                if model_name == MODEL_QWEN
-                else self.qwen_client
+        # Применяем greedy reorder для получения реального оптимального порядка.
+        # LLM-модели ненадёжны для малых моделей (0.5B–1.2B),
+        # поэтому Python всегда определяет итоговый порядок.
+        reordered = self._greedy_reorder(locs)
+
+        if route is None:
+            # Оба LLM упали — создаём маршрут на основе greedy
+            logger.warning("Both LLMs failed, using pure greedy route.")
+            import uuid
+            from datetime import datetime
+            route = PydanticRoute(
+                ID=str(uuid.uuid4()),
+                name="Оптимизированный маршрут (Greedy)",
+                locations=reordered,
+                total_distance_km=0.0,
+                total_time_hours=0.0,
+                total_cost_rub=0.0,
+                model_used="greedy",
+                created_at=datetime.now(),
             )
-            return await alt_client.generate_route(locs, constr)
+        else:
+            # Заменяем порядок локаций на greedy-оптимальный
+            route.locations = reordered
+
+        return route

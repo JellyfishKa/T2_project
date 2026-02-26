@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -13,11 +14,15 @@ class OptimizeRequest(BaseModel):
 
 
 class OptimizeResponse(BaseModel):
-    route_order: List[str]
-    total_distance: float
-    total_time_minutes: float
-    total_cost: float
+    """Формат совместим с интерфейсом Route фронтенда."""
+    id: str
+    name: str
+    locations: List[str]          # порядок ID после оптимизации
+    total_distance_km: float
+    total_time_hours: float
+    total_cost_rub: float
     model_used: str
     quality_score: float
     response_time_ms: int
     fallback_reason: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())

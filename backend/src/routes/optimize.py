@@ -58,15 +58,19 @@ async def run_optimization(
                 f'used {optimized_route.model_used} instead.'
             )
 
+        from datetime import datetime
         return OptimizeResponse(
-            route_order=[loc.ID for loc in optimized_route.locations],
-            total_distance=optimized_route.total_distance_km,
-            total_time_minutes=optimized_route.total_time_hours * 60,
-            total_cost=optimized_route.total_cost_rub,
+            id=optimized_route.ID,
+            name=optimized_route.name or "Оптимизированный маршрут",
+            locations=[loc.ID for loc in optimized_route.locations],
+            total_distance_km=optimized_route.total_distance_km,
+            total_time_hours=optimized_route.total_time_hours,
+            total_cost_rub=optimized_route.total_cost_rub,
             model_used=optimized_route.model_used,
             quality_score=getattr(optimized_route, 'quality_score', 0.0),
             response_time_ms=execution_time_ms,
             fallback_reason=fallback_reason,
+            created_at=datetime.now().isoformat(),
         )
 
     except Exception as e:
