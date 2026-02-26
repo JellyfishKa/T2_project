@@ -140,22 +140,26 @@ describe('DashboardView.vue', () => {
       {
         id: 'store-1',
         name: 'Store 1',
-        latitude: 55.7558,
-        longitude: 37.6173,
+        lat: 55.7558,
+        lon: 37.6173,
         address: 'Address 1',
         time_window_start: '09:00',
         time_window_end: '18:00',
-        priority: 1
+        category: 'A' as const,
+        city: null,
+        district: null
       },
       {
         id: 'store-2',
         name: 'Store 2',
-        latitude: 55.7489,
-        longitude: 37.616,
+        lat: 55.7489,
+        lon: 37.616,
         address: 'Address 2',
         time_window_start: '10:00',
         time_window_end: '19:00',
-        priority: 2
+        category: 'B' as const,
+        city: null,
+        district: null
       }
     ],
     total_distance_km: 10.5,
