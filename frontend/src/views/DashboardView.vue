@@ -354,9 +354,9 @@ const metricsSortDirection = ref<SortDirection>('desc')
 
 // Computed
 const averageTime = computed(() => {
-  if (!routes.value.items.length) return 0
+  if (!routes.value.items.length) return '0.0'
   const sum = routes.value.items.reduce(
-    (acc, route) => acc + route.total_time_hours,
+    (acc, route) => acc + (route.total_time_hours ?? 0),
     0
   )
   return (sum / routes.value.items.length).toFixed(1)
@@ -365,7 +365,7 @@ const averageTime = computed(() => {
 const averageCost = computed(() => {
   if (!routes.value.items.length) return 0
   const sum = routes.value.items.reduce(
-    (acc, route) => acc + route.total_cost_rub,
+    (acc, route) => acc + (route.total_cost_rub ?? 0),
     0
   )
   return Math.round(sum / routes.value.items.length)

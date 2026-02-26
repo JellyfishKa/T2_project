@@ -128,13 +128,13 @@
                 <div class="flex items-center">
                   <div class="w-24 bg-gray-200 rounded-full h-2.5">
                     <div
-                      class="bg-green-600 h-2.5 rounded-full"
-                      :style="{ width: metric.quality_score * 100 + '%' }"
-                    ></div>
-                  </div>
-                  <span class="ml-3 text-sm text-gray-900"
-                    >{{ (metric.quality_score * 100).toFixed(1) }}%</span
-                  >
+                    class="bg-green-600 h-2.5 rounded-full"
+                    :style="{ width: Math.min(metric.quality_score, 100) + '%' }"
+                  ></div>
+                </div>
+                <span class="ml-3 text-sm text-gray-900"
+                  >{{ metric.quality_score.toFixed(1) }}%</span
+                >
                 </div>
               </td>
               <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">

@@ -70,13 +70,13 @@
               </span>
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-              {{ route.total_distance_km.toFixed(1) }} км
+              {{ (route.total_distance_km ?? 0).toFixed(1) }} км
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-              {{ route.total_time_hours.toFixed(1) }} ч
+              {{ (route.total_time_hours ?? 0).toFixed(1) }} ч
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-              {{ route.total_cost_rub.toFixed(0) }} ₽
+              {{ (route.total_cost_rub ?? 0).toFixed(0) }} ₽
             </td>
           </tr>
         </tbody>
@@ -126,19 +126,19 @@
         <div class="mt-4 grid grid-cols-3 gap-2">
           <div class="text-center">
             <div class="text-sm font-medium text-gray-900">
-              {{ route.total_distance_km.toFixed(1) }} км
+              {{ (route.total_distance_km ?? 0).toFixed(1) }} км
             </div>
             <div class="text-xs text-gray-500">Расстояние</div>
           </div>
           <div class="text-center">
             <div class="text-sm font-medium text-gray-900">
-              {{ route.total_time_hours.toFixed(1) }} ч
+              {{ (route.total_time_hours ?? 0).toFixed(1) }} ч
             </div>
             <div class="text-xs text-gray-500">Время</div>
           </div>
           <div class="text-center">
             <div class="text-sm font-medium text-gray-900">
-              {{ route.total_cost_rub.toFixed(0) }} ₽
+              {{ (route.total_cost_rub ?? 0).toFixed(0) }} ₽
             </div>
             <div class="text-xs text-gray-500">Стоимость</div>
           </div>

@@ -64,11 +64,11 @@
                 <div class="w-24 bg-gray-200 rounded-full h-2">
                   <div
                     class="bg-green-500 h-2 rounded-full"
-                    :style="{ width: metric.quality_score * 100 + '%' }"
+                    :style="{ width: Math.min(metric.quality_score, 100) + '%' }"
                   ></div>
                 </div>
                 <span class="ml-3 text-sm text-gray-900"
-                  >{{ (metric.quality_score * 100).toFixed(1) }}%</span
+                  >{{ metric.quality_score.toFixed(1) }}%</span
                 >
               </div>
             </td>
@@ -118,7 +118,7 @@
           <div class="flex justify-between">
             <span class="text-sm text-gray-600">Качество:</span>
             <span class="text-sm font-medium text-gray-900"
-              >{{ (metric.quality_score * 100).toFixed(1) }}%</span
+              >{{ metric.quality_score.toFixed(1) }}%</span
             >
           </div>
           <div class="flex justify-between">

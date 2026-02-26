@@ -158,6 +158,34 @@ def format_nearest_neighbors(
     return "\n".join(lines)
 
 
+def compute_route_metrics(
+    locations: List[Dict],
+    sequence_ids: List[str],
+    constraints: Optional[Dict] = None,
+) -> tuple:
+    """Compute (total_distance_km, total_time_hours, total_cost_rub)
+    from an ordered sequence of location IDs."""
+    id_to_loc = {loc["ID"]: loc for loc in locations}
+    fuel_rate = float((constraints or {}).get("fuel_rate", 7.0))
+    region = detect_region_info(locations)
+    speed = 25.0 if region["classification"] == "urban" else 40.0
+    factor = 1.15 if region["classification"] == "urban" else 1.3
+
+    ordered = [id_to_loc[sid] for sid in sequence_ids if sid in id_to_loc]
+    total_distance = 0.0
+    for i in range(len(ordered) - 1):
+        d = haversine(
+            ordered[i]["lat"], ordered[i]["lon"],
+            ordered[i + 1]["lat"], ordered[i + 1]["lon"],
+        ) * factor
+        total_distance += d
+
+    # 15 min (0.25h) per stop
+    total_time = total_distance / speed + len(ordered) * 0.25
+    total_cost = total_distance * fuel_rate
+    return round(total_distance, 2), round(total_time, 2), round(total_cost, 2)
+
+
 def build_constraints_text(constraints: Optional[Dict]) -> str:
     """Build human-readable constraints text from dict."""
     if not constraints:

@@ -93,7 +93,7 @@ describe('AnalyticsView.vue', () => {
         route_id: 'route-1',
         model: 'llama',
         response_time_ms: 1245,
-        quality_score: 0.87,
+        quality_score: 87.0,
         cost_rub: 25.5,
         timestamp: '2026-02-13T09:15:30Z'
       },
@@ -102,7 +102,7 @@ describe('AnalyticsView.vue', () => {
         route_id: 'route-2',
         model: 'qwen',
         response_time_ms: 432,
-        quality_score: 0.82,
+        quality_score: 82.0,
         cost_rub: 0,
         timestamp: '2026-02-13T09:16:15Z'
       },
@@ -111,7 +111,7 @@ describe('AnalyticsView.vue', () => {
         route_id: 'route-3',
         model: 'llama',
         response_time_ms: 1850,
-        quality_score: 0.89,
+        quality_score: 89.0,
         cost_rub: 18.0,
         timestamp: '2026-02-13T09:17:00Z'
       }

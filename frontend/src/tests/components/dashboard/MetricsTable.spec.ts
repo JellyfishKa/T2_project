@@ -10,7 +10,7 @@ describe('MetricsTable.vue', () => {
       route_id: 'route-1',
       model: 'llama',
       response_time_ms: 1245,
-      quality_score: 0.87,
+      quality_score: 87.0,
       cost_rub: 25.5,
       timestamp: '2024-01-06T09:15:30Z'
     },
@@ -19,7 +19,7 @@ describe('MetricsTable.vue', () => {
       route_id: 'route-2',
       model: 'qwen',
       response_time_ms: 432,
-      quality_score: 0.82,
+      quality_score: 82.0,
       cost_rub: 0.0,
       timestamp: '2024-01-06T09:16:15Z'
     }
@@ -66,7 +66,7 @@ describe('MetricsTable.vue', () => {
             route_id: 'route-1',
             model: 'llama',
             response_time_ms: 1000,
-            quality_score: 0.9,
+            quality_score: 90.0,
             cost_rub: 10,
             timestamp: '2024-01-06T09:15:30Z'
           },
@@ -75,7 +75,7 @@ describe('MetricsTable.vue', () => {
             route_id: 'route-2',
             model: 'qwen',
             response_time_ms: 500,
-            quality_score: 0.8,
+            quality_score: 80.0,
             cost_rub: 0,
             timestamp: '2024-01-06T09:16:00Z'
           },

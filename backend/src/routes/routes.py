@@ -92,10 +92,11 @@ async def get_route_detail(
     return RouteDetailResponse(
         id=route.id,
         name=route.name,
-        locations_order=route.locations_order or [],
-        total_distance=route.total_distance,
-        total_time=route.total_time,
-        total_cost=route.total_cost,
+        locations=route.locations_order or [],
+        total_distance_km=route.total_distance or 0.0,
+        total_time_hours=route.total_time or 0.0,
+        total_cost_rub=route.total_cost or 0.0,
+        model_used=route.model_used or "unknown",
         created_at=route.created_at,
         metrics=metrics_data,
     )

@@ -192,7 +192,7 @@
             <div class="ml-4">
               <p class="text-sm font-medium text-gray-600">Среднее качество</p>
               <p class="text-2xl font-semibold text-gray-900">
-                {{ (stats.avgQuality * 100).toFixed(1) }}%
+                {{ stats.avgQuality.toFixed(1) }}%
               </p>
             </div>
           </div>
@@ -336,7 +336,7 @@
                     {{ stat.avgResponseTime.toFixed(0) }}
                   </td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                    {{ (stat.avgQuality * 100).toFixed(1) }}%
+                    {{ stat.avgQuality.toFixed(1) }}%
                   </td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                     {{ stat.totalCost.toFixed(2) }} ₽
@@ -486,7 +486,7 @@ const lineChartOptions = {
     tooltip: {
       callbacks: {
         label: (context: any) => {
-          return `${(context.raw * 100).toFixed(1)}%`
+          return `${Number(context.raw).toFixed(1)}%`
         }
       }
     }
@@ -494,13 +494,12 @@ const lineChartOptions = {
   scales: {
     y: {
       beginAtZero: true,
-      max: 1,
       title: {
         display: true,
-        text: 'Качество решения'
+        text: 'Качество решения (%)'
       },
       ticks: {
-        callback: (value: any) => `${(value * 100).toFixed(0)}%`
+        callback: (value: any) => `${Number(value).toFixed(0)}%`
       }
     }
   }
@@ -574,19 +573,27 @@ const modelStats = computed<ModelStat[]>(() => {
 })
 
 const modelPerformanceData = computed(() => {
-  if (!modelComparison.value?.models?.length) {
-    return { labels: [], datasets: [] }
-  }
+  // Приоритет: данные сравнения моделей, иначе — агрегированные метрики
+  const source: { label: string; value: number }[] =
+    modelComparison.value?.models?.length
+      ? modelComparison.value.models.map((m: any) => ({
+          label: m.name as string,
+          value: m.avg_response_time_ms as number
+        }))
+      : modelStats.value.map((m: ModelStat) => ({
+          label: m.model,
+          value: Math.round(m.avgResponseTime)
+        }))
+
+  if (!source.length) return { labels: [], datasets: [] }
 
   return {
-    labels: modelComparison.value.models.map((m: any) => getModelName(m.name)),
+    labels: source.map((m) => m.label),
     datasets: [
       {
         label: 'Время ответа (мс)',
         backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'],
-        data: modelComparison.value.models.map(
-          (m: any) => m.avg_response_time_ms
-        )
+        data: source.map((m) => m.value)
       }
     ]
   }
