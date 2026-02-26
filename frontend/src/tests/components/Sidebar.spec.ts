@@ -11,7 +11,9 @@ const router = createRouter({
     { path: '/', component: { template: '<div>Home</div>' } },
     { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
     { path: '/optimize', component: { template: '<div>Optimize</div>' } },
-    { path: '/analytics', component: { template: '<div>Analytics</div>' } }
+    { path: '/analytics', component: { template: '<div>Analytics</div>' } },
+    { path: '/schedule', component: { template: '<div>Schedule</div>' } },
+    { path: '/reps', component: { template: '<div>Reps</div>' } }
   ]
 })
 
@@ -28,7 +30,7 @@ describe('Sidebar.vue', () => {
 
     // Check if navigation items exist
     const navLinks = wrapper.findAll('a')
-    expect(navLinks.length).toBe(4) // Home, Dashboard, Optimize, Analytics
+    expect(navLinks.length).toBe(6) // Home, Dashboard, Optimize, Analytics, Расписание, Сотрудники
 
     // Check if the close button exists for mobile view
     expect(wrapper.find('button').exists()).toBe(true)
