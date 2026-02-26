@@ -215,8 +215,8 @@
           </div>
           <div v-else-if="modelPerformanceData.labels.length" class="h-64">
             <BarChart
-              :chart-data="modelPerformanceData"
-              :chart-options="barChartOptions"
+              :data="modelPerformanceData"
+              :options="barChartOptions"
             />
           </div>
           <div
@@ -240,8 +240,8 @@
           </div>
           <div v-else-if="scatterData.datasets[0]?.data.length" class="h-64">
             <ScatterChart
-              :chart-data="scatterData"
-              :chart-options="scatterChartOptions"
+              :data="scatterData"
+              :options="scatterChartOptions"
             />
           </div>
           <div
@@ -265,9 +265,9 @@
           <SkeletonLoader height="300px" />
         </div>
         <div v-else-if="timeSeriesData.labels.length" class="h-80">
-          <LineChart
-            :chart-data="timeSeriesData"
-            :chart-options="lineChartOptions"
+            <LineChart
+            :data="timeSeriesData"
+            :options="lineChartOptions"
           />
         </div>
         <div v-else class="h-80 flex items-center justify-center text-gray-500">

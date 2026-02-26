@@ -12,17 +12,18 @@ vi.mock('@/services/api', () => ({
 }))
 
 // Мокаем Chart.js компоненты
+// AnalyticsView импортирует { Bar as BarChart, Scatter as ScatterChart, Line as LineChart }
 vi.mock('vue-chartjs', () => ({
-  BarChart: {
+  Bar: {
     name: 'BarChart',
     template: '<div data-testid="bar-chart" class="mock-bar-chart"></div>'
   },
-  ScatterChart: {
+  Scatter: {
     name: 'ScatterChart',
     template:
       '<div data-testid="scatter-chart" class="mock-scatter-chart"></div>'
   },
-  LineChart: {
+  Line: {
     name: 'LineChart',
     template: '<div data-testid="line-chart" class="mock-line-chart"></div>'
   }
