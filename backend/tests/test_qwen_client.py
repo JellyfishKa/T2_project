@@ -184,7 +184,7 @@ class TestQwenClientPromptConstruction:
             assert "Store A" in prompt
             assert "Store B" in prompt
             assert "55.75" in prompt
-            assert "LOCATIONS" in prompt
+            assert "STOPS" in prompt
             assert "nearest" in prompt.lower()
 
     def test_construct_prompt_includes_constraints(self, sample_locations):
@@ -215,9 +215,9 @@ class TestQwenClientPromptConstruction:
             locations_data = [loc.model_dump() for loc in sample_locations]
             prompt = client._construct_prompt(locations_data, None)
 
-            assert "route_id" in prompt
+            assert "locations_sequence" in prompt
             assert "total_distance_km" in prompt
-            assert "Minimize total km" in prompt
+            assert "COMPUTE" in prompt
 
 
 class TestQwenClientResponseParsing:

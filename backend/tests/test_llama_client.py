@@ -283,8 +283,8 @@ class TestLlamaClientPromptConstruction:
 
             assert "Store A" in prompt
             assert "Store B" in prompt
-            assert "LOCATIONS" in prompt
-            assert "DISTANCE MATRIX" in prompt
+            assert "STOPS" in prompt
+            assert "NEAREST" in prompt
 
     def test_construct_prompt_includes_region_info(self, sample_locations):
         """Промпт включает информацию о регионе."""
@@ -298,7 +298,7 @@ class TestLlamaClientPromptConstruction:
             locations_data = [loc.model_dump() for loc in sample_locations]
             prompt = client._construct_prompt(locations_data, None)
 
-            assert "REGION:" in prompt
+            assert "rural" in prompt
             assert "km2" in prompt
 
     def test_construct_prompt_with_constraints(self, sample_locations):
@@ -316,4 +316,4 @@ class TestLlamaClientPromptConstruction:
 
             assert "Team: 4" in prompt
             assert "8.0" in prompt
-            assert "minimize distance" in prompt
+            assert "Visit ALL" in prompt
