@@ -11,13 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import Base, engine, get_session
 from src.middleware.main import AdvancedMiddleware
 from src.routes.benchmark import router as benchmark_router
+from src.routes.force_majeure import router as force_majeure_router
 from src.routes.insights import router as insights_router
 from src.routes.llama import router as llama_router
 from src.routes.locations import router as locations_router
 from src.routes.metrics import router as metrics_router
 from src.routes.optimize import router as optimize_router
 from src.routes.qwen import router as qwen_router
+from src.routes.reps import router as reps_router
 from src.routes.routes import router as routes_router
+from src.routes.schedule import router as schedule_router
+from src.routes.visits import router as visits_router
 
 import uvicorn
 
@@ -39,6 +43,20 @@ async def lifespan(app: FastAPI):
             logger.info("Column routes.model_used ensured.")
         except Exception as e:
             logger.warning(f"Could not alter routes table: {e}")
+        # Добавляем новые колонки в locations если их нет
+        for col_def in [
+            "category VARCHAR(1)",
+            "city VARCHAR(255)",
+            "district VARCHAR(255)",
+            "address VARCHAR(500)",
+        ]:
+            col_name = col_def.split()[0]
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE locations ADD COLUMN IF NOT EXISTS {col_def}"
+                ))
+            except Exception as e:
+                logger.warning(f"Could not add column locations.{col_name}: {e}")
     yield
     logger.info("Shutting down: Closing database engine...")
     await engine.dispose()
@@ -78,6 +96,11 @@ api_v1_router.include_router(llama_router)
 api_v1_router.include_router(metrics_router)
 api_v1_router.include_router(insights_router)
 api_v1_router.include_router(routes_router)
+# Новые роутеры (Фаза 4–8)
+api_v1_router.include_router(reps_router)
+api_v1_router.include_router(schedule_router)
+api_v1_router.include_router(force_majeure_router)
+api_v1_router.include_router(visits_router)
 
 app.include_router(benchmark_router)
 app.include_router(api_v1_router)

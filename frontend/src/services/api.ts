@@ -11,7 +11,10 @@ import type {
   HealthStatus,
   ApiError,
   Insights,
-  ModelComparison
+  ModelComparison,
+  SalesRep,
+  MonthlyPlan,
+  ForceMajeureEvent
 } from './types'
 
 // Конфигурация API
@@ -284,6 +287,88 @@ export const fetchAllLocations = async (): Promise<Location[]> => {
   const response = await withRetry(() => api.get('/locations'))
   return response.data
 }
+
+// ========== СОТРУДНИКИ ==========
+
+export const fetchReps = async (): Promise<SalesRep[]> => {
+  const response = await withRetry(() => api.get('/reps/'))
+  return response.data
+}
+
+export const createRep = async (
+  name: string,
+  status: SalesRep['status'] = 'active'
+): Promise<SalesRep> => {
+  const response = await withRetry(() =>
+    api.post('/reps/', { name, status })
+  )
+  return response.data
+}
+
+export const updateRep = async (
+  repId: string,
+  data: Partial<Pick<SalesRep, 'name' | 'status'>>
+): Promise<SalesRep> => {
+  const response = await withRetry(() => api.patch(`/reps/${repId}`, data))
+  return response.data
+}
+
+export const deleteRep = async (repId: string): Promise<void> => {
+  await withRetry(() => api.delete(`/reps/${repId}`))
+}
+
+// ========== РАСПИСАНИЕ ==========
+
+export const generateSchedule = async (
+  month: string,
+  repIds?: string[]
+): Promise<{ total_visits_planned: number; coverage_pct: number }> => {
+  const response = await withRetry(() =>
+    api.post('/schedule/generate', { month, rep_ids: repIds })
+  )
+  return response.data
+}
+
+export const fetchMonthlySchedule = async (
+  month: string
+): Promise<MonthlyPlan> => {
+  const response = await withRetry(() =>
+    api.get('/schedule/', { params: { month } })
+  )
+  return response.data
+}
+
+export const fetchRepSchedule = async (
+  repId: string,
+  month: string
+): Promise<MonthlyPlan> => {
+  const response = await withRetry(() =>
+    api.get(`/schedule/${repId}`, { params: { month } })
+  )
+  return response.data
+}
+
+// ========== ФОРС-МАЖОРЫ ==========
+
+export const createForceMajeure = async (data: {
+  type: string
+  rep_id: string
+  event_date: string
+  description?: string
+}): Promise<ForceMajeureEvent> => {
+  const response = await withRetry(() => api.post('/force_majeure/', data))
+  return response.data
+}
+
+export const fetchForceMajeure = async (
+  month: string
+): Promise<ForceMajeureEvent[]> => {
+  const response = await withRetry(() =>
+    api.get('/force_majeure/', { params: { month } })
+  )
+  return response.data
+}
+
 export { api }
 export type {
   Location,
@@ -297,5 +382,8 @@ export type {
   HealthStatus,
   ApiError,
   Insights,
-  ModelComparison
+  ModelComparison,
+  SalesRep,
+  MonthlyPlan,
+  ForceMajeureEvent
 }

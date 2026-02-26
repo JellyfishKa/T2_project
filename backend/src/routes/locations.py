@@ -183,6 +183,15 @@ _XLSX_COLUMN_MAP = {
     "конец": "time_window_end",
     "время окончания": "time_window_end",
     "закрытие": "time_window_end",
+    "category": "category",
+    "категория": "category",
+    "кат": "category",
+    "city": "city",
+    "город": "city",
+    "district": "district",
+    "район": "district",
+    "address": "address",
+    "адрес тт": "address",
 }
 
 # Справочник координат районов и городов Республики Мордовия.

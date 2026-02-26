@@ -126,7 +126,9 @@ const navigation: NavigationItem[] = [
   { name: 'Home', to: '/' },
   { name: 'Dashboard', to: '/dashboard' },
   { name: 'Optimize', to: '/optimize' },
-  { name: 'Analytics', to: '/analytics' }
+  { name: 'Analytics', to: '/analytics' },
+  { name: 'Расписание', to: '/schedule' },
+  { name: 'Сотрудники', to: '/reps' },
 ]
 
 const route = useRoute()

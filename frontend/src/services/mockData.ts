@@ -5,62 +5,74 @@ export const mockLocations: Location[] = [
   {
     id: 'store-1',
     name: 'Салон Т2 Саранск Центр',
-    latitude: 54.1871,
-    longitude: 45.1749,
+    lat: 54.1871,
+    lon: 45.1749,
     address: 'ул. Советская, 35, Саранск',
     time_window_start: '09:00',
     time_window_end: '18:00',
-    priority: 1
+    category: 'A',
+    city: 'Саранск',
+    district: 'г.о. Саранск'
   },
   {
     id: 'store-2',
     name: 'Салон Т2 Проспект Ленина',
-    latitude: 54.1902,
-    longitude: 45.1685,
+    lat: 54.1902,
+    lon: 45.1685,
     address: 'пр. Ленина, 15, Саранск',
     time_window_start: '09:00',
     time_window_end: '18:00',
-    priority: 1
+    category: 'A',
+    city: 'Саранск',
+    district: 'г.о. Саранск'
   },
   {
     id: 'store-3',
     name: 'Салон Т2 Огарев Plaza',
-    latitude: 54.1845,
-    longitude: 45.1695,
+    lat: 54.1845,
+    lon: 45.1695,
     address: 'ул. Большевистская, 84, Саранск',
     time_window_start: '10:00',
     time_window_end: '20:00',
-    priority: 1
+    category: 'B',
+    city: 'Саранск',
+    district: 'г.о. Саранск'
   },
   {
     id: 'store-4',
     name: 'Салон Т2 Победы',
-    latitude: 54.1935,
-    longitude: 45.1620,
+    lat: 54.1935,
+    lon: 45.1620,
     address: 'ул. Победы, 120, Саранск',
     time_window_start: '10:00',
     time_window_end: '21:00',
-    priority: 2
+    category: 'B',
+    city: 'Саранск',
+    district: 'г.о. Саранск'
   },
   {
     id: 'store-5',
     name: 'Салон Т2 Рузаевка',
-    latitude: 54.0620,
-    longitude: 44.9500,
+    lat: 54.0620,
+    lon: 44.9500,
     address: 'ул. Ленина, 1, Рузаевка',
     time_window_start: '09:00',
     time_window_end: '17:00',
-    priority: 2
+    category: 'C',
+    city: 'Рузаевка',
+    district: 'Рузаевский район'
   },
   {
     id: 'store-6',
     name: 'Салон Т2 Ковылкино',
-    latitude: 54.0380,
-    longitude: 43.9190,
+    lat: 54.0380,
+    lon: 43.9190,
     address: 'ул. Свердлова, 12, Ковылкино',
     time_window_start: '09:00',
     time_window_end: '17:00',
-    priority: 2
+    category: 'D',
+    city: 'Ковылкино',
+    district: 'Ковылкинский район'
   }
 ]
 

@@ -164,32 +164,36 @@ describe('API Service', () => {
   describe('getInsights', () => {
     it('should fetch insights', async () => {
       const mockInsights = {
-        total_routes: 42,
-        total_distance_km: 1250.5,
-        total_cost_rub: 87500,
-        average_quality_score: 0.87,
-        popular_models: [
-          { model: 'qwen', count: 25 },
-          { model: 'llama', count: 12 }
-        ],
-        cost_savings: {
-          estimated_savings_rub: 12500,
-          percentage: 12.5
+        month: '2026-02',
+        total_tt: 250,
+        coverage_pct: 85.0,
+        visits_this_month: {
+          planned: 520,
+          completed: 410,
+          completion_rate: 78.8
         },
-        recent_activity: [
-          { date: '2026-02-10', routes_count: 5 },
-          { date: '2026-02-11', routes_count: 8 },
-          { date: '2026-02-12', routes_count: 12 },
-          { date: '2026-02-13', routes_count: 7 }
-        ]
+        by_category: {
+          A: { total: 50, planned: 150, completed: 120, pct: 80.0 },
+          B: { total: 75, planned: 150, completed: 110, pct: 73.3 },
+          C: { total: 50, planned: 50, completed: 40, pct: 80.0 },
+          D: { total: 75, planned: 75, completed: 60, pct: 80.0 }
+        },
+        by_district: [
+          { district: 'г.о. Саранск', total: 30, coverage_pct: 90.0 }
+        ],
+        rep_activity: [
+          { rep_id: 'rep-1', rep_name: 'Иванов И.И.', outings_count: 18, tt_visited: 95 }
+        ],
+        force_majeure_count: 2
       }
 
       mockedAxios.get.mockResolvedValue({ data: mockInsights })
 
       const result = await getInsights()
 
-      expect(result.total_routes).toBe(42)
-      expect(result.popular_models).toHaveLength(2)
+      expect(result.total_tt).toBe(250)
+      expect(result.coverage_pct).toBe(85.0)
+      expect(result.by_district).toHaveLength(1)
       expect(mockedAxios.get).toHaveBeenCalledWith('/insights')
     })
   })
@@ -385,8 +389,8 @@ describe('API Service', () => {
           {
             id: 'loc-1',
             name: 'Store 1',
-            latitude: 55.7558,
-            longitude: 37.6173
+            lat: 55.7558,
+            lon: 37.6173
           }
         ],
         num_iterations: 5

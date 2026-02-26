@@ -45,15 +45,17 @@ class Optimizer:
         self,
         db_loc: DBLocation,
     ) -> PydanticLocation:
+        # Используем реальную категорию ТТ; при её отсутствии — "C" (средний приоритет)
+        priority = db_loc.category if db_loc.category in ("A", "B", "C", "D") else "C"
         return PydanticLocation(
             ID=db_loc.id,
             name=db_loc.name,
-            address=db_loc.name,
+            address=getattr(db_loc, "address", None) or db_loc.name,
             lat=db_loc.lat,
             lon=db_loc.lon,
             time_window_start=db_loc.time_window_start,
             time_window_end=db_loc.time_window_end,
-            priority="A",
+            priority=priority,
         )
 
     def _calculate_real_metrics(

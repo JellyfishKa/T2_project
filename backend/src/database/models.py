@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 from sqlalchemy import (
-    Column, DateTime, Float,
-    ForeignKey, Integer, JSON, String)
+    Column, Date, DateTime, Float,
+    ForeignKey, Integer, JSON, String, Text, Time)
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -42,9 +42,111 @@ class Location(Base):
     lon = Column(Float, nullable=False)
     time_window_start = Column(String, nullable=False)
     time_window_end = Column(String, nullable=False)
+    # Новые поля (Фаза 1)
+    category = Column(String(1), nullable=True)   # A | B | C | D
+    city = Column(String(255), nullable=True)
+    district = Column(String(255), nullable=True)  # Саранск, Ардатовский р-н, …
+    address = Column(String(500), nullable=True)
 
     def __repr__(self):
-        return f"<Location(id={self.id}, name={self.name})>"
+        return f"<Location(id={self.id}, name={self.name}, category={self.category})>"
+
+
+class SalesRep(Base):
+    """Торговый представитель."""
+    __tablename__ = "sales_reps"
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="active")
+    # active | sick | vacation | unavailable
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
+
+    schedules = relationship("VisitSchedule", back_populates="rep",
+                             cascade="all, delete-orphan")
+    visits = relationship("VisitLog", back_populates="rep",
+                          cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<SalesRep(id={self.id}, name={self.name}, status={self.status})>"
+
+
+class VisitSchedule(Base):
+    """Плановый визит торгового представителя к ТТ."""
+    __tablename__ = "visit_schedule"
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    location_id = Column(String, ForeignKey("locations.id"), nullable=False, index=True)
+    rep_id = Column(String, ForeignKey("sales_reps.id", ondelete="CASCADE"),
+                    nullable=False, index=True)
+    planned_date = Column(Date, nullable=False, index=True)
+    status = Column(String, nullable=False, default="planned")
+    # planned | completed | skipped | rescheduled | cancelled
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
+
+    location = relationship("Location")
+    rep = relationship("SalesRep", back_populates="schedules")
+    visit_log = relationship("VisitLog", back_populates="schedule",
+                             cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return (f"<VisitSchedule(rep={self.rep_id}, loc={self.location_id},"
+                f" date={self.planned_date}, status={self.status})>")
+
+
+class VisitLog(Base):
+    """Фактический визит торгового представителя к ТТ."""
+    __tablename__ = "visit_log"
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    schedule_id = Column(String, ForeignKey("visit_schedule.id", ondelete="SET NULL"),
+                         nullable=True, index=True)
+    location_id = Column(String, ForeignKey("locations.id"), nullable=False, index=True)
+    rep_id = Column(String, ForeignKey("sales_reps.id", ondelete="CASCADE"),
+                    nullable=False, index=True)
+    visited_date = Column(Date, nullable=False, index=True)
+    time_in = Column(Time, nullable=True)
+    time_out = Column(Time, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
+
+    schedule = relationship("VisitSchedule", back_populates="visit_log")
+    location = relationship("Location")
+    rep = relationship("SalesRep", back_populates="visits")
+
+    def __repr__(self):
+        return (f"<VisitLog(rep={self.rep_id}, loc={self.location_id},"
+                f" date={self.visited_date})>")
+
+
+class ForceMajeureEvent(Base):
+    """Форс-мажорное событие с перераспределением ТТ."""
+    __tablename__ = "force_majeure_events"
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    type = Column(String, nullable=False)
+    # illness | weather | vehicle_breakdown | other
+    rep_id = Column(String, ForeignKey("sales_reps.id", ondelete="CASCADE"),
+                    nullable=False, index=True)
+    event_date = Column(Date, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    affected_tt_ids = Column(JSON, default=list)
+    redistributed_to = Column(JSON, default=list)
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
+
+    rep = relationship("SalesRep")
+
+    def __repr__(self):
+        return (f"<ForceMajeureEvent(type={self.type}, rep={self.rep_id},"
+                f" date={self.event_date})>")
 
 
 class Route(Base):

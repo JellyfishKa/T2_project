@@ -28,6 +28,18 @@ const router = createRouter({
       component: () => import('../views/AnalyticsView.vue'),
       meta: { title: 'Analytics - T2 LLM Platform' }
     },
+    {
+      path: '/schedule',
+      name: 'schedule',
+      component: () => import('../views/ScheduleView.vue'),
+      meta: { title: 'Расписание - T2 Platform' }
+    },
+    {
+      path: '/reps',
+      name: 'reps',
+      component: () => import('../views/RepsView.vue'),
+      meta: { title: 'Сотрудники - T2 Platform' }
+    },
     // Redirect to home if route not found
     {
       path: '/:pathMatch(.*)*',

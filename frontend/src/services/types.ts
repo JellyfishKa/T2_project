@@ -1,14 +1,19 @@
+// ─── Location ───────────────────────────────────────────────────────────────
 export interface Location {
   id: string
   name: string
-  latitude: number
-  longitude: number
-  address: string
+  lat: number
+  lon: number
   time_window_start: string
   time_window_end: string
-  priority: number
+  // Новые поля (Фаза 1)
+  category: 'A' | 'B' | 'C' | 'D' | null
+  city: string | null
+  district: string | null
+  address: string | null
 }
 
+// ─── Route (оптимизация) ────────────────────────────────────────────────────
 export interface Route {
   id: string
   name: string
@@ -26,6 +31,94 @@ export interface RouteDetails extends Route {
   locations_data: Location[]
 }
 
+// ─── Sales Reps ─────────────────────────────────────────────────────────────
+export interface SalesRep {
+  id: string
+  name: string
+  status: 'active' | 'sick' | 'vacation' | 'unavailable'
+  created_at: string
+}
+
+// ─── Schedule ────────────────────────────────────────────────────────────────
+export interface VisitScheduleItem {
+  id: string
+  location_id: string
+  location_name: string
+  location_category: 'A' | 'B' | 'C' | 'D' | null
+  rep_id: string
+  rep_name: string
+  planned_date: string
+  status: 'planned' | 'completed' | 'skipped' | 'rescheduled' | 'cancelled'
+}
+
+export interface DailyRoute {
+  rep_id: string
+  rep_name: string
+  date: string
+  visits: VisitScheduleItem[]
+  total_tt: number
+  estimated_duration_hours: number
+}
+
+export interface MonthlyPlan {
+  month: string
+  routes: DailyRoute[]
+  total_tt_planned: number
+  coverage_pct: number
+}
+
+// ─── Force Majeure ──────────────────────────────────────────────────────────
+export interface ForceMajeureEvent {
+  id: string
+  type: 'illness' | 'weather' | 'vehicle_breakdown' | 'other'
+  rep_id: string
+  rep_name: string
+  event_date: string
+  description: string | null
+  affected_tt_count: number
+  redistributed_to: Array<{
+    rep_id: string
+    rep_name: string
+    location_ids: string[]
+    new_date: string
+  }>
+  created_at: string
+}
+
+// ─── Insights ────────────────────────────────────────────────────────────────
+export interface Insights {
+  month: string
+  total_tt: number
+  coverage_pct: number
+  visits_this_month: {
+    planned: number
+    completed: number
+    completion_rate: number
+  }
+  by_category: Record<
+    'A' | 'B' | 'C' | 'D',
+    {
+      total: number
+      planned: number
+      completed: number
+      pct: number
+    }
+  >
+  by_district: Array<{
+    district: string
+    total: number
+    coverage_pct: number
+  }>
+  rep_activity: Array<{
+    rep_id: string
+    rep_name: string
+    outings_count: number
+    tt_visited: number
+  }>
+  force_majeure_count: number
+}
+
+// ─── Metrics / Benchmark ─────────────────────────────────────────────────────
 export interface Metric {
   id: string
   route_id: string
@@ -52,28 +145,19 @@ export interface BenchmarkRequest {
   test_locations: Array<{
     id: string
     name: string
-    latitude: number
-    longitude: number
+    lat: number
+    lon: number
   }>
   num_iterations: number
 }
 
 export interface OptimizeRequest {
-  locations: Array<{
-    id: string
-    name: string
-    latitude: number
-    longitude: number
-    time_window_start: string
-    time_window_end: string
-  }>
-  constraints: {
-    vehicle_capacity?: number
-    max_distance_km?: number
-    start_time?: string
-    end_time?: string
+  location_ids: string[]
+  model?: string
+  constraints?: {
+    max_stops_per_route?: number
+    time_window_minutes?: number
   }
-  preferred_model: string
 }
 
 export interface PaginatedResponse<T> {
@@ -95,26 +179,6 @@ export interface ApiError {
   message: string
   code?: string
   details?: Record<string, any>
-}
-
-// Новые типы для FE-6
-export interface Insights {
-  total_routes: number
-  total_distance_km: number
-  total_cost_rub: number
-  average_quality_score: number
-  popular_models: Array<{
-    model: string
-    count: number
-  }>
-  cost_savings: {
-    estimated_savings_rub: number
-    percentage: number
-  }
-  recent_activity: Array<{
-    date: string
-    routes_count: number
-  }>
 }
 
 export interface ModelComparison {
