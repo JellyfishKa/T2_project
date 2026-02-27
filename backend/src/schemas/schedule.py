@@ -21,8 +21,18 @@ class VisitScheduleItem(BaseModel):
     rep_name: str
     planned_date: date
     status: str
+    time_in: Optional[str] = None   # HH:MM из visit_log
+    time_out: Optional[str] = None  # HH:MM из visit_log
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class VisitStatusUpdate(BaseModel):
+    """Тело запроса для PATCH /schedule/{visit_id}."""
+    status: Literal["completed", "skipped", "cancelled", "rescheduled", "planned"]
+    time_in: Optional[str] = None    # "HH:MM" — время прихода
+    time_out: Optional[str] = None   # "HH:MM" — время выхода
+    notes: Optional[str] = None
 
 
 class DailyRoute(BaseModel):
@@ -32,6 +42,7 @@ class DailyRoute(BaseModel):
     visits: List[VisitScheduleItem]
     total_tt: int
     estimated_duration_hours: float
+    lunch_break_at: Optional[str] = None  # "HH:MM", фиксированный обед
 
 
 class MonthlyPlan(BaseModel):

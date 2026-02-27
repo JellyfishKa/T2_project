@@ -14,7 +14,8 @@ import type {
   ModelComparison,
   SalesRep,
   MonthlyPlan,
-  ForceMajeureEvent
+  ForceMajeureEvent,
+  VisitScheduleItem
 } from './types'
 
 // Конфигурация API
@@ -348,6 +349,23 @@ export const fetchRepSchedule = async (
   return response.data
 }
 
+// ========== ВИЗИТЫ: ОБНОВЛЕНИЕ СТАТУСА ==========
+
+export const updateVisitStatus = async (
+  visitId: string,
+  data: {
+    status: 'completed' | 'skipped' | 'cancelled' | 'rescheduled' | 'planned'
+    time_in?: string
+    time_out?: string
+    notes?: string
+  }
+): Promise<VisitScheduleItem> => {
+  const response = await withRetry(() =>
+    api.patch(`/schedule/${visitId}`, data)
+  )
+  return response.data
+}
+
 // ========== ФОРС-МАЖОРЫ ==========
 
 export const createForceMajeure = async (data: {
@@ -385,5 +403,6 @@ export type {
   ModelComparison,
   SalesRep,
   MonthlyPlan,
-  ForceMajeureEvent
+  ForceMajeureEvent,
+  VisitScheduleItem
 }

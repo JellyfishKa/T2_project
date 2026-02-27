@@ -8,9 +8,10 @@
    B → 2 визита (1-я и 3-я рабочие недели)
    C → 1 визит (середина месяца)
    D → 1 визит в квартал (если текущий квартал совпадает)
-3. Собирает пул (location_id, planned_date).
-4. Распределяет по сотрудникам round-robin с ограничением MAX_TT_PER_DAY.
-5. Внутри дня сортирует: сначала A, потом B, C, D.
+3. Собирает пул (location_id, planned_date, category).
+4. Сортирует задачи по (дата, приоритет A→B→C→D).
+5. Для каждой задачи ищет ближайший свободный слот (date, rep)
+   начиная с целевой даты — сотрудника с наибольшим остатком слотов.
 6. Сохраняет в visit_schedule (batch insert).
 """
 
@@ -35,11 +36,12 @@ WORK_START_HOUR = 9
 WORK_END_HOUR = 18
 VISIT_DURATION_MIN = 15        # минут на одну ТТ
 AVG_TRAVEL_MIN_PER_TT = 20    # средние затраты времени на переезд к ТТ
+LUNCH_BREAK_MIN = 30           # обед
 WORK_MINUTES = (WORK_END_HOUR - WORK_START_HOUR) * 60   # 540 мин
 
 MAX_TT_PER_DAY = math.floor(
-    WORK_MINUTES / (VISIT_DURATION_MIN + AVG_TRAVEL_MIN_PER_TT)
-)   # ≈ 15 ТТ/день
+    (WORK_MINUTES - LUNCH_BREAK_MIN) / (VISIT_DURATION_MIN + AVG_TRAVEL_MIN_PER_TT)
+)   # floor(510/35) = 14 ТТ/день
 
 CATEGORY_PRIORITY = {"A": 1, "B": 2, "C": 3, "D": 4}
 
@@ -107,6 +109,14 @@ def _visit_dates(
     return []
 
 
+def _next_working_day(d: date) -> date:
+    """Следующий рабочий день после d."""
+    nxt = d + timedelta(days=1)
+    while nxt.weekday() >= 5:
+        nxt += timedelta(days=1)
+    return nxt
+
+
 # ---------------------------------------------------------------------------
 # Основной планировщик
 # ---------------------------------------------------------------------------
@@ -137,7 +147,7 @@ class SchedulePlanner:
         if not reps:
             return {"error": "Нет активных сотрудников"}
         if not locations:
-            return {"error": "Нет торговых точек в базе"}
+            return {"error": "Нет торговых точек с категорией A/B/C/D в базе"}
 
         # --- Рабочие дни и недели ---
         all_days = _working_days(year, month)
@@ -149,7 +159,7 @@ class SchedulePlanner:
         # --- Строим пул задач: [(location_id, date, category), ...] ---
         task_pool: List[Tuple[str, date, str]] = []
         for loc in locations:
-            cat = loc.category or "C"
+            cat = loc.category  # уже отфильтровано до A/B/C/D
             dates = _visit_dates(cat, work_weeks, all_days, quarter_start_month, month)
             for d in dates:
                 task_pool.append((loc.id, d, cat))
@@ -168,50 +178,49 @@ class SchedulePlanner:
             await self.db.flush()
 
         # --- Распределение по сотрудникам ---
-        # Группируем задачи по дате, внутри дня сортируем A→B→C→D
-        by_date: Dict[date, List[Tuple[str, str]]] = defaultdict(list)
-        for (loc_id, d, cat) in task_pool:
-            by_date[d].append((loc_id, cat))
+        # Сортируем задачи по (целевая дата, приоритет категории)
+        sorted_tasks = sorted(
+            task_pool,
+            key=lambda t: (t[1], CATEGORY_PRIORITY.get(t[2], 4))
+        )
 
-        for d in by_date:
-            by_date[d].sort(key=lambda x: CATEGORY_PRIORITY.get(x[1], 4))
-
-        # Round-robin по сотрудникам с ограничением MAX_TT_PER_DAY
-        rep_count = len(reps)
-        rep_day_loads: Dict[Tuple[str, date], int] = defaultdict(int)
+        # Для каждой (дата, сотрудник) храним оставшиеся слоты
+        rep_day_slots: Dict[Tuple[str, date], int] = defaultdict(lambda: MAX_TT_PER_DAY)
         schedule_rows: List[VisitSchedule] = []
 
-        for d in sorted(by_date.keys()):
-            tasks = by_date[d]
-            rep_idx = 0
-            for (loc_id, cat) in tasks:
-                # Ищем сотрудника у которого меньше MAX_TT_PER_DAY на этот день
-                assigned = False
-                for _ in range(rep_count):
-                    rep = reps[rep_idx % rep_count]
-                    key = (rep.id, d)
-                    if rep_day_loads[key] < MAX_TT_PER_DAY:
-                        schedule_rows.append(VisitSchedule(
-                            location_id=loc_id,
-                            rep_id=rep.id,
-                            planned_date=d,
-                            status="planned",
-                        ))
-                        rep_day_loads[key] += 1
-                        rep_idx += 1
-                        assigned = True
-                        break
-                    rep_idx += 1
-                if not assigned:
-                    # Если все забиты — добавляем через день
-                    next_day = _next_working_day(d)
-                    rep = reps[0]
+        for (loc_id, target_d, cat) in sorted_tasks:
+            check_date = target_d
+            assigned = False
+
+            # Ограниченный lookahead: не дальше ~2 месяца
+            for _ in range(len(all_days) + 31):
+                # Пропускаем выходные
+                if check_date.weekday() >= 5:
+                    check_date = _next_working_day(check_date)
+                    continue
+
+                # Выбираем сотрудника с наибольшим остатком слотов (fairness)
+                best_rep = max(
+                    reps,
+                    key=lambda r: rep_day_slots[(r.id, check_date)],
+                )
+                if rep_day_slots[(best_rep.id, check_date)] > 0:
                     schedule_rows.append(VisitSchedule(
                         location_id=loc_id,
-                        rep_id=rep.id,
-                        planned_date=next_day,
+                        rep_id=best_rep.id,
+                        planned_date=check_date,
                         status="planned",
                     ))
+                    rep_day_slots[(best_rep.id, check_date)] -= 1
+                    assigned = True
+                    break
+
+                check_date = _next_working_day(check_date)
+
+            if not assigned:
+                logger.warning(
+                    "Не удалось запланировать ТТ %s в месяце %s", loc_id, month_str
+                )
 
         # --- Batch insert ---
         for row in schedule_rows:
@@ -221,11 +230,13 @@ class SchedulePlanner:
         # --- Статистика ---
         total_locations = len(locations)
         planned_locs = {row.location_id for row in schedule_rows}
-        coverage_pct = round(len(planned_locs) / total_locations * 100, 1) if total_locations else 0
+        coverage_pct = (
+            round(len(planned_locs) / total_locations * 100, 1) if total_locations else 0
+        )
 
         logger.info(
-            "Месячный план %s: %d визитов, %d ТТ охвачено (%.1f%%)",
-            month_str, len(schedule_rows), len(planned_locs), coverage_pct,
+            "Месячный план %s: %d визитов, %d ТТ охвачено (%.1f%%), max %d ТТ/день/сотрудник",
+            month_str, len(schedule_rows), len(planned_locs), coverage_pct, MAX_TT_PER_DAY,
         )
         return {
             "month": month_str,
@@ -233,11 +244,14 @@ class SchedulePlanner:
             "total_tt_planned": len(planned_locs),
             "total_locations": total_locations,
             "coverage_pct": coverage_pct,
-            "reps_count": rep_count,
+            "reps_count": len(reps),
         }
 
     async def _load_locations(self) -> List[Location]:
-        result = await self.db.execute(select(Location))
+        """Загружает только ТТ с категорией A/B/C/D (исключает данные без категории)."""
+        result = await self.db.execute(
+            select(Location).where(Location.category.in_(["A", "B", "C", "D"]))
+        )
         return result.scalars().all()
 
     async def _load_reps(self, rep_ids: Optional[List[str]]) -> List[SalesRep]:
@@ -246,11 +260,3 @@ class SchedulePlanner:
             stmt = stmt.where(SalesRep.id.in_(rep_ids))
         result = await self.db.execute(stmt)
         return result.scalars().all()
-
-
-def _next_working_day(d: date) -> date:
-    """Следующий рабочий день после d."""
-    nxt = d + timedelta(days=1)
-    while nxt.weekday() >= 5:
-        nxt += timedelta(days=1)
-    return nxt

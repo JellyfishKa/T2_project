@@ -49,6 +49,8 @@ export interface VisitScheduleItem {
   rep_name: string
   planned_date: string
   status: 'planned' | 'completed' | 'skipped' | 'rescheduled' | 'cancelled'
+  time_in?: string | null   // "HH:MM" — время прихода
+  time_out?: string | null  // "HH:MM" — время выхода
 }
 
 export interface DailyRoute {
@@ -58,6 +60,7 @@ export interface DailyRoute {
   visits: VisitScheduleItem[]
   total_tt: number
   estimated_duration_hours: number
+  lunch_break_at?: string  // "HH:MM"
 }
 
 export interface MonthlyPlan {
