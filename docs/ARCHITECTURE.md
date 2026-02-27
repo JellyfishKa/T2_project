@@ -1,426 +1,332 @@
 # АРХИТЕКТУРА И ТЕХНИЧЕСКИЙ ДИЗАЙН
 
-**Архитектура системы, потоки данных и технические решения**
+> Последнее обновление: 27 февраля 2026 (Неделя 4)
 
 ---
 
 ## Обзор архитектуры
 
 ```
-+---------------------------------------------+
-|      Frontend (Vue 3 + TypeScript)          |
-|  - Dashboard, Формы, Визуализация маршрутов |
-+----------------------+----------------------+
-                       |
-                       v (HTTP/REST)
-+---------------------------------------------+
-|      Backend API (FastAPI + Python)         |
-|  - LLM клиенты, Оптимизация маршрутов, Cache|
-+---------+-----------------+-----------------+
-          |                 |
-          v                 v
-    +-----------+    +--------------+
-    |   LLM     |    |   Database   |
-    |  Models   |    | (PostgreSQL) |
-    |           |    |              |
-    | Qwen      |    | Маршруты     |
-    | Llama     |    | Метрики      |
-    |           |    | Cache        |
-    +-----------+    +--------------+
++-------------------------------------------------------+
+|            Frontend (Vue 3 + TypeScript)              |
+|  AnalyticsView | ScheduleView | OptimizeView | Reps   |
++------------------------+------------------------------+
+                         |
+                         v  HTTP/REST (/api/v1/...)
++-------------------------------------------------------+
+|            Backend API (FastAPI + Python)             |
+|  optimize | schedule | reps | force_majeure | visits  |
+|  export   | import   | insights | metrics | locations |
++----------+----------------+-----------+---------------+
+           |                |           |
+           v                v           v
+    +-----------+   +-----------+  +----------+
+    |    LLM    |   | PostgreSQL|  |  openpyxl|
+    |  Qwen 0.5B|   |   (ORM)   |  | (Excel)  |
+    |  Llama 1B |   |           |  +----------+
+    +-----------+   +-----------+
 ```
 
 ---
 
-## Основные компоненты
+## Слой базы данных
 
-### 1. Интерфейс LLM клиента
+### Таблицы
 
-**Design Pattern**: Strategy + Adapter
+| Таблица | Назначение |
+|---------|-----------|
+| `locations` | Торговые точки (ТТ): координаты, категория A/B/C/D, адрес |
+| `routes` | Оптимизированные маршруты (результаты LLM) |
+| `metrics` | Метрики LLM-запросов (время, качество, стоимость) |
+| `optimization_results` | История оптимизаций |
+| `sales_reps` | Торговые представители (статус: active/sick/vacation/unavailable) |
+| `visit_schedule` | Плановые визиты (FK → rep, location, дата, статус) |
+| `visit_log` | Фактические визиты с `time_in`/`time_out` |
+| `force_majeure_events` | Форс-мажоры с JSON перераспределения визитов |
+
+### Связи
+
+```
+SalesRep ─────────────┐
+                       │ (rep_id)
+Location ──────────────┤
+                       │
+                  VisitSchedule ──── VisitLog
+                       │              (schedule_id)
+                       │
+             ForceMajeureEvent
+                  (rep_id -> redistributed_to JSON)
+```
+
+### Миграции Alembic
+
+| Версия | Содержимое |
+|--------|-----------|
+| `001_initial_schema` | `locations`, `routes`, `metrics`, `optimization_results` |
+| `002_add_reps_schedule` | `sales_reps`, `visit_schedule`, `visit_log`, `force_majeure_events`; расширение `locations`: category, city, district, address |
+
+---
+
+## Слой Backend
+
+### Структура маршрутов (routes)
+
+```
+backend/src/routes/
+  optimize.py          POST /optimize, /optimize/variants, /optimize/confirm
+  schedule.py          POST /generate, GET /, PATCH /{id}/status, GET /daily
+  reps.py              GET/POST/PATCH/DELETE /reps
+  force_majeure.py     POST/GET /force_majeure
+  visits.py            POST/GET /visits
+  export.py            GET /export/schedule   (Excel 4 листа)
+  import_excel.py      POST /import/schedule  (Excel -> БД)
+  insights.py          GET /insights
+  metrics.py           GET /metrics
+  locations.py         GET/POST /locations
+  routes.py            GET /routes
+  qwen.py              POST /qwen/optimize
+  llama.py             POST /llama/optimize
+```
+
+### Сервисный слой
+
+```
+backend/src/services/
+  optimize.py              Optimizer.optimize() / generate_variants() / confirm_variant()
+  schedule_planner.py      SchedulePlanner.generate_monthly_plan()
+  force_majeure_service.py ForceMajeureService.redistribute()
+```
+
+### LLM-клиенты (Strategy Pattern)
 
 ```python
-# Базовый интерфейс
 class LLMClient(ABC):
     @abstractmethod
-    async def generate_route(routes: List[Location]) -> str
+    async def generate_route(locations: List[Location]) -> str: ...
 
-    @abstractmethod
-    async def analyze_metrics(data: Dict) -> str
-
-# Реализации
 class QwenClient(LLMClient):
-    # Основная модель (лучшее качество)
+    """Qwen2-0.5B-Instruct-Q4_K_M.gguf — основная модель"""
 
 class LlamaClient(LLMClient):
-    # Fallback модель (максимальная надежность, open-source)
+    """Llama-3.2-1B-Instruct-Q4_K_M.gguf — fallback"""
 ```
 
-**Стратегия fallback**:
-```
-Пробуем Qwen (Primary)
-  | (если fail)
-Пробуем Llama (Fallback)
-  | (если fail)
-Возвращаем ошибку
-```
-
-**Почему такой дизайн**:
-- Развязанные реализации (легко добавить новые модели)
-- Автоматический fallback (без ручного вмешательства)
-- Тестируемый (mock каждый клиент отдельно)
-- Расширяемый (добавь новые модели без изменения core)
-
----
-
-### 2. API маршруты
-
-**Структура endpoints**:
+### Fallback-цепочка оптимизации
 
 ```
-POST /qwen/optimize
-|-- Вход: List[Location], ограничения
-|-- Процесс: QwenClient генерирует маршруты
-|-- Выход: OptimizedRoute (последовательность, время, стоимость)
-
-POST /llama/optimize
-|-- Вход: List[Location], ограничения
-|-- Процесс: LlamaClient генерирует маршруты
-|-- Выход: OptimizedRoute
-
-GET /health
-|-- Выход: HealthStatus (все сервисы работают?)
+POST /optimize
+    |
+    v
+[Qwen] -- успех --> OptimizeResponse (model_used="qwen")
+    |
+  ошибка
+    |
+    v
+[Llama] -- успех --> OptimizeResponse (model_used="llama", fallback_reason="...")
+    |
+  ошибка
+    |
+    v
+[Greedy] -- всегда работает --> OptimizeResponse (model_used="greedy")
 ```
 
-**Обработка ошибок**:
+### Алгоритм SchedulePlanner
+
 ```
-200 OK: Успех
-400 Bad Request: Некорректный вход
-500 Internal Error: Backend ошибка
-503 Service Unavailable: Все модели недоступны
+Входные данные: список ТТ (с категориями), список ТП, месяц
+
+Определяем частоту визитов по категории:
+  A -> 3/мес   B -> 2/мес   C -> 1/мес   D -> 1/квартал
+
+Константы:
+  WORK_MINUTES   = 540  (09:00-18:00)
+  LUNCH_BREAK    = 30 мин
+  VISIT_DURATION = 15 мин
+  AVG_TRAVEL     = 20 мин
+  MAX_TT_PER_DAY = floor((540-30) / 35) = 14
+
+Итерируем по рабочим дням (Пн-Пт):
+  Для каждого ТП: назначаем ТТ (приоритет A->B->C->D)
+  Проверяем: count(ТП, день) <= MAX_TT_PER_DAY
+
+Сохраняем VisitSchedule в БД
 ```
 
----
+### Excel экспорт/импорт
 
-### 3. Схема базы данных
+```
+Экспорт (export.py):
+  openpyxl.Workbook() -> 4 листа -> BytesIO -> StreamingResponse
 
-**Ключевые сущности**:
-
-```sql
--- Маршруты
-CREATE TABLE routes (
-    id UUID PRIMARY KEY,
-    name VARCHAR(255),
-    locations JSONB,  -- List of store locations
-    optimized_sequence VARCHAR(255),
-    total_distance FLOAT,
-    total_time INTEGER,  -- секунды
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
-
--- Метрики
-CREATE TABLE metrics (
-    id UUID PRIMARY KEY,
-    route_id UUID REFERENCES routes(id),
-    model VARCHAR(50),  -- qwen, llama
-    response_time_ms INTEGER,
-    quality_score FLOAT,  -- 0-100
-    cost FLOAT,  -- стоимость модели
-    timestamp TIMESTAMP
-);
-
--- Cache
-CREATE TABLE cache (
-    key VARCHAR(255) PRIMARY KEY,
-    value JSONB,
-    expires_at TIMESTAMP
-);
+Импорт (import_excel.py):
+  UploadFile -> openpyxl.load_workbook(data_only=True)
+  -> iter_rows(min_row=3)
+  -> матчинг по (planned_date, rep_name -> rep.id, loc_name -> loc.id)
+  -> обновление VisitSchedule.status
+  -> если completed + время -> создание/обновление VisitLog
+  -> commit -> {updated, skipped, errors[:20]}
 ```
 
 ---
 
-### 4. Архитектура Frontend
+## Слой Frontend
 
-**Иерархия компонентов**:
+### Страницы (Views)
 
-```
-App.vue
-|-- Header (лого, навигация)
-|-- Dashboard.vue
-|   |-- RouteMap.vue (визуализация)
-|   |-- MetricsPanel.vue (статистика)
-|   |-- ResultsTable.vue (детали)
-|-- OptimizeView.vue
-|   |-- OptimizationForm.vue (входы)
-|   |-- ConstraintsPanel.vue (опции)
-|   |-- ProgressBar.vue (loading)
-|-- AnalyticsView.vue
-    |-- PerformanceChart.vue
-    |-- ComparisonTable.vue
-    |-- ExportButton.vue
-```
+| Файл | Маршрут | Назначение |
+|------|---------|-----------|
+| `DashboardView.vue` | `/` | Сводная статистика |
+| `OptimizeView.vue` | `/optimize` | Форма оптимизации маршрута |
+| `AnalyticsView.vue` | `/analytics` | Аналитика + Excel импорт/экспорт |
+| `ScheduleView.vue` | `/schedule` | Месячный календарь + Day modal |
+| `RepsView.vue` | `/reps` | CRUD торговых представителей |
 
-**Управление состоянием**:
-- Используй Pinia для глобального состояния
-- Store: маршруты, метрики, UI состояние
-- Actions: fetchRoutes, optimizeRoute, benchmarkModels
+### Сервисный слой (api.ts)
 
-**API коммуникация**:
 ```typescript
-// api.ts
-export const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL,
-    timeout: 30000
-});
+// Оптимизация
+optimize(locationIds, model)
+optimizeVariants(locationIds, model, opts)
+confirmVariant(payload)
+
+// Расписание
+fetchMonthlyPlan(month, repId?)
+updateVisitStatus(id, status, timeIn?, timeOut?)
+
+// Сотрудники
+fetchReps(), createRep(data), updateRep(id, data), deleteRep(id)
+
+// Excel
+downloadScheduleExcel(month)
+importScheduleExcel(file)
+
+// Аналитика
+fetchRoutes(offset, limit), getMetrics()
+compareModels().catch(() => null)
+getInsights().catch(() => null)
 ```
 
----
+### Ключевые паттерны Frontend
 
-## Потоки данных
+Graceful degradation для optional endpoints:
 
-### Поток оптимизации маршрутов
-
-```
-Вход пользователя (магазины, ограничения)
-    |
-Frontend валидирует
-    |
-POST /qwen/optimize (или /llama/optimize)
-    |
-Backend LLMClient.generate_route()
-    |
-Qwen (попытка 1)
-    | (fail? -> Llama)
-    | (fail? -> ошибка)
-    |
-Алгоритмическая оптимизация
-    |
-Сохранить в базу
-    |
-Возвращаем optimized_sequence + model_used
-    |
-Frontend визуализирует на карте
-    |
-Отображаем метрики + сбережения
+```typescript
+const [routesData, metricsData, comparisonData, insightsData] = await Promise.all([
+  fetchRoutes(0, 100),
+  getMetrics(),
+  compareModels().catch(() => null),
+  getInsights().catch(() => null),
+])
 ```
 
-### Агрегация метрик
+Вычисление времени на ТТ:
 
-```
-ML бенчмарки
-    |
-Запустить все 2 модели на test данных
-    |
-Измеряем: response_time, quality, cost
-    |
-Сохранить в базу
-    |
-Dashboard отображает сравнение
-    |
-Рекомендация: какую модель использовать
-```
-
----
-
-## Конфигурация
-
-### Переменные окружения
-
-```env
-# Database
-DATABASE_URL=postgresql://user:pass@localhost/t2_db
-
-# LLM Models
-QWEN_API_ENDPOINT=local
-QWEN_MODEL_ID=qwen2-0_5b-instruct-q4_k_m.gguf
-
-LLAMA_API_ENDPOINT=local
-LLAMA_MODEL_ID=Llama-3.2-1B-Instruct-Q4_K_M.gguf
-
-HF_TOKEN=your_hf_token
-
-# Cache
-REDIS_URL=redis://localhost:6379
-
-# API
-API_PORT=8000
-DEBUG=false
-
-# Frontend
-VITE_API_URL=http://localhost:8000
-```
-
-### Feature flags
-
-```python
-# Включить/отключить модели во время выполнения
-ENABLED_MODELS = {
-    'qwen': os.getenv('ENABLE_QWEN', 'true') == 'true',
-    'llama': True,  # Всегда включена (локальная, fallback)
+```typescript
+function visitDuration(visit: VisitScheduleItem): number | null {
+  if (!visit.time_in || !visit.time_out) return null
+  const [h1, m1] = visit.time_in.split(':').map(Number)
+  const [h2, m2] = visit.time_out.split(':').map(Number)
+  const diff = (h2 * 60 + m2) - (h1 * 60 + m1)
+  return diff > 0 ? diff : null
 }
-
-# Cache настройки
-CACHE_TTL = int(os.getenv('CACHE_TTL', 3600))
-USE_CACHE = os.getenv('USE_CACHE') == 'true'
 ```
 
 ---
 
-## Стратегия тестирования
+## Система категорий ТТ
 
-### Backend тесты
+| Категория | % от базы | Визитов/мес | Приоритет |
+|-----------|-----------|-------------|-----------|
+| A | 20% | 3 | 1 (критичный) |
+| B | 30% | 2 | 2 |
+| C | 20% | 1 | 3 |
+| D | 30% | 1/квартал | 4 |
 
-```python
-# test_llm_clients.py
-def test_qwen_client():
-    client = QwenClient()
-    result = await client.generate_route([...])
-    assert result.status == 'success'
+Цветовое кодирование в Excel: A=красный, B=оранжевый, C=жёлтый, D=серый.
 
-def test_fallback():
-    # Mock Qwen fail
-    # Должен fallback на Llama
-    result = await service.generate_route([...])
-    assert result.model_used == 'llama'
+---
 
-# test_api.py
-def test_optimize_endpoint():
-    response = client.post('/qwen/optimize', {...})
-    assert response.status_code == 200
+## DevOps и инфраструктура
 
-def test_error_handling():
-    response = client.post('/qwen/optimize', {invalid})
-    assert response.status_code == 400
+### Docker Compose
+
+```
+Services:
+  backend   -- FastAPI (порт 8000)
+  frontend  -- Nginx + Vue SPA (порт 80)
+  db        -- PostgreSQL 15 (порт 5432)
+  redis     -- Redis 7 (порт 6379, кэш)
 ```
 
-### Frontend тесты
+### CI/CD (GitHub Actions)
+
+```
+Триггеры: push/PR на main
+Шаги:
+  1. Backend тесты:  pytest backend/tests/ --cov
+  2. Frontend тесты: npx vitest run
+  3. TypeScript:     npx vue-tsc --noEmit
+  4. Coverage report
+```
+
+### Ресурсы LLM-моделей
+
+| Модель | Файл GGUF | RAM | Диск |
+|--------|-----------|-----|------|
+| Qwen2-0.5B-Instruct | qwen2-0_5b-instruct-q4_k_m.gguf | ~0.6 GB | ~400 MB |
+| Llama-3.2-1B-Instruct | Llama-3.2-1B-Instruct-Q4_K_M.gguf | ~1.2 GB | ~808 MB |
+| Итого | | ~1.8 GB | ~1.2 GB |
+
+Модели загружаются **lazy** (при первом запросе) — холодный старт 5-15 сек.
+
+---
+
+## Тестовая архитектура
+
+### Backend (pytest + pytest-asyncio)
+
+```
+backend/tests/
+  test_llm_client.py              QwenClient / LlamaClient unit тесты
+  test_qwen_client.py             Qwen-специфичные тесты
+  test_llama_client.py            Llama-специфичные тесты
+  test_routes.py                  API endpoint тесты
+  test_integration.py             End-to-end тесты
+  test_optimization_comparison.py Сравнение моделей
+  test_quality_evaluator.py       Оценка качества маршрутов
+```
+
+### Frontend (Vitest + Vue Test Utils)
+
+```
+frontend/src/tests/views/
+  AnalyticsView.spec.ts   9 тест-кейсов (charts, stats, import/export)
+  OptimizeView.spec.ts    7 тест-кейсов (форма, модель по умолчанию)
+```
+
+Мокирование API в тестах:
 
 ```typescript
-// Dashboard.spec.ts
-describe('Dashboard', () => {
-    it('отображает метрики маршрута', () => {
-        // Mount component
-        // Check метрики отображены
-    });
-
-    it('визуализирует маршрут на карте', () => {
-        // Mount RouteMap
-        // Check маркеры отрендерены
-    });
-});
+vi.mock('@/services/api', () => ({
+  fetchRoutes: vi.fn(),
+  getMetrics: vi.fn(),
+  compareModels: vi.fn(),
+  getInsights: vi.fn(),
+  downloadScheduleExcel: vi.fn(),
+  importScheduleExcel: vi.fn(),
+}))
 ```
 
 ---
 
-## Архитектура деплоя
+## Ключевые архитектурные решения
 
-### Docker настройка
-
-```yaml
-version: '3.9'
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://...
-      - QWEN_MODEL_ID=...
-      - LLAMA_MODEL_ID=...
-      - HF_TOKEN=...
-    depends_on:
-      - db
-      - redis
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:5173"
-    environment:
-      - VITE_API_URL=http://backend:8000
-
-  db:
-    image: postgres:15
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_PASSWORD=...
-
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-```
-
-### Производство considerations
-
-- Docker multi-stage builds (оптимизировать размер image)
-- Environment variable injection (управление secrets)
-- Database migrations (Alembic)
-- Health checks (все endpoints)
-- Логирование aggregation (CloudWatch/ELK)
-- Мониторинг (Prometheus, Grafana)
-
----
-
-## Безопасность considerations
-
-### API Security
-
-- Input validation (Pydantic)
-- Rate limiting (FastAPI middleware)
-- CORS configuration (только frontend)
-- Аутентификация (basic для Недели 1, JWT для prod)
-- API key rotation (HF tokens)
-
-### Data Protection
-
-- Database encryption (TLS)
-- Secrets management (.env, не в repo)
-- HTTPS only (production)
-- Sanitized logs (без API ключей)
-
-### Model Access
-
-- Hugging Face token IP restrictions (если доступно)
-- Llama локальная (без external доступа)
-- Rate limiting per модель
-- Cost monitoring
-
----
-
-## Целевые показатели производительности
-
-### Backend
-- API response time: <2 сек (p99)
-- Optimization task: <5 сек
-- Database queries: <100ms
-
-### Frontend
-- Page load: <3 сек
-- Route visualization: <1 сек
-- Dashboard interaction: <200ms
-
-### LLM Models
-- Qwen: ~3-10 сек (лучшее качество, основная)
-- Llama: ~5-15 сек (надежный fallback)
-
----
-
-## Технологические выборы & почему
-
-| Выбор | Почему |
-|-------|--------|
-| FastAPI | Современный, async, auto-documentation, отлично для ML |
-| Vue 3 | Легковесный, простая кривая обучения, отлично для dashboards |
-| PostgreSQL | Надежная, mature, хорошо для structured данных |
-| Redis | Быстрый caching, pub/sub для real-time updates |
-| Docker | Консистентное окружение, простой deployment |
-| Pydantic | Type safety, валидация, сериализация |
-| SQLAlchemy | ORM, migrations, relationships |
-| Pytest | Python стандарт, отличные fixtures, mocking |
-| TypeScript | Type safety, лучше IDE поддержка |
-| llama-cpp-python | Единый интерфейс для всех GGUF моделей |
-
----
-
-**Вопросы?** Посмотри специфичные файлы реализации в `/backend`, `/frontend`, `/ml`
+| Решение | Причина |
+|---------|---------|
+| Два LLM + Greedy fallback | Надёжность: всегда возвращается результат |
+| `data_only=True` в openpyxl | Получаем вычисленные значения ячеек |
+| Batch-загрузка VisitLog | Избегаем N+1 запросов при JOIN расписания |
+| `.catch(() => null)` для optional API | Graceful degradation при отсутствии endpoint |
+| `MAX_TT_PER_DAY = 14` | floor((540-30)/35) — физический лимит рабочего дня |
+| Матчинг по имени в импорте | Excel не содержит UUID — матчим по rep_name + loc_name |
+| AUTO ALTER TABLE в main.py | Обратная совместимость при обновлении без потери данных |
