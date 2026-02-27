@@ -103,9 +103,9 @@ describe('OptimizeView.vue', () => {
     expect(wrapper.text()).toContain('Qwen')
   })
 
-  it('выбирает Llama модель по умолчанию', () => {
-    const llamaRadio = wrapper.find('input[value="llama"]')
-    expect((llamaRadio.element as HTMLInputElement).checked).toBe(true)
+  it('выбирает Qwen модель по умолчанию', () => {
+    const qwenRadio = wrapper.find('input[value="qwen"]')
+    expect((qwenRadio.element as HTMLInputElement).checked).toBe(true)
   })
 
   it('изменяет выбранную модель при клике', async () => {

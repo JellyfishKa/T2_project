@@ -424,6 +424,24 @@ export const downloadScheduleExcel = async (month: string): Promise<void> => {
   URL.revokeObjectURL(url)
 }
 
+// ========== ИМПОРТ ==========
+
+/**
+ * Загрузка заполненного Excel с результатами визитов
+ * POST /api/v1/import/schedule
+ */
+export const importScheduleExcel = async (
+  file: File
+): Promise<{ updated: number; skipped: number; errors: string[] }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await api.post('/import/schedule', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60_000,
+  })
+  return response.data
+}
+
 // ========== ФОРС-МАЖОРЫ ==========
 
 export const createForceMajeure = async (data: {

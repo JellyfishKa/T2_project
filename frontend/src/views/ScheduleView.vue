@@ -185,52 +185,105 @@
           </div>
         </div>
 
-        <!-- Кнопка оптимизации маршрута -->
-        <button
-          class="btn-primary w-full flex items-center justify-center gap-2"
-          :disabled="dayOptLoading"
-          @click="optimizeDayRoute"
-        >
-          <svg
-            v-if="dayOptLoading"
-            class="animate-spin h-4 w-4 text-white flex-shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <span>{{ dayOptLoading ? 'Оптимизирую маршрут…' : 'Оптимизировать маршрут (ИИ)' }}</span>
-        </button>
-
-        <!-- Прогресс-бар оптимизации -->
-        <div v-if="dayOptLoading" class="mt-2">
-          <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
-            <div class="bg-blue-500 h-1.5 rounded-full animate-pulse" style="width: 100%" />
+        <!-- Выбор модели + кнопка оптимизации -->
+        <div class="border-t border-gray-700 pt-3 mt-1">
+          <p class="text-xs text-gray-500 mb-2">Модель для оценки вариантов:</p>
+          <div class="flex gap-2 mb-3">
+            <button
+              v-for="m in [{ id: 'qwen', label: 'Qwen 0.5B', hint: 'быстрая' }, { id: 'llama', label: 'Llama 1B', hint: 'точнее' }]"
+              :key="m.id"
+              class="flex-1 text-xs py-1.5 rounded font-medium transition-colors"
+              :class="selectedModel === m.id
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
+              :disabled="dayOptLoading"
+              @click="selectedModel = (m.id as 'qwen' | 'llama')"
+            >
+              {{ m.label }}
+              <span class="opacity-60 ml-1">({{ m.hint }})</span>
+            </button>
           </div>
-          <p class="text-xs text-gray-500 mt-1 text-center">Строю оптимальный маршрут...</p>
+
+          <button
+            class="btn-primary w-full flex items-center justify-center gap-2"
+            :disabled="dayOptLoading"
+            @click="optimizeDayRoute"
+          >
+            <svg v-if="dayOptLoading" class="animate-spin h-4 w-4 text-white flex-shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span>{{ dayOptLoading ? 'Строю варианты маршрута…' : 'Получить варианты (ИИ)' }}</span>
+          </button>
+
+          <!-- Прогресс-бар -->
+          <div v-if="dayOptLoading" class="mt-2">
+            <div class="relative w-full bg-gray-700 rounded-full h-1 overflow-hidden">
+              <div class="absolute top-0 left-0 h-1 bg-blue-500 rounded-full animate-pulse w-full" />
+            </div>
+            <p class="text-xs text-gray-500 mt-1 text-center">
+              Строю 3 варианта + оцениваю через {{ selectedModel === 'qwen' ? 'Qwen' : 'Llama' }}…
+            </p>
+          </div>
         </div>
 
         <div v-if="dayOptError" class="mt-2 text-sm text-red-400">{{ dayOptError }}</div>
 
-        <!-- Результат оптимизации -->
-        <div v-if="dayOptResult" class="mt-4 rounded border border-gray-600 p-3 bg-gray-900">
-          <p class="text-xs text-gray-400 mb-2">
-            Модель: <strong class="text-blue-300">{{ dayOptResult.model_used }}</strong>
-            · {{ dayOptResult.total_distance_km?.toFixed(1) }} км
-            · {{ dayOptResult.total_time_hours?.toFixed(1) }}ч
-          </p>
-          <p class="text-xs text-gray-500 mb-1">Рекомендованный порядок:</p>
-          <ol class="space-y-0.5">
-            <li
-              v-for="(locId, i) in dayOptResult.locations"
-              :key="locId"
-              class="text-xs flex gap-2 text-gray-300"
-            >
-              <span class="text-gray-600 w-5">{{ i + 1 }}.</span>
-              <span>{{ visitNameByLocId(locId) }}</span>
-            </li>
-          </ol>
+        <!-- 3 варианта маршрута -->
+        <div v-if="dayOptResult" class="mt-3 space-y-2">
+          <div class="flex items-center gap-2 text-xs text-gray-400 mb-1">
+            <span>Модель: <strong class="text-blue-300">{{ dayOptResult.model_used }}</strong></span>
+            <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-400 ml-1">
+              · ИИ-оценка недоступна
+            </span>
+          </div>
+
+          <div
+            v-for="variant in dayOptResult.variants"
+            :key="variant.id"
+            class="rounded border p-3 cursor-pointer transition-all"
+            :class="selectedVariantId === variant.id
+              ? 'border-blue-500 bg-blue-900/20'
+              : 'border-gray-600 bg-gray-900 hover:border-gray-500'"
+            @click="selectedVariantId = variant.id"
+          >
+            <div class="flex items-start justify-between mb-1">
+              <p class="text-sm font-medium text-white">{{ variant.name }}</p>
+              <span class="text-xs px-1.5 py-0.5 rounded ml-2 flex-shrink-0"
+                :class="variant.metrics.quality_score >= 80 ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-300'"
+              >
+                {{ variant.metrics.quality_score.toFixed(0) }}%
+              </span>
+            </div>
+            <p class="text-xs text-gray-400 mb-2">{{ variant.description }}</p>
+            <!-- Метрики -->
+            <div class="flex gap-3 text-xs text-gray-300 mb-2">
+              <span>📍 {{ variant.metrics.distance_km.toFixed(1) }} км</span>
+              <span>⏱ {{ variant.metrics.time_hours.toFixed(1) }} ч</span>
+              <span>💰 {{ variant.metrics.cost_rub.toFixed(0) }} ₽</span>
+            </div>
+            <!-- Pros / Cons -->
+            <div v-if="variant.pros.length || variant.cons.length" class="flex flex-wrap gap-1">
+              <span
+                v-for="p in variant.pros" :key="'p'+p"
+                class="text-xs bg-green-900/50 text-green-300 px-1.5 py-0.5 rounded"
+              >✓ {{ p }}</span>
+              <span
+                v-for="c in variant.cons" :key="'c'+c"
+                class="text-xs bg-red-900/40 text-red-300 px-1.5 py-0.5 rounded"
+              >✗ {{ c }}</span>
+            </div>
+          </div>
+
+          <!-- Сохранить выбранный -->
+          <button
+            v-if="selectedVariantId !== null"
+            class="btn-primary w-full text-sm mt-1"
+            :disabled="confirmingVariant"
+            @click="confirmSelectedVariant"
+          >
+            {{ confirmingVariant ? 'Сохранение…' : 'Сохранить выбранный маршрут' }}
+          </button>
         </div>
       </div>
     </div>
@@ -300,8 +353,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { DailyRoute, Route, SalesRep, VisitScheduleItem } from '@/services/types'
-import { optimize, updateVisitStatus, downloadScheduleExcel } from '@/services/api'
+import type { DailyRoute, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
+import { optimizeVariants, confirmVariant, updateVisitStatus, downloadScheduleExcel } from '@/services/api'
 
 const API = '/api/v1'
 
@@ -341,9 +394,12 @@ const statusOptions = [
 // ─── Day detail modal state ───────────────────────────────────────────────────
 const showDayModal = ref(false)
 const selectedDayRoute = ref<DailyRoute | null>(null)
-const dayOptResult = ref<Route | null>(null)
+const dayOptResult = ref<OptimizeVariantsResponse | null>(null)
 const dayOptLoading = ref(false)
 const dayOptError = ref<string | null>(null)
+const selectedModel = ref<'qwen' | 'llama'>('qwen')
+const selectedVariantId = ref<number | null>(null)
+const confirmingVariant = ref(false)
 
 const fm = ref({
   type: 'illness' as string,
@@ -504,6 +560,7 @@ function openDayModal(route: DailyRoute) {
   selectedDayRoute.value = route
   dayOptResult.value = null
   dayOptError.value = null
+  selectedVariantId.value = null
   showDayModal.value = true
 }
 
@@ -511,9 +568,11 @@ async function optimizeDayRoute() {
   if (!selectedDayRoute.value) return
   dayOptLoading.value = true
   dayOptError.value = null
+  dayOptResult.value = null
+  selectedVariantId.value = null
   try {
     const locationIds = selectedDayRoute.value.visits.map(v => v.location_id)
-    dayOptResult.value = await optimize(locationIds, 'auto', {})
+    dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {})
   } catch (e: any) {
     dayOptError.value = e?.message ?? 'Ошибка оптимизации'
   } finally {
@@ -521,11 +580,32 @@ async function optimizeDayRoute() {
   }
 }
 
-function visitNameByLocId(locId: string): string {
-  const v = selectedDayRoute.value?.visits.find(v => v.location_id === locId)
-  if (!v) return locId
-  return `[${v.location_category ?? '?'}] ${v.location_name}`
+async function confirmSelectedVariant() {
+  if (!selectedDayRoute.value || !dayOptResult.value || selectedVariantId.value === null) return
+  const variant = dayOptResult.value.variants.find(v => v.id === selectedVariantId.value)
+  if (!variant) return
+  confirmingVariant.value = true
+  dayOptError.value = null
+  try {
+    const payload: ConfirmVariantRequest = {
+      name: `${selectedDayRoute.value.rep_name} — ${selectedDayRoute.value.date} (${variant.name})`,
+      locations: variant.locations,
+      total_distance_km: variant.metrics.distance_km,
+      total_time_hours: variant.metrics.time_hours,
+      total_cost_rub: variant.metrics.cost_rub,
+      quality_score: variant.metrics.quality_score,
+      model_used: dayOptResult.value.model_used,
+      original_location_ids: selectedDayRoute.value.visits.map(v => v.location_id),
+    }
+    await confirmVariant(payload)
+    showDayModal.value = false
+  } catch (e: any) {
+    dayOptError.value = e?.message ?? 'Ошибка сохранения маршрута'
+  } finally {
+    confirmingVariant.value = false
+  }
 }
+
 
 function statusLabel(s: string): string {
   return ({ completed: '✓', skipped: '✗', planned: '·', cancelled: '—', rescheduled: '↺' } as Record<string, string>)[s] ?? s

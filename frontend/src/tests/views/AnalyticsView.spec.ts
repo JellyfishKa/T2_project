@@ -8,7 +8,10 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 vi.mock('@/services/api', () => ({
   fetchRoutes: vi.fn(),
   getMetrics: vi.fn(),
-  compareModels: vi.fn()
+  compareModels: vi.fn(),
+  getInsights: vi.fn(),
+  downloadScheduleExcel: vi.fn(),
+  importScheduleExcel: vi.fn(),
 }))
 
 // Мокаем Chart.js компоненты
@@ -148,6 +151,9 @@ describe('AnalyticsView.vue', () => {
     vi.mocked(api.fetchRoutes).mockResolvedValue(mockRoutes)
     vi.mocked(api.getMetrics).mockResolvedValue(mockMetrics)
     vi.mocked(api.compareModels).mockResolvedValue(mockModelComparison)
+    vi.mocked(api.getInsights).mockResolvedValue(null as any)
+    vi.mocked(api.downloadScheduleExcel).mockResolvedValue(undefined)
+    vi.mocked(api.importScheduleExcel).mockResolvedValue({ updated: 0, skipped: 0, errors: [] })
 
     await router.push('/analytics')
     await router.isReady()

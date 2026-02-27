@@ -355,24 +355,64 @@
            РАЗДЕЛ: Охват торговых точек (из /insights)
       ════════════════════════════════════════════════════════════════════ -->
       <div v-if="insights" class="mt-8">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-xl font-semibold text-gray-900">
             Охват торговых точек — {{ insights.month }}
           </h2>
-          <button
-            @click="handleExport"
-            :disabled="exportLoading"
-            class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
-          >
-            <svg v-if="exportLoading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-            </svg>
-            <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-            </svg>
-            {{ exportLoading ? 'Экспорт…' : 'Скачать Excel' }}
-          </button>
+          <div class="flex items-center gap-2">
+            <!-- Импорт заполненного Excel -->
+            <label
+              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg cursor-pointer disabled:opacity-50 transition-colors"
+              :class="{ 'opacity-50 pointer-events-none': importLoading }"
+              title="Загрузить заполненный Excel с результатами визитов"
+            >
+              <svg v-if="importLoading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+              </svg>
+              <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4 0l4-4m0 0l4 4m-4-4v12"/>
+              </svg>
+              {{ importLoading ? 'Импорт…' : 'Загрузить Excel' }}
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                class="hidden"
+                :disabled="importLoading"
+                @change="handleImport"
+              />
+            </label>
+
+            <!-- Экспорт -->
+            <button
+              @click="handleExport"
+              :disabled="exportLoading"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
+            >
+              <svg v-if="exportLoading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+              </svg>
+              <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+              </svg>
+              {{ exportLoading ? 'Экспорт…' : 'Скачать Excel' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Результат импорта -->
+        <div v-if="importResult" class="mb-4 rounded-lg border p-3 text-sm"
+          :class="importResult.errors.length && !importResult.updated
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-green-50 border-green-200 text-green-800'"
+        >
+          <p class="font-medium">
+            Импорт завершён: обновлено {{ importResult.updated }}, пропущено {{ importResult.skipped }}
+          </p>
+          <ul v-if="importResult.errors.length" class="mt-1 space-y-0.5 text-xs opacity-80">
+            <li v-for="e in importResult.errors" :key="e">• {{ e }}</li>
+          </ul>
         </div>
 
         <!-- Сводные карточки -->
@@ -512,6 +552,7 @@ import {
   compareModels,
   getInsights,
   downloadScheduleExcel,
+  importScheduleExcel,
   type Route,
   type Metric
 } from '@/services/api'
@@ -556,6 +597,8 @@ const metrics = ref<Metric[]>([])
 const modelComparison = ref<any>(null)
 const insights = ref<Insights | null>(null)
 const exportLoading = ref(false)
+const importLoading = ref(false)
+const importResult = ref<{ updated: number; skipped: number; errors: string[] } | null>(null)
 
 // Текущий месяц для инсайтов
 const insightsMonth = computed(() => {
@@ -861,8 +904,8 @@ const loadAnalyticsData = async () => {
     const [routesData, metricsData, comparisonData, insightsData] = await Promise.all([
       fetchRoutes(0, 100),
       getMetrics(),
-      compareModels(),
-      getInsights().catch(() => null),  // не критично если упадёт
+      compareModels().catch(() => null),  // /benchmark/compare может отсутствовать
+      getInsights().catch(() => null),
     ])
 
     routes.value = routesData.items ?? []
@@ -885,6 +928,23 @@ const handleExport = async () => {
     alert('Ошибка экспорта: ' + (e?.message ?? 'неизвестная ошибка'))
   } finally {
     exportLoading.value = false
+  }
+}
+
+const handleImport = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  importLoading.value = true
+  importResult.value = null
+  try {
+    importResult.value = await importScheduleExcel(file)
+    await loadAnalyticsData()
+  } catch (e: any) {
+    importResult.value = { updated: 0, skipped: 0, errors: [e?.message ?? 'неизвестная ошибка'] }
+  } finally {
+    importLoading.value = false
+    target.value = ''
   }
 }
 
