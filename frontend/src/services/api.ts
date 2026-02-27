@@ -7,6 +7,8 @@ import type {
   BenchmarkResult,
   BenchmarkRequest,
   OptimizeRequest,
+  OptimizeVariantsResponse,
+  ConfirmVariantRequest,
   PaginatedResponse,
   HealthStatus,
   ApiError,
@@ -179,6 +181,40 @@ export const optimize = async (
   }
 
   const response = await withRetry(() => api.post('/optimize', request))
+  return response.data
+}
+
+/**
+ * Генерация 3 вариантов оптимизации с оценкой LLM (без сохранения в БД)
+ * POST /api/v1/optimize/variants
+ */
+export const optimizeVariants = async (
+  locationIds: string[],
+  model: string,
+  constraints: any
+): Promise<OptimizeVariantsResponse> => {
+  const request = {
+    location_ids: locationIds,
+    model,
+    constraints
+  }
+  // LLM может работать 30-120с → увеличенный timeout
+  const response = await api.post('/optimize/variants', request, {
+    timeout: 180_000
+  })
+  return response.data
+}
+
+/**
+ * Сохранение выбранного варианта маршрута в БД
+ * POST /api/v1/optimize/confirm
+ */
+export const confirmVariant = async (
+  payload: ConfirmVariantRequest
+): Promise<Route> => {
+  const response = await withRetry(() =>
+    api.post('/optimize/confirm', payload)
+  )
   return response.data
 }
 
@@ -396,6 +432,8 @@ export type {
   BenchmarkResult,
   BenchmarkRequest,
   OptimizeRequest,
+  OptimizeVariantsResponse,
+  ConfirmVariantRequest,
   PaginatedResponse,
   HealthStatus,
   ApiError,

@@ -6,7 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Location as DBLocation, get_session
-from src.schemas.optimize import OptimizeRequest, OptimizeResponse
+from src.schemas.optimize import (
+    ConfirmVariantRequest,
+    OptimizeRequest,
+    OptimizeResponse,
+    OptimizeVariantsRequest,
+    OptimizeVariantsResponse,
+)
 from src.services.optimize import Optimizer
 
 router = APIRouter(tags=['Optimization'])
@@ -77,4 +83,88 @@ async def run_optimization(
         raise HTTPException(
             status_code=500,
             detail=f'Optimization failed: {str(e)}',
+        )
+
+
+@router.post('/optimize/variants', response_model=OptimizeVariantsResponse)
+async def get_optimization_variants(
+    payload: OptimizeVariantsRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Генерирует 3 варианта оптимизации маршрута без сохранения в БД.
+    LLM выбранной модели оценивает каждый вариант и добавляет pros/cons.
+    """
+    if len(payload.location_ids) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail='Необходимо минимум 2 точки для оптимизации',
+        )
+
+    query = select(DBLocation).where(
+        DBLocation.id.in_(payload.location_ids),
+    )
+    result = await db.execute(query)
+    db_locations = result.scalars().all()
+
+    if not db_locations:
+        raise HTTPException(
+            status_code=404,
+            detail='Locations not found',
+        )
+
+    loc_map = {loc.id: loc for loc in db_locations}
+    ordered_locations = [
+        loc_map[loc_id]
+        for loc_id in payload.location_ids
+        if loc_id in loc_map
+    ]
+
+    optimizer = Optimizer(db)
+
+    try:
+        return await optimizer.generate_variants(
+            db_locations=ordered_locations,
+            model=payload.model,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f'Variants generation failed: {str(exc)}',
+        )
+
+
+@router.post('/optimize/confirm', response_model=OptimizeResponse)
+async def confirm_variant(
+    payload: ConfirmVariantRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Сохраняет выбранный пользователем вариант маршрута в БД.
+    """
+    if not payload.locations:
+        raise HTTPException(
+            status_code=422,
+            detail='Список точек не может быть пустым',
+        )
+
+    optimizer = Optimizer(db)
+
+    try:
+        saved = await optimizer.confirm_variant(
+            name=payload.name,
+            locations_order=payload.locations,
+            total_distance_km=payload.total_distance_km,
+            total_time_hours=payload.total_time_hours,
+            total_cost_rub=payload.total_cost_rub,
+            quality_score=payload.quality_score,
+            model_used=payload.model_used,
+            original_location_ids=payload.original_location_ids,
+        )
+        return OptimizeResponse(**saved)
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f'Failed to save variant: {str(exc)}',
         )

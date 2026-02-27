@@ -16,6 +16,7 @@ from src.models.geo_utils import (
     compute_distance_matrix,
     detect_region_info,
     estimate_fuel_cost,
+    haversine,
     infer_category,
 )
 from src.models.llama_client import LlamaClient
@@ -206,6 +207,314 @@ class Optimizer:
             model,
         )
         return optimized_route
+
+    # ─── Вспомогательный greedy для подмножества точек ──────────────────────────
+
+    def _greedy_subset(
+        self,
+        locations: List[PydanticLocation],
+        start_idx: int = 0,
+    ) -> List[PydanticLocation]:
+        """Greedy nearest-neighbor внутри подмножества точек."""
+        n = len(locations)
+        if n <= 1:
+            return list(locations)
+
+        loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
+        matrix = compute_distance_matrix(loc_dicts)
+
+        visited = [False] * n
+        order = [start_idx]
+        visited[start_idx] = True
+
+        for _ in range(n - 1):
+            cur = order[-1]
+            nearest = min(
+                (j for j in range(n) if not visited[j]),
+                key=lambda j: matrix[cur][j],
+            )
+            order.append(nearest)
+            visited[nearest] = True
+
+        return [locations[i] for i in order]
+
+    # ─── Алгоритм 2: Приоритет категорий (A→B→C→D) ──────────────────────────────
+
+    def _priority_first_reorder(
+        self,
+        locations: List[PydanticLocation],
+    ) -> List[PydanticLocation]:
+        """
+        Сначала посещаем все точки категории A (greedy),
+        затем B, C, D — каждую группу greedy от последней посещённой точки.
+        """
+        if len(locations) <= 1:
+            return list(locations)
+
+        groups: Dict[str, List[PydanticLocation]] = {"A": [], "B": [], "C": [], "D": []}
+        for loc in locations:
+            cat = infer_category(getattr(loc, "priority", "C"))
+            groups[cat].append(loc)
+
+        result: List[PydanticLocation] = []
+        for cat in ("A", "B", "C", "D"):
+            group = groups[cat]
+            if not group:
+                continue
+
+            if result:
+                last = result[-1]
+                distances = [
+                    haversine(last.lat, last.lon, loc.lat, loc.lon)
+                    for loc in group
+                ]
+                start_idx = distances.index(min(distances))
+            else:
+                start_idx = 0
+
+            result.extend(self._greedy_subset(group, start_idx))
+
+        return result
+
+    # ─── Алгоритм 3: Взвешенный баланс (60% расстояние + 40% приоритет) ─────────
+
+    def _balanced_reorder(
+        self,
+        locations: List[PydanticLocation],
+    ) -> List[PydanticLocation]:
+        """
+        Взвешенный алгоритм: score = 0.6 × distance + 0.4 × priority_penalty.
+        A-точки получают нулевой штраф, D-точки — 15 км эквивалент.
+        """
+        if len(locations) <= 1:
+            return list(locations)
+
+        loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
+        matrix = compute_distance_matrix(loc_dicts)
+        n = len(locations)
+
+        priority_penalty_km = {"A": 0.0, "B": 3.0, "C": 8.0, "D": 15.0}
+        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+
+        start = min(
+            range(n),
+            key=lambda i: priority_rank.get(
+                infer_category(getattr(locations[i], "priority", "C")), 3
+            ),
+        )
+
+        visited = [False] * n
+        order = [start]
+        visited[start] = True
+
+        for _ in range(n - 1):
+            cur = order[-1]
+            nearest = min(
+                (j for j in range(n) if not visited[j]),
+                key=lambda j: (
+                    0.6 * matrix[cur][j]
+                    + 0.4 * priority_penalty_km.get(
+                        infer_category(getattr(locations[j], "priority", "C")), 8.0
+                    )
+                ),
+            )
+            order.append(nearest)
+            visited[nearest] = True
+
+        return [locations[i] for i in order]
+
+    # ─── Генерация вариантов маршрута (без сохранения в БД) ──────────────────────
+
+    async def generate_variants(
+        self,
+        db_locations: List[DBLocation],
+        model: str = "qwen",
+    ):
+        """
+        Генерирует 3 детерминированных варианта маршрута,
+        затем запрашивает у LLM pros/cons для каждого.
+        БД не используется — результат возвращается напрямую.
+        """
+        from src.schemas.optimize import (
+            OptimizeVariantsResponse,
+            RouteVariant,
+            RouteVariantMetrics,
+        )
+
+        start_time_ms = int(time.time() * 1000)
+
+        pydantic_locations = [
+            self._convert_db_to_pydantic(loc) for loc in db_locations
+        ]
+
+        # Базовые метрики (неупорядоченный маршрут)
+        baseline = self._calculate_real_metrics(pydantic_locations)
+
+        # ── Три варианта ────────────────────────────────────────────────────────
+        variant_configs = [
+            {
+                "id": 1,
+                "name": "Минимум расстояния",
+                "description": "Кратчайший путь между точками (жадный алгоритм)",
+                "algorithm": "greedy",
+                "locations_ordered": self._greedy_reorder(pydantic_locations),
+            },
+            {
+                "id": 2,
+                "name": "По приоритету категорий",
+                "description": "Сначала точки A, затем B, C, D — внутри группы кратчайший путь",
+                "algorithm": "priority_first",
+                "locations_ordered": self._priority_first_reorder(pydantic_locations),
+            },
+            {
+                "id": 3,
+                "name": "Оптимальный баланс",
+                "description": "Взвешенный подход: 60% расстояние + 40% важность точки",
+                "algorithm": "balanced",
+                "locations_ordered": self._balanced_reorder(pydantic_locations),
+            },
+        ]
+
+        # Считаем метрики для каждого варианта
+        variants_data = []
+        for vc in variant_configs:
+            real = self._calculate_real_metrics(vc["locations_ordered"])
+            q_score = evaluate_route_quality(
+                {**baseline, "constraints_satisfied": True},
+                {**real, "constraints_satisfied": True},
+            )
+            variants_data.append({
+                "id": vc["id"],
+                "name": vc["name"],
+                "description": vc["description"],
+                "algorithm": vc["algorithm"],
+                "locations_ordered": vc["locations_ordered"],
+                "metrics": {
+                    "distance_km": real["distance_km"],
+                    "time_hours": real["time_minutes"] / 60,
+                    "cost_rub": real["cost_rub"],
+                    "quality_score": q_score,
+                },
+                "pros": [],
+                "cons": [],
+            })
+
+        # ── LLM: генерируем pros/cons (graceful fallback при ошибке) ───────────
+        llm_success = False
+        try:
+            client = (
+                self.qwen_client if model == "qwen" else self.llama_client
+            )
+            evaluation = await client.evaluate_variants(variants_data)
+            if evaluation:
+                eval_by_id = {item["id"]: item for item in evaluation}
+                for v in variants_data:
+                    ev = eval_by_id.get(v["id"])
+                    if ev:
+                        v["pros"] = ev.get("pros", [])[:3]
+                        v["cons"] = ev.get("cons", [])[:3]
+                llm_success = True
+        except Exception as exc:
+            logger.warning("LLM evaluate_variants failed: %s", exc)
+
+        # ── Строим ответ ────────────────────────────────────────────────────────
+        response_variants = [
+            RouteVariant(
+                id=v["id"],
+                name=v["name"],
+                description=v["description"],
+                algorithm=v["algorithm"],
+                pros=v["pros"],
+                cons=v["cons"],
+                locations=[loc.ID for loc in v["locations_ordered"]],
+                metrics=RouteVariantMetrics(**v["metrics"]),
+            )
+            for v in variants_data
+        ]
+
+        return OptimizeVariantsResponse(
+            variants=response_variants,
+            model_used=model,
+            response_time_ms=int(time.time() * 1000) - start_time_ms,
+            llm_evaluation_success=llm_success,
+        )
+
+    # ─── Сохранение выбранного варианта в БД ─────────────────────────────────────
+
+    async def confirm_variant(
+        self,
+        name: str,
+        locations_order: List[str],
+        total_distance_km: float,
+        total_time_hours: float,
+        total_cost_rub: float,
+        quality_score: float,
+        model_used: str,
+        original_location_ids: List[str],
+    ):
+        """
+        Сохраняет выбранный пользователем вариант маршрута в БД.
+        Возвращает OptimizeResponse-совместимый словарь.
+        """
+        start_time_ms = int(time.time() * 1000)
+        route_id = str(uuid.uuid4())
+
+        improvement_pct = 0.0
+        try:
+            new_route = DBRoute(
+                id=route_id,
+                name=name,
+                locations_order=locations_order,
+                total_distance=total_distance_km,
+                total_time=total_time_hours,
+                total_cost=total_cost_rub,
+                model_used=model_used,
+            )
+            self.db.add(new_route)
+
+            self.db.add(
+                DBMetric(
+                    route_id=route_id,
+                    model_name=model_used,
+                    response_time_ms=int(time.time() * 1000) - start_time_ms,
+                    quality_score=quality_score,
+                    cost=0.0,
+                )
+            )
+
+            self.db.add(
+                DBOptimizationResult(
+                    original_route=original_location_ids,
+                    optimized_route=locations_order,
+                    improvement_percentage=round(improvement_pct, 2),
+                    model_used=model_used,
+                    created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                )
+            )
+
+            await self.db.commit()
+            logger.info("Confirmed variant saved as route %s.", route_id)
+
+        except Exception as exc:
+            await self.db.rollback()
+            logger.error("confirm_variant DB save failed: %s", exc)
+            raise
+
+        return {
+            "id": route_id,
+            "name": name,
+            "locations": locations_order,
+            "total_distance_km": total_distance_km,
+            "total_time_hours": total_time_hours,
+            "total_cost_rub": total_cost_rub,
+            "model_used": model_used,
+            "quality_score": quality_score,
+            "response_time_ms": int(time.time() * 1000) - start_time_ms,
+            "fallback_reason": None,
+            "created_at": datetime.now().isoformat(),
+        }
+
+    # ─── Оригинальный greedy (алгоритм 1, также используется как fallback) ───────
 
     def _greedy_reorder(
         self,

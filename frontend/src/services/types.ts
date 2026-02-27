@@ -121,6 +121,43 @@ export interface Insights {
   force_majeure_count: number
 }
 
+// ─── Route Variants (оптимизация с выбором) ──────────────────────────────────
+export interface RouteVariantMetrics {
+  distance_km: number
+  time_hours: number
+  cost_rub: number
+  quality_score: number
+}
+
+export interface RouteVariant {
+  id: number
+  name: string
+  description: string
+  algorithm: string
+  pros: string[]
+  cons: string[]
+  locations: string[]           // упорядоченные ID точек
+  metrics: RouteVariantMetrics
+}
+
+export interface OptimizeVariantsResponse {
+  variants: RouteVariant[]
+  model_used: string
+  response_time_ms: number
+  llm_evaluation_success: boolean
+}
+
+export interface ConfirmVariantRequest {
+  name: string
+  locations: string[]
+  total_distance_km: number
+  total_time_hours: number
+  total_cost_rub: number
+  quality_score: number
+  model_used: string
+  original_location_ids: string[]
+}
+
 // ─── Metrics / Benchmark ─────────────────────────────────────────────────────
 export interface Metric {
   id: string

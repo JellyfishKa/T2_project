@@ -264,6 +264,116 @@ class QwenClient(LLMClient):
             )
             raise QwenServerError(f"Route Validation Error: {str(e)}")
 
+    async def evaluate_variants(
+        self,
+        variants: List[Dict],
+    ) -> List[Dict]:
+        """
+        Просит LLM оценить варианты маршрута и сгенерировать pros/cons.
+        При ошибке возвращает пустой список (graceful fallback).
+        """
+        if not variants:
+            return []
+
+        prompt = self._construct_evaluation_prompt(variants)
+
+        try:
+            llm = self._get_generator()
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a logistics analyst. "
+                        "Output ONLY valid JSON array, no text."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ]
+
+            loop = asyncio.get_event_loop()
+            output = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: llm.create_chat_completion(
+                        messages=messages,
+                        max_tokens=512,
+                        temperature=0.3,
+                        stop=["<|im_end|>"],
+                    ),
+                ),
+                timeout=90,
+            )
+
+            content = output["choices"][0]["message"]["content"] or ""  # type: ignore[union-attr]
+            logger.info("RAW EVALUATION RESPONSE:\n%s", content)
+            return self._parse_evaluation_response(content)
+
+        except Exception as e:
+            logger.warning("evaluate_variants failed: %s", e)
+            return []
+
+    def _construct_evaluation_prompt(self, variants: List[Dict]) -> str:
+        lines = []
+        for v in variants:
+            m = v.get("metrics", {})
+            lines.append(
+                f"Option {v['id']} ({v['name']}): "
+                f"distance={m.get('distance_km', 0):.1f}km, "
+                f"time={m.get('time_hours', 0):.1f}h, "
+                f"cost={m.get('cost_rub', 0):.0f}rub"
+            )
+        variants_text = "\n".join(lines)
+
+        # Строим пример JSON-ответа для модели
+        example_items = ",".join(
+            f'{{"id":{v["id"]},"pros":["text","text"],"cons":["text","text"]}}'
+            for v in variants
+        )
+
+        return (
+            f"Analyze {len(variants)} delivery route options. "
+            f"For each, provide exactly 2 advantages and 2 disadvantages "
+            f"in Russian (short phrases, max 8 words each).\n\n"
+            f"{variants_text}\n\n"
+            f"Return ONLY valid JSON array, no markdown:\n"
+            f"[{example_items}]"
+        )
+
+    def _parse_evaluation_response(self, text: str) -> List[Dict]:
+        try:
+            clean = text.strip()
+            # Убираем markdown блоки
+            if "```" in clean:
+                parts = clean.split("```")
+                for part in parts:
+                    if "[" in part:
+                        clean = part.lstrip("json").strip()
+                        break
+
+            arr_start = clean.find("[")
+            arr_end = clean.rfind("]") + 1
+            if arr_start == -1 or arr_end == 0:
+                return []
+
+            data = json.loads(clean[arr_start:arr_end])
+            if not isinstance(data, list):
+                return []
+
+            # Валидируем структуру
+            result = []
+            for item in data:
+                if isinstance(item, dict) and "id" in item:
+                    result.append({
+                        "id": item["id"],
+                        "pros": item.get("pros", []) if isinstance(item.get("pros"), list) else [],
+                        "cons": item.get("cons", []) if isinstance(item.get("cons"), list) else [],
+                    })
+            return result
+
+        except Exception as e:
+            logger.warning("Evaluation parse error: %s. Text: %s", e, text[:200])
+            return []
+
     async def analyze_metrics(self, data: Dict) -> str:
         return "Not implemented"
 
