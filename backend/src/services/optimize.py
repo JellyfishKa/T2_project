@@ -276,9 +276,12 @@ class Optimizer:
         )
 
         route = await _try_model(primary)
+        # Llama-fallback намеренно отключён: обе модели (~1.1 GB совокупно)
+        # не помещаются в RAM одновременно → SIGSEGV (exit 139).
+        # Итоговый порядок всегда определяет greedy-алгоритм ниже,
+        # поэтому LLM влияет только на label model_used.
         if route is None:
-            logger.warning("Primary model failed, trying alternative.")
-            route = await _try_model(alt)
+            logger.warning("Primary model failed, falling back to greedy (single-model policy).")
 
         # Применяем greedy reorder для получения реального оптимального порядка.
         # LLM-модели ненадёжны для малых моделей (0.5B–1.2B),
@@ -286,8 +289,8 @@ class Optimizer:
         reordered = self._greedy_reorder(locs)
 
         if route is None:
-            # Оба LLM упали — создаём маршрут на основе greedy
-            logger.warning("Both LLMs failed, using pure greedy route.")
+            # LLM не ответил корректно — используем greedy
+            logger.warning("LLM failed, using pure greedy route.")
             import uuid
             from datetime import datetime
             route = PydanticRoute(

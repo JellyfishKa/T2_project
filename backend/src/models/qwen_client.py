@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
 from datetime import datetime
 from time import time
@@ -212,11 +213,11 @@ class QwenClient(LLMClient):
             f"RULES: {constraints_text} "
             f"Speed={speed}km/h+15min/stop. "
             f"Cost=dist*{fuel_rate}rub/km. A>B>C>D priority.\n\n"
-            f"OUTPUT (JSON only, no text):\n"
+            f"OUTPUT (JSON only, no text, numbers must be 0 if unknown):\n"
             f'{{"locations_sequence":["{first_id}",...,"{last_id}"],'
-            f'"total_distance_km":COMPUTE,'
-            f'"total_time_hours":COMPUTE,'
-            f'"total_cost_rub":COMPUTE}}'
+            f'"total_distance_km":0,'
+            f'"total_time_hours":0,'
+            f'"total_cost_rub":0}}'
         )
 
     def _parse_response(
@@ -231,6 +232,8 @@ class QwenClient(LLMClient):
                 clean_text = clean_text[7:]
             if clean_text.endswith("```"):
                 clean_text = clean_text[:-3]
+            # Заменяем COMPUTE (модель иногда копирует шаблон дословно)
+            clean_text = re.sub(r':\s*COMPUTE\b', ':0', clean_text)
 
             json_start = clean_text.find("{")
             json_end = clean_text.rfind("}") + 1
