@@ -1,7 +1,7 @@
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, time
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -25,6 +25,18 @@ from src.services.schedule_planner import (
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
 
 LUNCH_BREAK_TIME = "13:00"  # фиксированный обед
+
+
+async def _load_logs_by_schedule(
+    session: AsyncSession, schedule_ids: List[str]
+) -> Dict[str, VisitLog]:
+    """Загружает VisitLog-записи для переданных schedule_id одним запросом."""
+    if not schedule_ids:
+        return {}
+    result = await session.execute(
+        select(VisitLog).where(VisitLog.schedule_id.in_(schedule_ids))
+    )
+    return {log.schedule_id: log for log in result.scalars().all()}
 
 
 def _estimated_duration(visit_count: int) -> float:
@@ -92,7 +104,14 @@ async def update_visit_status(
 
     await session.commit()
     await session.refresh(sched, ["location", "rep"])
-    return _schedule_to_item(sched)
+    # Загружаем связанный VisitLog чтобы вернуть time_in/time_out
+    visit_log = None
+    if sched.status == "completed":
+        log_result = await session.execute(
+            select(VisitLog).where(VisitLog.schedule_id == sched.id)
+        )
+        visit_log = log_result.scalars().first()
+    return _schedule_to_item(sched, visit_log)
 
 
 @router.get("/daily", response_model=List[DailyRoute])
@@ -114,6 +133,9 @@ async def get_daily_schedule(
     result = await session.execute(stmt)
     schedules = result.scalars().all()
 
+    schedule_ids = [s.id for s in schedules]
+    logs_by_schedule = await _load_logs_by_schedule(session, schedule_ids)
+
     by_rep = defaultdict(list)
     for s in schedules:
         by_rep[s.rep_id].append(s)
@@ -121,7 +143,7 @@ async def get_daily_schedule(
     routes: List[DailyRoute] = []
     for rep_id, rep_schedules in by_rep.items():
         rep = rep_schedules[0].rep
-        visits = [_schedule_to_item(s) for s in rep_schedules]
+        visits = [_schedule_to_item(s, logs_by_schedule.get(s.id)) for s in rep_schedules]
         routes.append(DailyRoute(
             rep_id=rep_id,
             rep_name=rep.name if rep else rep_id,
@@ -185,6 +207,10 @@ async def _build_monthly_plan_response(
     result = await session.execute(stmt)
     schedules = result.scalars().all()
 
+    # Загружаем VisitLog для всех найденных визитов одним запросом
+    schedule_ids = [s.id for s in schedules]
+    logs_by_schedule = await _load_logs_by_schedule(session, schedule_ids)
+
     # Количество всех ТТ для расчёта покрытия
     total_tt_result = await session.execute(select(Location))
     total_tt = len(total_tt_result.scalars().all())
@@ -197,7 +223,7 @@ async def _build_monthly_plan_response(
     for r_id, date_map in by_rep_date.items():
         for d, day_schedules in sorted(date_map.items()):
             rep = day_schedules[0].rep
-            visits = [_schedule_to_item(s) for s in day_schedules]
+            visits = [_schedule_to_item(s, logs_by_schedule.get(s.id)) for s in day_schedules]
             routes.append(DailyRoute(
                 rep_id=r_id,
                 rep_name=rep.name if rep else r_id,
@@ -219,7 +245,7 @@ async def _build_monthly_plan_response(
     )
 
 
-def _schedule_to_item(s: VisitSchedule) -> VisitScheduleItem:
+def _schedule_to_item(s: VisitSchedule, log: Optional[VisitLog] = None) -> VisitScheduleItem:
     loc = s.location
     rep = s.rep
     return VisitScheduleItem(
@@ -231,4 +257,6 @@ def _schedule_to_item(s: VisitSchedule) -> VisitScheduleItem:
         rep_name=rep.name if rep else s.rep_id,
         planned_date=s.planned_date,
         status=s.status,
+        time_in=str(log.time_in)[:5] if log and log.time_in else None,
+        time_out=str(log.time_out)[:5] if log and log.time_out else None,
     )

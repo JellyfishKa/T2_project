@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Base, engine, get_session
 from src.middleware.main import AdvancedMiddleware
-from src.routes.benchmark import router as benchmark_router
 from src.routes.force_majeure import router as force_majeure_router
 from src.routes.insights import router as insights_router
 from src.routes.llama import router as llama_router
@@ -102,7 +101,6 @@ api_v1_router.include_router(schedule_router)
 api_v1_router.include_router(force_majeure_router)
 api_v1_router.include_router(visits_router)
 
-app.include_router(benchmark_router)
 app.include_router(api_v1_router)
 
 

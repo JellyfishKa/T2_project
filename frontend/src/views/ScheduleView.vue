@@ -36,12 +36,16 @@
         :key="route.rep_id + route.date"
         class="card p-3"
       >
-        <div class="flex items-center gap-3 mb-2">
+        <div
+          class="flex items-center gap-3 mb-2 cursor-pointer hover:text-blue-300 transition-colors"
+          @click="openDayModal(route)"
+        >
           <span class="font-medium text-sm">{{ route.date }}</span>
           <span class="text-blue-400 font-medium">{{ route.rep_name }}</span>
           <span class="text-gray-400 text-xs">
             {{ route.total_tt }} ТТ · ~{{ route.estimated_duration_hours }}ч
           </span>
+          <span class="text-gray-600 text-xs ml-auto">↗ детали</span>
         </div>
         <div class="flex flex-wrap gap-1 items-center">
           <template v-for="(visit, idx) in route.visits" :key="visit.id">
@@ -61,7 +65,10 @@
               @click="openVisitModal(visit)"
             >
               {{ visit.location_category ?? '?' }} · {{ visit.location_name.slice(0, 18) }}
-              <span v-if="visit.status === 'completed'" class="ml-0.5">✓</span>
+              <span v-if="visit.status === 'completed'">
+                <span class="ml-0.5">✓</span>
+                <span v-if="visitDuration(visit)" class="ml-0.5 opacity-75">{{ visitDuration(visit) }}м</span>
+              </span>
               <span v-else-if="visit.status === 'skipped'" class="ml-0.5">✗</span>
             </span>
           </template>
@@ -129,6 +136,72 @@
       </div>
     </div>
 
+    <!-- Модал: детальный просмотр дня + LLM оптимизация -->
+    <div v-if="showDayModal && selectedDayRoute" class="modal-overlay" @click.self="showDayModal = false">
+      <div class="modal" style="max-width: 540px;">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <h2 class="font-semibold text-lg">{{ selectedDayRoute.rep_name }}</h2>
+            <p class="text-sm text-gray-400">
+              {{ selectedDayRoute.date }} · {{ selectedDayRoute.total_tt }} ТТ
+              · ~{{ selectedDayRoute.estimated_duration_hours }}ч
+            </p>
+          </div>
+          <button class="btn-icon text-xs" @click="showDayModal = false">✕</button>
+        </div>
+
+        <!-- Список визитов дня -->
+        <div class="space-y-0.5 mb-4 max-h-56 overflow-y-auto pr-1">
+          <div
+            v-for="(v, i) in selectedDayRoute.visits"
+            :key="v.id"
+            class="flex items-center gap-2 text-sm py-1 border-b border-gray-700"
+          >
+            <span class="text-gray-600 w-5 shrink-0">{{ i + 1 }}.</span>
+            <span :class="catColor(v.location_category ?? '?')" class="visit-chip shrink-0 text-white">
+              {{ v.location_category ?? '?' }}
+            </span>
+            <span class="flex-1 truncate text-xs">{{ v.location_name }}</span>
+            <span v-if="v.time_in" class="text-xs text-gray-400 shrink-0">
+              {{ v.time_in }}–{{ v.time_out ?? '?' }}
+              <span v-if="visitDuration(v)" class="text-green-400 ml-0.5">({{ visitDuration(v) }}м)</span>
+            </span>
+            <span class="text-xs shrink-0" :class="statusColor(v.status)">{{ statusLabel(v.status) }}</span>
+          </div>
+        </div>
+
+        <!-- Кнопка LLM оптимизации -->
+        <button
+          class="btn-primary w-full"
+          :disabled="dayOptLoading"
+          @click="optimizeDayRoute"
+        >
+          {{ dayOptLoading ? 'Оптимизирую…' : '🤖 Оптимизировать маршрут (LLM)' }}
+        </button>
+        <div v-if="dayOptError" class="mt-2 text-sm text-red-400">{{ dayOptError }}</div>
+
+        <!-- Результат оптимизации -->
+        <div v-if="dayOptResult" class="mt-4 rounded border border-gray-600 p-3 bg-gray-900">
+          <p class="text-xs text-gray-400 mb-2">
+            Модель: <strong class="text-blue-300">{{ dayOptResult.model_used }}</strong>
+            · {{ dayOptResult.total_distance_km?.toFixed(1) }} км
+            · {{ dayOptResult.total_time_hours?.toFixed(1) }}ч
+          </p>
+          <p class="text-xs text-gray-500 mb-1">Рекомендованный порядок:</p>
+          <ol class="space-y-0.5">
+            <li
+              v-for="(locId, i) in dayOptResult.locations"
+              :key="locId"
+              class="text-xs flex gap-2 text-gray-300"
+            >
+              <span class="text-gray-600 w-5">{{ i + 1 }}.</span>
+              <span>{{ visitNameByLocId(locId) }}</span>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
     <!-- Модал: статус визита -->
     <div v-if="showVisitModal && selectedVisit" class="modal-overlay" @click.self="closeVisitModal">
       <div class="modal">
@@ -138,6 +211,14 @@
             {{ selectedVisit.location_category ?? '?' }}
           </span>
           {{ selectedVisit.location_name }}
+        </p>
+
+        <!-- Сохранённое время (если уже было посещение) -->
+        <p v-if="selectedVisit?.time_in" class="text-sm text-blue-300 mb-3">
+          ⏱ {{ selectedVisit.time_in }} — {{ selectedVisit.time_out ?? '?' }}
+          <span v-if="visitDuration(selectedVisit!)" class="ml-1 text-green-400">
+            ({{ visitDuration(selectedVisit!) }} мин на точке)
+          </span>
         </p>
 
         <!-- Кнопки статуса -->
@@ -186,8 +267,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { DailyRoute, SalesRep, VisitScheduleItem } from '@/services/types'
-import { updateVisitStatus } from '@/services/api'
+import type { DailyRoute, Route, SalesRep, VisitScheduleItem } from '@/services/types'
+import { optimize, updateVisitStatus } from '@/services/api'
 
 const API = '/api/v1'
 
@@ -222,6 +303,13 @@ const statusOptions = [
   { value: 'skipped' as const,   label: '✗ Пропущен',  cls: 'bg-red-700 hover:bg-red-600' },
   { value: 'planned' as const,   label: '⏳ Запланирован', cls: 'bg-gray-600 hover:bg-gray-500' },
 ]
+
+// ─── Day detail modal state ───────────────────────────────────────────────────
+const showDayModal = ref(false)
+const selectedDayRoute = ref<DailyRoute | null>(null)
+const dayOptResult = ref<Route | null>(null)
+const dayOptLoading = ref(false)
+const dayOptError = ref<string | null>(null)
 
 const fm = ref({
   type: 'illness' as string,
@@ -354,6 +442,51 @@ async function submitVisitUpdate() {
   } finally {
     savingVisit.value = false
   }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function visitDuration(visit: VisitScheduleItem): number | null {
+  if (!visit.time_in || !visit.time_out) return null
+  const [h1, m1] = visit.time_in.split(':').map(Number)
+  const [h2, m2] = visit.time_out.split(':').map(Number)
+  const diff = (h2 * 60 + m2) - (h1 * 60 + m1)
+  return diff > 0 ? diff : null
+}
+
+// ─── Day modal ────────────────────────────────────────────────────────────────
+function openDayModal(route: DailyRoute) {
+  selectedDayRoute.value = route
+  dayOptResult.value = null
+  dayOptError.value = null
+  showDayModal.value = true
+}
+
+async function optimizeDayRoute() {
+  if (!selectedDayRoute.value) return
+  dayOptLoading.value = true
+  dayOptError.value = null
+  try {
+    const locationIds = selectedDayRoute.value.visits.map(v => v.location_id)
+    dayOptResult.value = await optimize(locationIds, 'auto', {})
+  } catch (e: any) {
+    dayOptError.value = e?.message ?? 'Ошибка оптимизации'
+  } finally {
+    dayOptLoading.value = false
+  }
+}
+
+function visitNameByLocId(locId: string): string {
+  const v = selectedDayRoute.value?.visits.find(v => v.location_id === locId)
+  if (!v) return locId
+  return `[${v.location_category ?? '?'}] ${v.location_name}`
+}
+
+function statusLabel(s: string): string {
+  return ({ completed: '✓', skipped: '✗', planned: '·', cancelled: '—', rescheduled: '↺' } as Record<string, string>)[s] ?? s
+}
+
+function statusColor(s: string): string {
+  return ({ completed: 'text-green-400', skipped: 'text-red-400', cancelled: 'text-gray-500', rescheduled: 'text-yellow-400', planned: 'text-gray-400' } as Record<string, string>)[s] ?? 'text-gray-400'
 }
 
 // ─── Category styling ─────────────────────────────────────────────────────────
