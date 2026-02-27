@@ -1,120 +1,164 @@
-# Руководство по сборке и запуску T2 на сервере
+# Руководство по развёртыванию T2 на сервере
+
+**Версия:** v1.2.0 · **Обновлено:** 27.02.2026
+
+---
 
 ## Оглавление
 
 1. [Текущее состояние проекта](#1-текущее-состояние-проекта)
-2. [Что нужно на сервере](#2-что-нужно-на-сервере)
+2. [Требования к серверу](#2-требования-к-серверу)
 3. [Подготовка сервера](#3-подготовка-сервера)
-4. [Клонирование и настройка проекта](#4-клонирование-и-настройка-проекта)
-5. [Исправление docker-compose.yml](#5-исправление-docker-composeyml)
-6. [Скачивание LLM моделей](#6-скачивание-llm-моделей)
-7. [Запуск через Docker Compose](#7-запуск-через-docker-compose)
-8. [Запуск без Docker (для отладки)](#8-запуск-без-docker-для-отладки)
+4. [Клонирование и настройка](#4-клонирование-и-настройка)
+5. [Скачивание LLM-моделей](#5-скачивание-llm-моделей)
+6. [Запуск через Docker Compose](#6-запуск-через-docker-compose)
+7. [Первоначальная загрузка данных](#7-первоначальная-загрузка-данных)
+8. [Запуск без Docker (отладка)](#8-запуск-без-docker-отладка)
 9. [Проверка работоспособности](#9-проверка-работоспособности)
 10. [Доступ через Tailscale](#10-доступ-через-tailscale)
-11. [Нереализованные эндпоинты](#11-нереализованные-эндпоинты)
-12. [Типичные проблемы и решения](#12-типичные-проблемы-и-решения)
+11. [Типичные проблемы и решения](#11-типичные-проблемы-и-решения)
+12. [Чеклист развёртывания](#12-чеклист-развёртывания)
 
 ---
 
 ## 1. Текущее состояние проекта
 
-### Что ГОТОВО и работает
+### Что реализовано
 
 | Компонент | Статус | Описание |
 |-----------|--------|----------|
-| Frontend (Vue 3) | Готов | SPA с дашбордом, оптимизацией, аналитикой (4 страницы) |
-| Backend (FastAPI) | Готов | 15 эндпоинтов: оптимизация, локации, маршруты, метрики, бенчмарки, insights |
-| PostgreSQL | Готов | Схема, миграции, ORM модели |
-| Redis | Готов | Контейнер настроен (кеширование) |
-| Docker-файлы | Готовы | Multi-stage builds для backend и frontend |
-| Nginx | Готов | Проксирование API, SPA routing |
-| LLM клиенты | Готовы | QwenClient, LlamaClient (GGUF через llama-cpp) |
-| CI/CD | Готов | GitHub Actions (тесты, линтинг, coverage) |
+| Frontend (Vue 3 + TypeScript) | ✅ | 6 страниц: Home, Dashboard, Optimize, Analytics, Schedule, Reps |
+| Backend (FastAPI + Python) | ✅ | 33 эндпоинта |
+| PostgreSQL | ✅ | 8 таблиц: locations, sales_reps, visit_schedule, visit_log, force_majeure_events, routes, metrics, optimization_results |
+| Redis | ✅ | Контейнер настроен (кеширование) |
+| Docker Compose | ✅ | 4 сервиса: postgres, redis, backend, frontend |
+| Nginx | ✅ | Проксирование `/api/*` → backend, SPA routing |
+| Qwen 0.5B GGUF | ✅ | Оценка вариантов маршрута (pros/cons), lazy load |
+| Llama 1B GGUF | ✅ | Альтернативная модель, lazy load |
+| SchedulePlanner | ✅ | Алгоритм A/B/C/D, 14 ТТ/день, форс-мажоры, автоперенос skipped |
+| Excel-экспорт | ✅ | 4 листа: Расписание, Журнал визитов, Статистика по ТТ, Активность ТП |
+| 3 варианта оптимизации | ✅ | Greedy / Priority-first / Balanced + LLM evaluation |
 
-### Реализованные эндпоинты
+### Полный список эндпоинтов
 
-| Эндпоинт | Что делает | Статус |
-|----------|------------|--------|
-| `GET /health` | Проверка здоровья системы | ✅ |
-| `POST /api/v1/optimize` | Единый эндпоинт оптимизации (Qwen/Llama/auto) | ✅ |
-| `POST /api/v1/qwen/optimize` | Прямой вызов Qwen | ✅ |
-| `POST /api/v1/llama/optimize` | Прямой вызов Llama | ✅ |
-| `GET /api/v1/locations/` | Список всех локаций | ✅ |
-| `POST /api/v1/locations/` | Создание локации | ✅ |
-| `GET /api/v1/metrics` | Метрики моделей | ✅ |
-| `GET /api/v1/insights` | Рекомендации по выбору модели | ✅ |
-| `POST /api/v1/benchmark/run` | Запуск бенчмарка | ✅ |
-| `GET /api/v1/benchmark/compare` | Сравнение моделей | ✅ |
-| `GET /api/v1/benchmark/status` | Статус бенчмарка | ✅ |
-| `GET /api/v1/benchmark/latest` | Последний результат бенчмарка | ✅ |
-| `GET /api/v1/routes/` | Список маршрутов (пагинация) | ✅ |
-| `GET /api/v1/routes/{id}` | Детали маршрута с метриками | ✅ |
-| `POST /api/v1/locations/upload` | Загрузка локаций из CSV/JSON файла | ✅ |
+#### Система
+| Эндпоинт | Описание |
+|----------|----------|
+| `GET /health` | Health check (DB + LLM статусы) |
+| `GET /api/v1/health` | Health check для фронтенда |
 
-> **Вывод**: Все эндпоинты из API-контракта реализованы. Фронтенд полноценно работает на всех страницах.
+#### Оптимизация маршрутов
+| Эндпоинт | Описание |
+|----------|----------|
+| `POST /api/v1/optimize` | Greedy-оптимизация (< 100 мс) |
+| `POST /api/v1/qwen/optimize` | Прямой вызов Qwen |
+| `POST /api/v1/llama/optimize` | Прямой вызов Llama |
+| `POST /api/v1/optimize/variants` | 3 варианта + LLM pros/cons (timeout 180 сек) |
+| `POST /api/v1/optimize/confirm` | Сохранение выбранного варианта |
+
+#### Торговые точки
+| Эндпоинт | Описание |
+|----------|----------|
+| `GET /api/v1/locations/` | Список ТТ с пагинацией |
+| `POST /api/v1/locations/` | Создание ТТ |
+| `GET /api/v1/locations/{id}` | Детали ТТ |
+| `PUT /api/v1/locations/{id}` | Обновление ТТ |
+| `DELETE /api/v1/locations/{id}` | Удаление ТТ |
+| `POST /api/v1/locations/upload` | Загрузка из XLSX/CSV/JSON |
+
+#### Торговые представители
+| Эндпоинт | Описание |
+|----------|----------|
+| `GET /api/v1/reps` | Список ТП |
+| `POST /api/v1/reps` | Создание ТП |
+| `PATCH /api/v1/reps/{id}` | Обновление |
+| `DELETE /api/v1/reps/{id}` | Удаление |
+
+#### Расписание и визиты
+| Эндпоинт | Описание |
+|----------|----------|
+| `POST /api/v1/schedule/generate` | Генерация месячного плана |
+| `GET /api/v1/schedule/` | Полный план на месяц |
+| `GET /api/v1/schedule/daily` | Маршруты на конкретный день |
+| `GET /api/v1/schedule/{rep_id}` | План конкретного ТП |
+| `PATCH /api/v1/schedule/{id}` | Обновление статуса (skipped → автоперенос) |
+| `POST /api/v1/force_majeure` | Форс-мажор + перераспределение |
+| `GET /api/v1/force_majeure` | История форс-мажоров |
+| `POST /api/v1/visits` | Фиксация визита |
+| `GET /api/v1/visits/` | История визитов |
+| `GET /api/v1/visits/stats` | Статистика посещаемости |
+
+#### Аналитика и экспорт
+| Эндпоинт | Описание |
+|----------|----------|
+| `GET /api/v1/metrics` | Метрики LLM |
+| `GET /api/v1/insights` | Охват ТТ, активность ТП, районы |
+| `GET /api/v1/routes/` | История маршрутов |
+| `GET /api/v1/routes/{id}` | Детали маршрута |
+| `GET /api/v1/export/schedule` | Excel-отчёт (4 листа) |
+| `GET /api/v1/benchmark/compare` | Сравнение LLM-моделей |
+| `GET /api/v1/benchmark/status` | Статус бенчмарка |
+| `GET /api/v1/benchmark/latest` | Последний результат бенчмарка |
 
 ---
 
-## 2. Что нужно на сервере
+## 2. Требования к серверу
 
-### Минимальные требования
+### Минимальные ресурсы
 
 | Ресурс | Минимум | Рекомендация |
 |--------|---------|--------------|
-| RAM | 4 GB | 8 GB |
-| Диск | 5 GB свободных | 10 GB |
-| CPU | 2 ядра | 4 ядра |
+| RAM | 4 GB | **8 GB** (LLM требует ~1.2 GB под моделью) |
+| Диск | 8 GB свободных | 15 GB (Qwen ~400 MB + Llama ~800 MB + образы ~3 GB) |
+| CPU | 2 ядра | 4 ядра (inference быстрее) |
 | ОС | Ubuntu 22.04+ | Ubuntu 24.04 LTS |
 
-> Ваш сервер: Ubuntu 24.04, ~55 GB диск — более чем достаточно.
+> **Ваш сервер:** `100.120.184.98` — Ubuntu 24.04, ~55 GB диск — достаточно.
 
 ### Необходимое ПО
 
 - **Docker** + **Docker Compose plugin** (v2)
 - **Git**
-- **Python 3.11+** (для скачивания моделей)
-- **pip** (для `huggingface-hub`)
+- **Python 3.11+** (только для скачивания моделей через huggingface-hub)
 
 ---
 
 ## 3. Подготовка сервера
 
-### 3.1 Подключение к серверу
+### 3.1 Подключение
 
 ```bash
 ssh jellyfishka@100.120.184.98
 ```
 
-### 3.2 Установка Docker (если ещё не установлен)
+### 3.2 Установка Docker (если не установлен)
 
 ```bash
-# Проверка — если docker уже есть, пропускай этот шаг
+# Проверка
 docker --version && docker compose version
 
-# Если нет — устанавливаем
+# Установка (если нет)
 sudo apt update
 sudo apt install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
 
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-# Добавить себя в группу docker
 sudo usermod -aG docker $USER
 newgrp docker
 
-# Проверка
-docker run hello-world
+docker run hello-world   # Проверка
 ```
 
-### 3.3 Установка вспомогательных инструментов
+### 3.3 Вспомогательные инструменты
 
 ```bash
 sudo apt install -y python3 python3-pip python3-venv git htop
@@ -122,9 +166,9 @@ sudo apt install -y python3 python3-pip python3-venv git htop
 
 ---
 
-## 4. Клонирование и настройка проекта
+## 4. Клонирование и настройка
 
-### 4.1 Клонирование репозитория
+### 4.1 Клонирование
 
 ```bash
 cd ~
@@ -132,193 +176,187 @@ git clone git@github.com:JellyfishKa/T2_project.git
 cd T2_project
 ```
 
-> Если SSH-ключ для GitHub ещё не настроен — см. `docs/server-guide.md` раздел "Подключение GitHub через SSH".
+> Если SSH-ключ ещё не добавлен — см. `docs/SERVER/server-guide.md`.
 
-### 4.2 Создание файла .env
+### 4.2 Создание `.env`
 
 ```bash
-cp .env.example .env
-nano .env
+cp backend/.env.example backend/.env
+nano backend/.env
 ```
 
-Заполни значения:
+Минимальная конфигурация:
 
 ```env
 # Database
 DATABASE_USER=postgres
-DATABASE_PASSWORD=ПРИДУМАЙ_НАДЁЖНЫЙ_ПАРОЛЬ
+DATABASE_PASSWORD=НАДЁЖНЫЙ_ПАРОЛЬ_ЗДЕСЬ
 DATABASE_HOST=postgres
 DATABASE_PORT=5432
 DATABASE_NAME=t2
 
 # LLM Models
-QWEN_API_ENDPOINT=local
 QWEN_MODEL_ID=qwen2-0_5b-instruct-q4_k_m.gguf
-LLAMA_API_ENDPOINT=local
 LLAMA_MODEL_ID=Llama-3.2-1B-Instruct-Q4_K_M.gguf
 
 # Application
 DEBUG=false
 ENVIRONMENT=production
-BACKEND_PORT=8000
-FRONTEND_PORT=80
+CORS_ORIGINS=http://100.120.184.98,http://localhost
 ```
+
+> `DATABASE_HOST=postgres` — имя сервиса Docker, не `localhost`.
 
 ---
 
-## 5. Исправление docker-compose.yml
+## 5. Скачивание LLM-моделей
 
-### Проблема
-
-Файл `docker-compose.yml` лежит в `backend/`, но пути сборки (`./backend`, `./frontend`) написаны так, как будто он в корне проекта. **Это не будет работать.**
-
-### Решение: перенести docker-compose.yml в корень проекта
-
-```bash
-cd ~/T2_project
-mv backend/docker-compose.yml ./docker-compose.yml
-```
-
-Теперь пути `./backend` и `./frontend` будут корректными относительно корня проекта.
-
-### Альтернатива: если не хочешь двигать файл
-
-Отредактируй `backend/docker-compose.yml` — замени пути:
-
-```yaml
-# Было:
-  backend:
-    build:
-      context: ./backend
-  # ...
-    volumes:
-      - ./backend/src/models:/app/src/models:ro
-  frontend:
-    build:
-      context: ./frontend
-
-# Стало:
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-  # ...
-    volumes:
-      - ./src/models:/app/src/models:ro
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-```
-
-> **Рекомендация**: перенеси файл в корень — это стандартная практика и проще для понимания.
-
----
-
-## 6. Скачивание LLM моделей
-
-Модели нужно скачать **до запуска Docker**, потому что они монтируются как volume.
+Модели монтируются как Docker volume, их нужно скачать **до первого запуска**.
 
 ```bash
 cd ~/T2_project
 
-# Создать Python venv для скачивания
-python3 -m venv .venv
-source .venv/bin/activate
+# Создать venv только для скачивания
+python3 -m venv .venv_download
+source .venv_download/bin/activate
 pip install huggingface-hub
 
-# Скачать Qwen (~400 MB)
-python3 -c "
+# Qwen 0.5B (~400 MB) — основная модель
+python3 - <<'EOF'
 from huggingface_hub import hf_hub_download
 hf_hub_download(
-    'Qwen/Qwen2-0.5B-Instruct-GGUF',
-    'qwen2-0_5b-instruct-q4_k_m.gguf',
+    repo_id='Qwen/Qwen2-0.5B-Instruct-GGUF',
+    filename='qwen2-0_5b-instruct-q4_k_m.gguf',
     local_dir='./backend/src/models/'
 )
-"
+print("Qwen downloaded OK")
+EOF
 
-# Скачать Llama (~808 MB)
-python3 -c "
+# Llama 1B (~808 MB) — альтернативная модель
+python3 - <<'EOF'
 from huggingface_hub import hf_hub_download
 hf_hub_download(
-    'bartowski/Llama-3.2-1B-Instruct-GGUF',
-    'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+    repo_id='bartowski/Llama-3.2-1B-Instruct-GGUF',
+    filename='Llama-3.2-1B-Instruct-Q4_K_M.gguf',
     local_dir='./backend/src/models/'
 )
-"
+print("Llama downloaded OK")
+EOF
+
+deactivate
 
 # Проверка
 ls -lh backend/src/models/*.gguf
 # Ожидаем:
-#   qwen2-0_5b-instruct-q4_k_m.gguf     (~400 MB)
-#   Llama-3.2-1B-Instruct-Q4_K_M.gguf   (~808 MB)
-
-deactivate
+#   qwen2-0_5b-instruct-q4_k_m.gguf     ~400 MB
+#   Llama-3.2-1B-Instruct-Q4_K_M.gguf   ~808 MB
 ```
 
 ---
 
-## 7. Запуск через Docker Compose
+## 6. Запуск через Docker Compose
 
-### 7.1 Сборка и запуск
+### 6.1 Сборка и старт
 
 ```bash
 cd ~/T2_project
 
-# Убедись, что docker-compose.yml в корне (шаг 5)
-# и .env файл создан (шаг 4.2)
+# Убедиться: docker-compose.yml лежит в корне проекта
+ls docker-compose.yml   # или backend/docker-compose.yml
 
-# Сборка всех образов
+# Если docker-compose.yml в backend/ — перенести в корень
+mv backend/docker-compose.yml ./docker-compose.yml
+
+# Сборка образов (занимает 5-15 минут при первом запуске)
 docker compose build
 
 # Запуск всех сервисов
 docker compose up -d
 ```
 
-### 7.2 Проверка статуса
+### 6.2 Проверка статуса
 
 ```bash
-# Все контейнеры должны быть в статусе "Up"
 docker compose ps
-
-# Ожидаемый вывод:
-# NAME            STATUS                    PORTS
-# t2_postgres     Up (healthy)              0.0.0.0:5432->5432/tcp
-# t2_redis        Up                        0.0.0.0:6379->6379/tcp
-# t2_backend      Up (health: starting)     0.0.0.0:8000->8000/tcp
-# t2_frontend     Up                        0.0.0.0:80->80/tcp
+# NAME            STATUS               PORTS
+# t2_postgres     Up (healthy)         0.0.0.0:5432->5432/tcp
+# t2_redis        Up                   0.0.0.0:6379->6379/tcp
+# t2_backend      Up (healthy)         0.0.0.0:8000->8000/tcp
+# t2_frontend     Up                   0.0.0.0:80->80/tcp
 ```
 
-### 7.3 Просмотр логов
+### 6.3 Просмотр логов
 
 ```bash
-# Все логи
-docker compose logs -f
-
-# Только backend (самое полезное при отладке)
-docker compose logs -f backend
-
-# Только frontend
-docker compose logs -f frontend
+docker compose logs -f          # все сервисы
+docker compose logs -f backend  # только backend (наиболее информативно)
 ```
 
-### 7.4 Остановка
+### 6.4 Остановка
 
 ```bash
-docker compose down          # Остановить, сохранить данные
-docker compose down -v       # Остановить и удалить volumes (БД!)
+docker compose down       # остановить, данные БД сохранятся
+docker compose down -v    # остановить и удалить volumes (данные БД удалятся!)
+```
+
+### 6.5 Обновление после `git pull`
+
+```bash
+git pull
+docker compose build backend  # пересобрать только backend (фронтенд если менялся тоже)
+docker compose up -d
 ```
 
 ---
 
-## 8. Запуск без Docker (для отладки)
+## 7. Первоначальная загрузка данных
 
-Если Docker-сборка падает или нужно быстро потестить бэкенд отдельно:
+После первого запуска база пустая. Нужно заполнить:
 
-### 8.1 PostgreSQL и Redis через Docker
+### 7.1 Загрузка торговых точек
 
 ```bash
-# Запустить только БД и кеш
+# Через API (curl)
+curl -X POST http://localhost:8000/api/v1/locations/upload \
+  -F "file=@/путь/к/mordovia_tt.xlsx"
+
+# Или через Swagger UI: http://localhost:8000/docs
+# POST /api/v1/locations/upload
+```
+
+> Поддерживаемые форматы: `.xlsx`, `.csv`, `.json`
+> Обязательные колонки: `name`, `lat`, `lon`, `time_window_start`, `time_window_end`
+> Опциональные: `category` (A/B/C/D), `city`, `district`, `address`
+
+### 7.2 Создание торговых представителей
+
+```bash
+curl -X POST http://localhost:8000/api/v1/reps \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Иванов Иван Иванович"}'
+
+# Повторить для каждого ТП (рекомендуется минимум 3)
+```
+
+### 7.3 Генерация месячного расписания
+
+```bash
+# Замените 2026-02 на текущий месяц
+curl -X POST "http://localhost:8000/api/v1/schedule/generate" \
+  -H "Content-Type: application/json" \
+  -d '{"month": "2026-02"}'
+
+# Ожидаемый ответ:
+# {"month": "2026-02", "total_visits": 700, "coverage_pct": 85.0, ...}
+```
+
+---
+
+## 8. Запуск без Docker (отладка)
+
+### 8.1 Только БД и Redis через Docker
+
+```bash
 docker compose up -d postgres redis
 ```
 
@@ -331,17 +369,16 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements/prod/requirements.txt
 
-# Указать переменные (localhost, т.к. БД работает через Docker)
+# Переменные окружения (localhost т.к. БД в Docker)
 export DATABASE_USER=postgres
-export DATABASE_PASSWORD=ТВОЙ_ПАРОЛЬ
+export DATABASE_PASSWORD=ВАШ_ПАРОЛЬ
 export DATABASE_HOST=localhost
 export DATABASE_PORT=5432
 export DATABASE_NAME=t2
 export QWEN_MODEL_ID=qwen2-0_5b-instruct-q4_k_m.gguf
 export LLAMA_MODEL_ID=Llama-3.2-1B-Instruct-Q4_K_M.gguf
 
-# Запуск с hot-reload
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 8.3 Frontend вручную
@@ -349,90 +386,83 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```bash
 cd ~/T2_project/frontend
 
-# Нужен Node.js 20+
-# Если нет — установи через nvm:
+# Node.js 20+ (через nvm если нет)
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.bashrc
-nvm install 20
-nvm use 20
+nvm install 20 && nvm use 20
 
 npm install
-
-# Указать URL бэкенда
-export VITE_API_URL=http://localhost:8000/api/v1
-
 npm run dev -- --host 0.0.0.0
-# Фронт будет на порту 5173
+# Фронт будет на http://localhost:5173
 ```
 
 ---
 
 ## 9. Проверка работоспособности
 
-### 9.1 Health check бэкенда
+### 9.1 Health check
 
 ```bash
 curl http://localhost:8000/health
 ```
 
 Ожидаемый ответ:
+
 ```json
 {
-  "status": "ok",
+  "status": "healthy",
   "database": "connected",
-  "models": {
-    "qwen": "not_loaded",
-    "llama": "not_loaded"
+  "services": {
+    "database": "connected",
+    "qwen": "unavailable",
+    "llama": "unavailable"
   }
 }
 ```
 
-> `not_loaded` — нормально. Модели загрузятся при первом запросе (lazy loading).
+> `"unavailable"` для моделей — нормально. Они загружаются лениво при первом запросе.
 
-### 9.2 Тест Qwen endpoint (единственный рабочий endpoint оптимизации)
+### 9.2 Тест оптимизации (быстрый greedy)
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/qwen/optimize \
+curl -X POST http://localhost:8000/api/v1/optimize \
   -H "Content-Type: application/json" \
   -d '{
-    "locations": [
-      {
-        "ID": "loc_1",
-        "name": "Красная площадь",
-        "address": "Москва",
-        "lat": 55.7539,
-        "lon": 37.6208,
-        "time_window_start": "10:00",
-        "time_window_end": "22:00",
-        "priority": "high"
-      },
-      {
-        "ID": "loc_2",
-        "name": "Парк Горького",
-        "address": "Москва",
-        "lat": 55.7298,
-        "lon": 37.5995,
-        "time_window_start": "08:00",
-        "time_window_end": "23:00",
-        "priority": "medium"
-      }
-    ],
-    "constraints": {}
+    "location_ids": ["ID_1", "ID_2", "ID_3"],
+    "model": "auto"
   }'
+# Ответ за < 1 секунды
 ```
 
-> Первый запрос займёт 5-15 секунд (загрузка модели в RAM). Последующие — быстрее.
-
-### 9.3 Тест фронтенда
+### 9.3 Тест вариантов с LLM (долгий, 30-120 сек)
 
 ```bash
-curl -s http://localhost:80 | head -5
-# Должен вернуть HTML (index.html)
+curl -X POST http://localhost:8000/api/v1/optimize/variants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "location_ids": ["ID_1", "ID_2", "ID_3"],
+    "model": "qwen"
+  }'
+# Ожидать: 3 варианта с pros/cons
 ```
 
-### 9.4 Swagger UI (интерактивная документация API)
+### 9.4 Тест экспорта Excel
 
-Открой в браузере:
+```bash
+curl -o test_export.xlsx \
+  "http://localhost:8000/api/v1/export/schedule?month=2026-02"
+ls -lh test_export.xlsx   # Должен быть > 5 KB
+```
+
+### 9.5 Тест фронтенда
+
+```bash
+curl -s http://localhost:80 | grep -o '<title>[^<]*</title>'
+# Ожидаем: <title>T2 Logistics</title> или похожее
+```
+
+### 9.6 Swagger UI
+
 ```
 http://100.120.184.98:8000/docs
 ```
@@ -441,119 +471,133 @@ http://100.120.184.98:8000/docs
 
 ## 10. Доступ через Tailscale
 
-### Порты и адреса
-
-После запуска проект доступен через Tailscale по следующим адресам:
-
 | Сервис | URL | Описание |
 |--------|-----|----------|
-| **Фронтенд** | `http://100.120.184.98` | Основной интерфейс (порт 80) |
+| **Фронтенд** | `http://100.120.184.98` | Основной интерфейс |
 | **Backend API** | `http://100.120.184.98:8000` | REST API |
 | **Swagger UI** | `http://100.120.184.98:8000/docs` | Документация API |
-| **PostgreSQL** | `100.120.184.98:5432` | БД (для подключения через DBeaver и т.д.) |
+| **PostgreSQL** | `100.120.184.98:5432` | БД (DBeaver, pgAdmin) |
 
-### CORS
+### CORS настройка
 
-Сейчас в `main.py` CORS разрешён только для `localhost:3000` и `localhost:5173`. Для доступа через Tailscale нужно добавить IP сервера.
+В `.env` укажите:
 
-**Временное решение** — в `backend/main.py` изменить:
-
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Для разработки — разрешить все origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+```env
+CORS_ORIGINS=http://100.120.184.98,http://localhost,http://localhost:5173
 ```
 
-> Или добавить конкретный origin: `"http://100.120.184.98"`.
+В `main.py` CORS настраивается автоматически из переменной `CORS_ORIGINS`.
 
-### Nginx проксирование
-
-Nginx в контейнере `t2_frontend` уже настроен проксировать `/api/*` на backend. Поэтому фронтенд на порту 80 может обращаться к API через свой же домен — это обходит проблему CORS для продакшн-сборки.
-
-**Но** фронтенд в dev-режиме (порт 5173) обращается напрямую к `localhost:8000` — для этого CORS нужен.
+> **Важно:** фронтенд через порт 80 (Nginx) проксирует API — CORS не нужен для продакшн.
+> CORS нужен только при разработке (порт 5173 → порт 8000).
 
 ---
 
-## 11. Статус API-эндпоинтов
+## 11. Типичные проблемы и решения
 
-> **Обновлено 25.02.2026**: Все эндпоинты из API-контракта реализованы. Полный список — в разделе 1.
+### Backend не стартует: `sqlalchemy connection refused`
 
----
+**Причина:** PostgreSQL ещё не готов.
 
-## 12. Типичные проблемы и решения
-
-### Проблема: `docker compose build` падает на backend
-
-**Причина**: `llama-cpp-python` требует компилятор C++.
-
-**Решение**: Это уже обработано в Dockerfile (`gcc`, `build-essential`). Если всё равно падает — проверь логи:
 ```bash
-docker compose build backend 2>&1 | tail -50
+docker compose logs postgres | tail -20
+# Ждать: "database system is ready to accept connections"
+docker compose restart backend
 ```
 
-### Проблема: backend не может подключиться к PostgreSQL
+### LLM зависает или SIGSEGV (exit 139)
 
-**Причина**: `DATABASE_HOST` должен быть `postgres` (имя сервиса в Docker), не `localhost`.
+**Причина:** Попытка загрузить Qwen и Llama одновременно — не хватает RAM.
 
-**Решение**: В `.env` установи `DATABASE_HOST=postgres` для Docker, `localhost` для ручного запуска.
+**Решение:** Система корректно работает с одной моделью. В `/optimize/variants` выбирайте только **одну** модель (Qwen **или** Llama). Обе одновременно не загружаются.
 
-### Проблема: фронтенд показывает "Network Error"
+### Analytics не загружается
 
-**Причина**: CORS не разрешает запросы с IP сервера.
+**Причина:** Один из API-вызовов возвращает ошибку.
 
-**Решение**: Добавить IP в `allow_origins` в `main.py` (см. раздел 10).
+```bash
+# Проверить вручную
+curl http://localhost:8000/api/v1/insights?month=2026-02
+curl http://localhost:8000/api/v1/benchmark/compare
+curl "http://localhost:8000/api/v1/routes/?skip=0&limit=10"
+```
 
-Или: используй фронтенд через порт 80 (Nginx) — он проксирует API и CORS не нужен.
+Если данных нет (пустая БД) — загрузить ТТ, создать ТП, сгенерировать расписание (шаг 7).
 
-### Проблема: `npm ci --only=production` в Dockerfile фронтенда
+### `npm ci --only=production` в Dockerfile фронтенда
 
-`--only=production` пропустит devDependencies (включая Vite, TypeScript). Сборка упадёт.
+**Причина:** `--only=production` пропускает devDependencies (Vite, TypeScript).
 
-**Решение**: Заменить в `frontend/Dockerfile`:
 ```dockerfile
-# Было:
+# В frontend/Dockerfile заменить:
 RUN npm ci --only=production
-
-# Стало:
+# На:
 RUN npm ci
 ```
 
-### Проблема: GGUF модели не найдены в контейнере
-
-**Причина**: Volume в docker-compose монтирует `./backend/src/models` — путь относительно docker-compose.yml.
-
-**Решение**: Убедись, что docker-compose.yml перенесён в корень (шаг 5) и модели лежат в `backend/src/models/`.
-
-### Проблема: порт 80 занят
+### GGUF модели не найдены
 
 ```bash
-# Проверка
-sudo lsof -i :80
+ls -lh backend/src/models/*.gguf
+# Если нет — выполнить шаг 5 (скачивание моделей)
+```
 
-# Изменить порт фронтенда в docker-compose.yml:
-ports:
-  - "8080:80"   # Будет доступен на http://100.120.184.98:8080
+### Порт 80 занят
+
+```bash
+sudo lsof -i :80
+# В docker-compose.yml изменить:
+#   ports: ["8080:80"]
+# Фронт будет на http://100.120.184.98:8080
+```
+
+### `docker compose build` падает на backend
+
+```bash
+# Посмотреть подробности
+docker compose build backend 2>&1 | tail -50
+# Обычно причина: отсутствует gcc/build-essential (уже в Dockerfile)
+# Или: нет места на диске
+df -h
 ```
 
 ---
 
-## Чеклист запуска
+## 12. Чеклист развёртывания
 
-- [ ] Подключиться к серверу через SSH
-- [ ] Установить Docker (если нет)
-- [ ] Клонировать репозиторий
-- [ ] Создать `.env` файл
-- [ ] Перенести `docker-compose.yml` в корень проекта
-- [ ] Исправить `frontend/Dockerfile` (`npm ci` без `--only=production`)
-- [ ] Скачать GGUF модели в `backend/src/models/`
-- [ ] Добавить CORS для Tailscale IP (или `"*"` для разработки)
-- [ ] `docker compose build`
-- [ ] `docker compose up -d`
-- [ ] Проверить `curl http://localhost:8000/health`
-- [ ] Проверить `curl http://localhost:80`
-- [ ] Открыть `http://100.120.184.98` в браузере
-- [ ] Тестировать через Swagger UI: `http://100.120.184.98:8000/docs`
+```
+Подготовка:
+  [ ] Подключиться к серверу (SSH)
+  [ ] Установить Docker + Docker Compose
+  [ ] Клонировать репозиторий
+
+Настройка:
+  [ ] Создать backend/.env из .env.example
+  [ ] Убедиться что DATABASE_HOST=postgres (не localhost)
+  [ ] Перенести docker-compose.yml в корень (если в backend/)
+  [ ] Проверить frontend/Dockerfile — npm ci без --only=production
+
+Модели:
+  [ ] Скачать qwen2-0_5b-instruct-q4_k_m.gguf (~400 MB)
+  [ ] Скачать Llama-3.2-1B-Instruct-Q4_K_M.gguf (~808 MB)
+  [ ] ls -lh backend/src/models/*.gguf — оба файла присутствуют
+
+Запуск:
+  [ ] docker compose build
+  [ ] docker compose up -d
+  [ ] docker compose ps — все 4 контейнера Up
+  [ ] curl http://localhost:8000/health → {"status": "healthy"}
+  [ ] curl http://localhost:80 → HTML
+
+Данные:
+  [ ] Загрузить торговые точки (POST /locations/upload)
+  [ ] Создать торговых представителей (POST /reps)
+  [ ] Сгенерировать расписание (POST /schedule/generate)
+
+Проверка функций:
+  [ ] /optimize → маршрут за < 1 сек
+  [ ] /optimize/variants → 3 варианта с метриками
+  [ ] /export/schedule → Excel скачивается, 4 листа
+  [ ] /schedule → отображается расписание
+  [ ] /analytics → охват ТТ и активность ТП загружаются
+```

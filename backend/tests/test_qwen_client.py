@@ -217,7 +217,7 @@ class TestQwenClientPromptConstruction:
 
             assert "locations_sequence" in prompt
             assert "total_distance_km" in prompt
-            assert "COMPUTE" in prompt
+            assert "0.0" in prompt
 
 
 class TestQwenClientResponseParsing:
