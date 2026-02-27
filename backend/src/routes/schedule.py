@@ -1,6 +1,6 @@
 from calendar import monthrange
 from collections import defaultdict
-from datetime import date, time
+from datetime import date, time, timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import Location, VisitLog, VisitSchedule, get_session
+from src.database.models import Location, SalesRep, VisitLog, VisitSchedule, get_session
 from src.schemas.schedule import (
     DailyRoute,
     GenerateScheduleRequest,
@@ -18,6 +18,7 @@ from src.schemas.schedule import (
 )
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
+    MAX_TT_PER_DAY,
     VISIT_DURATION_MIN,
     SchedulePlanner,
 )
@@ -67,7 +68,9 @@ async def update_visit_status(
     Обновить статус визита и зафиксировать время прихода/ухода.
 
     - status="completed" + time_in/time_out → создаёт запись в visit_log
-    - status="skipped"/"cancelled" → только обновляет статус
+    - status="skipped" → обновляет статус + автоматически создаёт новый визит
+      на ближайший доступный день (требование: 100% охват базы ТТ)
+    - status="cancelled" → только обновляет статус
     """
     sched = await session.get(
         VisitSchedule,
@@ -102,6 +105,12 @@ async def update_visit_status(
         )
         session.add(log)
 
+    elif data.status == "skipped":
+        # ── Автоматический перенос пропущенной ТТ ─────────────────────────────
+        # Конкурсное требование: гарантия 100% охвата базы ТТ, включая механизм
+        # добавления ТТ из пройденного маршрута в случае, если точка не работала.
+        await _reschedule_skipped_visit(session, sched)
+
     await session.commit()
     await session.refresh(sched, ["location", "rep"])
     # Загружаем связанный VisitLog чтобы вернуть time_in/time_out
@@ -112,6 +121,77 @@ async def update_visit_status(
         )
         visit_log = log_result.scalars().first()
     return _schedule_to_item(sched, visit_log)
+
+
+async def _reschedule_skipped_visit(
+    session: AsyncSession,
+    skipped: VisitSchedule,
+) -> None:
+    """
+    Создаёт новую запись в расписании для пропущенной ТТ на ближайший
+    доступный день. Пытается назначить тому же сотруднику; если у него нет
+    свободных слотов в ближайшие 30 дней — назначает любому активному.
+    """
+    import logging
+    import uuid as uuid_mod
+    log = logging.getLogger("schedule")
+
+    start_from = skipped.planned_date + timedelta(days=1)
+
+    async def _find_slot(rep_id: str) -> Optional[date]:
+        candidate = start_from
+        for _ in range(30):
+            if candidate.weekday() >= 5:
+                candidate += timedelta(days=1)
+                continue
+            count_q = select(VisitSchedule).where(
+                VisitSchedule.rep_id == rep_id,
+                VisitSchedule.planned_date == candidate,
+                VisitSchedule.status.in_(["planned", "rescheduled"]),
+            )
+            cnt = len((await session.execute(count_q)).scalars().all())
+            if cnt < MAX_TT_PER_DAY:
+                return candidate
+            candidate += timedelta(days=1)
+        return None
+
+    target_rep_id = skipped.rep_id
+    target_date = await _find_slot(target_rep_id)
+
+    if target_date is None:
+        # Нет слота у исходного сотрудника — ищем любого активного
+        reps_q = select(SalesRep).where(
+            SalesRep.status == "active",
+            SalesRep.id != target_rep_id,
+        )
+        active_reps = (await session.execute(reps_q)).scalars().all()
+        for rep in active_reps:
+            d = await _find_slot(rep.id)
+            if d is not None:
+                target_rep_id = rep.id
+                target_date = d
+                break
+
+    if target_date is None:
+        log.warning(
+            "Не удалось найти слот для переноса ТТ %s после пропуска",
+            skipped.location_id,
+        )
+        return
+
+    session.add(VisitSchedule(
+        id=str(uuid_mod.uuid4()),
+        location_id=skipped.location_id,
+        rep_id=target_rep_id,
+        planned_date=target_date,
+        status="rescheduled",
+    ))
+    log.info(
+        "ТТ %s перенесена на %s (сотрудник %s) после пропуска",
+        skipped.location_id,
+        target_date,
+        target_rep_id,
+    )
 
 
 @router.get("/daily", response_model=List[DailyRoute])

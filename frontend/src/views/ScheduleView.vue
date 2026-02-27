@@ -12,6 +12,21 @@
 
       <button class="btn-primary" @click="showGenerate = true">Сгенерировать план</button>
       <button class="btn-secondary" @click="showFM = true">Форс-мажор</button>
+      <button
+        class="btn-secondary flex items-center gap-1.5"
+        :disabled="exportLoading"
+        @click="handleExport"
+        title="Скачать Excel с расписанием и аналитикой"
+      >
+        <svg v-if="exportLoading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+        <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        <span>{{ exportLoading ? 'Экспорт…' : 'Excel' }}</span>
+      </button>
     </div>
 
     <!-- Легенда категорий -->
@@ -170,14 +185,32 @@
           </div>
         </div>
 
-        <!-- Кнопка LLM оптимизации -->
+        <!-- Кнопка оптимизации маршрута -->
         <button
-          class="btn-primary w-full"
+          class="btn-primary w-full flex items-center justify-center gap-2"
           :disabled="dayOptLoading"
           @click="optimizeDayRoute"
         >
-          {{ dayOptLoading ? 'Оптимизирую…' : '🤖 Оптимизировать маршрут (LLM)' }}
+          <svg
+            v-if="dayOptLoading"
+            class="animate-spin h-4 w-4 text-white flex-shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <span>{{ dayOptLoading ? 'Оптимизирую маршрут…' : 'Оптимизировать маршрут (ИИ)' }}</span>
         </button>
+
+        <!-- Прогресс-бар оптимизации -->
+        <div v-if="dayOptLoading" class="mt-2">
+          <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+            <div class="bg-blue-500 h-1.5 rounded-full animate-pulse" style="width: 100%" />
+          </div>
+          <p class="text-xs text-gray-500 mt-1 text-center">Строю оптимальный маршрут...</p>
+        </div>
+
         <div v-if="dayOptError" class="mt-2 text-sm text-red-400">{{ dayOptError }}</div>
 
         <!-- Результат оптимизации -->
@@ -268,7 +301,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { DailyRoute, Route, SalesRep, VisitScheduleItem } from '@/services/types'
-import { optimize, updateVisitStatus } from '@/services/api'
+import { optimize, updateVisitStatus, downloadScheduleExcel } from '@/services/api'
 
 const API = '/api/v1'
 
@@ -281,6 +314,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const showGenerate = ref(false)
 const showFM = ref(false)
+const exportLoading = ref(false)
 const generating = ref(false)
 const genResult = ref<string | null>(null)
 const submittingFM = ref(false)
@@ -451,6 +485,18 @@ function visitDuration(visit: VisitScheduleItem): number | null {
   const [h2, m2] = visit.time_out.split(':').map(Number)
   const diff = (h2 * 60 + m2) - (h1 * 60 + m1)
   return diff > 0 ? diff : null
+}
+
+// ─── Экспорт в Excel ──────────────────────────────────────────────────────────
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    await downloadScheduleExcel(currentMonth.value)
+  } catch (e: any) {
+    alert('Ошибка экспорта: ' + (e?.message ?? 'неизвестная ошибка'))
+  } finally {
+    exportLoading.value = false
+  }
 }
 
 // ─── Day modal ────────────────────────────────────────────────────────────────

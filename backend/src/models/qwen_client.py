@@ -202,8 +202,9 @@ class QwenClient(LLMClient):
         speed = 25 if region["classification"] == "urban" else 40
 
         n = len(locations)
-        first_id = locations[0]["ID"] if locations else "?"
-        last_id = locations[-1]["ID"] if locations else "?"
+        # Показываем первые 3 реальных ID без эллипсиса — модель копирует шаблон
+        # дословно, поэтому ",...," приводит к невалидному JSON
+        sample_ids = '","'.join(loc["ID"] for loc in locations[:min(3, n)])
 
         return (
             f"Route optimization: {n} stops, "
@@ -213,11 +214,11 @@ class QwenClient(LLMClient):
             f"RULES: {constraints_text} "
             f"Speed={speed}km/h+15min/stop. "
             f"Cost=dist*{fuel_rate}rub/km. A>B>C>D priority.\n\n"
-            f"OUTPUT (JSON only, no text, numbers must be 0 if unknown):\n"
-            f'{{"locations_sequence":["{first_id}",...,"{last_id}"],'
-            f'"total_distance_km":0,'
-            f'"total_time_hours":0,'
-            f'"total_cost_rub":0}}'
+            f"OUTPUT — reorder ALL {n} stop IDs optimally (JSON only, no text):\n"
+            f'{{"locations_sequence":["{sample_ids}"],'
+            f'"total_distance_km":0.0,'
+            f'"total_time_hours":0.0,'
+            f'"total_cost_rub":0.0}}'
         )
 
     def _parse_response(

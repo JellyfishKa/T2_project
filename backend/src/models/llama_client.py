@@ -200,9 +200,9 @@ class LlamaClient(LLMClient):
         speed = 25 if region["classification"] == "urban" else 40
         n = len(locations)
 
-        # Предвычисляем первый и последний ID для примера
-        first_id = locations[0]["ID"] if locations else "id_first"
-        last_id = locations[-1]["ID"] if locations else "id_last"
+        # Показываем первые 3 реальных ID без эллипсиса — модель копирует шаблон
+        # дословно, поэтому ",...," приводит к невалидному JSON
+        sample_ids = '","'.join(loc["ID"] for loc in locations[:min(3, n)])
 
         return (
             f"Optimize delivery route: {n} stops, "
@@ -213,8 +213,8 @@ class LlamaClient(LLMClient):
             f"Speed={speed}km/h + 15min/stop. "
             f"Cost=dist*{fuel_rate}rub/km. "
             f"Priority A>B>C>D. Visit ALL stops once.\n\n"
-            f"Return ONLY valid JSON, no markdown, no explanation:\n"
-            f'{{"locations_sequence":["{first_id}",...,"{last_id}"],'
+            f"Return ONLY valid JSON — reorder ALL {n} IDs optimally:\n"
+            f'{{"locations_sequence":["{sample_ids}"],'
             f'"total_distance_km":0.0,'
             f'"total_time_hours":0.0,'
             f'"total_cost_rub":0.0}}'

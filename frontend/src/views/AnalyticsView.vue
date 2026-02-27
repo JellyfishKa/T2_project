@@ -350,6 +350,142 @@
           </div>
         </div>
       </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           РАЗДЕЛ: Охват торговых точек (из /insights)
+      ════════════════════════════════════════════════════════════════════ -->
+      <div v-if="insights" class="mt-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold text-gray-900">
+            Охват торговых точек — {{ insights.month }}
+          </h2>
+          <button
+            @click="handleExport"
+            :disabled="exportLoading"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
+          >
+            <svg v-if="exportLoading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+            </svg>
+            <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            {{ exportLoading ? 'Экспорт…' : 'Скачать Excel' }}
+          </button>
+        </div>
+
+        <!-- Сводные карточки -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Всего ТТ</p>
+            <p class="text-3xl font-bold text-gray-900 mt-1">{{ insights.total_tt }}</p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Охват</p>
+            <p class="text-3xl font-bold mt-1" :class="insights.coverage_pct >= 80 ? 'text-green-600' : 'text-amber-500'">
+              {{ insights.coverage_pct }}%
+            </p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Запланировано</p>
+            <p class="text-3xl font-bold text-blue-600 mt-1">{{ insights.visits_this_month.planned }}</p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Выполнено</p>
+            <p class="text-3xl font-bold text-green-600 mt-1">{{ insights.visits_this_month.completed }}</p>
+            <p class="text-xs text-gray-400 mt-0.5">{{ insights.visits_this_month.completion_rate }}% выполнения</p>
+          </div>
+        </div>
+
+        <!-- По категориям -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            <h3 class="text-sm font-semibold text-gray-700 mb-4">Выполнение по категориям ТТ</h3>
+            <div class="space-y-3">
+              <div
+                v-for="(cat, key) in insights.by_category"
+                :key="key"
+                class="flex items-center gap-3"
+              >
+                <span
+                  class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                  :class="{
+                    'bg-red-500': key === 'A',
+                    'bg-orange-500': key === 'B',
+                    'bg-yellow-500': key === 'C',
+                    'bg-gray-400': key === 'D',
+                  }"
+                >{{ key }}</span>
+                <div class="flex-1">
+                  <div class="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{{ cat.completed }} / {{ cat.planned }} визитов</span>
+                    <span class="font-medium" :class="cat.pct >= 80 ? 'text-green-600' : 'text-gray-500'">
+                      {{ cat.pct }}%
+                    </span>
+                  </div>
+                  <div class="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      class="h-2 rounded-full transition-all"
+                      :class="{
+                        'bg-red-500': key === 'A',
+                        'bg-orange-500': key === 'B',
+                        'bg-yellow-400': key === 'C',
+                        'bg-gray-400': key === 'D',
+                      }"
+                      :style="{ width: `${Math.max(cat.pct, 1)}%` }"
+                    />
+                  </div>
+                </div>
+                <span class="text-xs text-gray-400 w-12 text-right">{{ cat.total }} ТТ</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Активность торговых представителей -->
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            <h3 class="text-sm font-semibold text-gray-700 mb-4">Активность торговых представителей</h3>
+            <div class="space-y-2">
+              <div
+                v-for="rep in insights.rep_activity"
+                :key="rep.rep_id"
+                class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"
+              >
+                <div>
+                  <p class="text-sm font-medium text-gray-900">{{ rep.rep_name }}</p>
+                  <p class="text-xs text-gray-400">{{ rep.outings_count }} выходов на маршрут</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-sm font-bold text-blue-600">{{ rep.tt_visited }}</p>
+                  <p class="text-xs text-gray-400">ТТ посещено</p>
+                </div>
+              </div>
+              <div v-if="!insights.rep_activity?.length" class="text-center py-4 text-gray-400 text-sm">
+                Нет данных за этот месяц
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- По районам -->
+        <div v-if="insights.by_district?.length" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-4">Охват по районам</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div
+              v-for="d in insights.by_district"
+              :key="d.district"
+              class="text-center p-3 bg-gray-50 rounded-lg"
+            >
+              <p class="text-xs font-medium text-gray-700 truncate">{{ d.district || 'Не указан' }}</p>
+              <p class="text-lg font-bold mt-1" :class="d.coverage_pct >= 80 ? 'text-green-600' : 'text-amber-500'">
+                {{ d.coverage_pct }}%
+              </p>
+              <p class="text-xs text-gray-400">{{ d.total }} ТТ</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </template>
   </div>
 </template>
@@ -374,9 +510,12 @@ import {
   fetchRoutes,
   getMetrics,
   compareModels,
+  getInsights,
+  downloadScheduleExcel,
   type Route,
   type Metric
 } from '@/services/api'
+import type { Insights } from '@/services/types'
 
 // Register ChartJS components
 ChartJS.register(
@@ -415,6 +554,14 @@ const error = ref<string | null>(null)
 const routes = ref<Route[]>([])
 const metrics = ref<Metric[]>([])
 const modelComparison = ref<any>(null)
+const insights = ref<Insights | null>(null)
+const exportLoading = ref(false)
+
+// Текущий месяц для инсайтов
+const insightsMonth = computed(() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+})
 
 // Chart options
 const barChartOptions = {
@@ -711,20 +858,33 @@ const loadAnalyticsData = async () => {
     isLoading.value = true
     error.value = null
 
-    const [routesData, metricsData, comparisonData] = await Promise.all([
+    const [routesData, metricsData, comparisonData, insightsData] = await Promise.all([
       fetchRoutes(0, 100),
       getMetrics(),
-      compareModels()
+      compareModels(),
+      getInsights().catch(() => null),  // не критично если упадёт
     ])
 
     routes.value = routesData.items ?? []
     metrics.value = metricsData?.metrics ?? []
     modelComparison.value = comparisonData
+    insights.value = insightsData
   } catch (err: any) {
     error.value = err.message || 'Не удалось загрузить данные аналитики'
     console.error('Analytics data loading error:', err)
   } finally {
     isLoading.value = false
+  }
+}
+
+const handleExport = async () => {
+  exportLoading.value = true
+  try {
+    await downloadScheduleExcel(insightsMonth.value)
+  } catch (e: any) {
+    alert('Ошибка экспорта: ' + (e?.message ?? 'неизвестная ошибка'))
+  } finally {
+    exportLoading.value = false
   }
 }
 

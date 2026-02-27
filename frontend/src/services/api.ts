@@ -402,6 +402,28 @@ export const updateVisitStatus = async (
   return response.data
 }
 
+// ========== ЭКСПОРТ ==========
+
+/**
+ * Скачать Excel-отчёт по расписанию и визитам
+ * GET /api/v1/export/schedule?month=YYYY-MM
+ */
+export const downloadScheduleExcel = async (month: string): Promise<void> => {
+  const response = await api.get('/export/schedule', {
+    params: { month },
+    responseType: 'blob',
+    timeout: 30_000,
+  })
+  const url = URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `t2_schedule_${month}.xlsx`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 // ========== ФОРС-МАЖОРЫ ==========
 
 export const createForceMajeure = async (data: {

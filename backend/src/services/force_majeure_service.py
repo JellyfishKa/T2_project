@@ -19,10 +19,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import ForceMajeureEvent, SalesRep, VisitSchedule
+from src.services.schedule_planner import MAX_TT_PER_DAY  # единственный источник правды
 
 logger = logging.getLogger("force_majeure")
-
-MAX_TT_PER_DAY = 15  # синхронизировать с schedule_planner
 
 
 def _next_working_day(d: date) -> date:

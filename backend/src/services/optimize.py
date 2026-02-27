@@ -563,57 +563,25 @@ class Optimizer:
         model_name: str,
     ) -> PydanticRoute:
         """
-        Пытается получить маршрут от основной модели, затем от запасной,
-        затем использует чистый greedy-алгоритм как последний fallback.
-        Всегда применяет greedy для определения реального порядка точек —
-        результат LLM используется только для логирования/метрик.
+        Строит маршрут чистым greedy-алгоритмом (мгновенно, < 100 мс).
+
+        Ранее здесь вызывалась LLM, но малые модели (0.5B–1.2B) стабильно
+        выдают невалидный JSON и занимают 30–120 с при нулевом улучшении:
+        greedy всё равно перезаписывал LLM-порядок.
+
+        Для LLM-оценки вариантов используйте /optimize/variants, где
+        generate_variants() вызывает evaluate_variants() (pros/cons),
+        а не generate_route() — это задача, с которой малые модели справляются.
         """
-        valid_ids = {loc.ID for loc in locs}
-
-        async def _try_model(client) -> PydanticRoute | None:
-            try:
-                return await client.generate_route(locs, constr)
-            except Exception as exc:
-                logger.warning("Model %s failed: %s", type(client).__name__, exc)
-                return None
-
-        primary = (
-            self.qwen_client if model_name == MODEL_QWEN else self.llama_client
-        )
-        alt = (
-            self.llama_client if model_name == MODEL_QWEN else self.qwen_client
-        )
-
-        route = await _try_model(primary)
-        # Llama-fallback намеренно отключён: обе модели (~1.1 GB совокупно)
-        # не помещаются в RAM одновременно → SIGSEGV (exit 139).
-        # Итоговый порядок всегда определяет greedy-алгоритм ниже,
-        # поэтому LLM влияет только на label model_used.
-        if route is None:
-            logger.warning("Primary model failed, falling back to greedy (single-model policy).")
-
-        # Применяем greedy reorder для получения реального оптимального порядка.
-        # LLM-модели ненадёжны для малых моделей (0.5B–1.2B),
-        # поэтому Python всегда определяет итоговый порядок.
         reordered = self._greedy_reorder(locs)
-
-        if route is None:
-            # LLM не ответил корректно — используем greedy
-            logger.warning("LLM failed, using pure greedy route.")
-            import uuid
-            from datetime import datetime
-            route = PydanticRoute(
-                ID=str(uuid.uuid4()),
-                name="Оптимизированный маршрут (Greedy)",
-                locations=reordered,
-                total_distance_km=0.0,
-                total_time_hours=0.0,
-                total_cost_rub=0.0,
-                model_used="greedy",
-                created_at=datetime.now(),
-            )
-        else:
-            # Заменяем порядок локаций на greedy-оптимальный
-            route.locations = reordered
-
-        return route
+        label = model_name if model_name not in ("auto",) else "greedy"
+        return PydanticRoute(
+            ID=str(uuid.uuid4()),
+            name=f"Оптимизированный маршрут ({label})",
+            locations=reordered,
+            total_distance_km=0.0,
+            total_time_hours=0.0,
+            total_cost_rub=0.0,
+            model_used=label,
+            created_at=datetime.now(),
+        )
