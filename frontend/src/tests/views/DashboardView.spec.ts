@@ -235,7 +235,7 @@ describe('DashboardView.vue', () => {
     services: {
       database: 'connected' as const,
       qwen: 'available' as const,
-      llama: 'connected' as const
+      llama: 'loaded' as const
     }
   }
 
