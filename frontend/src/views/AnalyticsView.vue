@@ -526,6 +526,59 @@
         </div>
       </div>
 
+      <!-- ═══════════════════════════════════════════════════════════════════
+           РАЗДЕЛ: Журнал визитов (time_in / time_out)
+      ════════════════════════════════════════════════════════════════════ -->
+      <div class="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+          <h3 class="text-lg font-semibold text-gray-900">Журнал визитов</h3>
+          <div class="flex items-center gap-2">
+            <select
+              v-model="visitRepId"
+              @change="loadVisits"
+              class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Все сотрудники</option>
+              <option v-for="rep in repsForFilter" :key="rep.id" :value="rep.id">
+                {{ rep.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table v-if="visits.length" class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сотрудник</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ТТ (ID)</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Время прихода</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Время ухода</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Длительность</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="v in visits" :key="v.id" class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-sm text-gray-900">{{ repNameMap[v.rep_id] || v.rep_id }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono">{{ v.location_id.slice(0, 8) }}…</td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ v.visited_date }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ fmtTime(v.time_in) }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ fmtTime(v.time_out) }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">
+                  <span v-if="calcDuration(v.time_in, v.time_out) !== null">
+                    {{ calcDuration(v.time_in, v.time_out) }} мин
+                  </span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="py-10 text-center text-gray-400 text-sm">
+            Нет данных о визитах за {{ insightsMonth }}
+          </div>
+        </div>
+      </div>
+
     </template>
   </div>
 </template>
@@ -553,10 +606,13 @@ import {
   getInsights,
   downloadScheduleExcel,
   importScheduleExcel,
+  fetchVisits,
+  fetchReps,
   type Route,
-  type Metric
+  type Metric,
+  type VisitLog
 } from '@/services/api'
-import type { Insights } from '@/services/types'
+import type { Insights, SalesRep } from '@/services/types'
 
 // Register ChartJS components
 ChartJS.register(
@@ -599,6 +655,10 @@ const insights = ref<Insights | null>(null)
 const exportLoading = ref(false)
 const importLoading = ref(false)
 const importResult = ref<{ updated: number; skipped: number; errors: string[] } | null>(null)
+
+const visits = ref<VisitLog[]>([])
+const repsForFilter = ref<SalesRep[]>([])
+const visitRepId = ref('')
 
 // Текущий месяц для инсайтов
 const insightsMonth = computed(() => {
@@ -896,28 +956,55 @@ const getModelBadgeClass = (model: string): string => {
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }
 
+const calcDuration = (timeIn: string | null, timeOut: string | null): number | null => {
+  if (!timeIn || !timeOut) return null
+  const [hI, mI] = timeIn.split(':').map(Number)
+  const [hO, mO] = timeOut.split(':').map(Number)
+  return (hO * 60 + mO) - (hI * 60 + mI)
+}
+
+const fmtTime = (t: string | null): string => {
+  if (!t) return '—'
+  return t.slice(0, 5)  // "HH:MM:SS" → "HH:MM"
+}
+
+const repNameMap = computed<Record<string, string>>(() => {
+  const m: Record<string, string> = {}
+  repsForFilter.value.forEach(r => { m[r.id] = r.name })
+  return m
+})
+
 const loadAnalyticsData = async () => {
   try {
     isLoading.value = true
     error.value = null
 
-    const [routesData, metricsData, comparisonData, insightsData] = await Promise.all([
+    const [routesData, metricsData, comparisonData, insightsData, repsData] = await Promise.all([
       fetchRoutes(0, 100),
       getMetrics(),
       compareModels().catch(() => null),  // /benchmark/compare может отсутствовать
       getInsights().catch(() => null),
+      fetchReps().catch(() => []),
     ])
 
     routes.value = routesData.items ?? []
     metrics.value = metricsData?.metrics ?? []
     modelComparison.value = comparisonData
     insights.value = insightsData
+    repsForFilter.value = repsData
+
+    // Загружаем журнал визитов для текущего месяца
+    visits.value = await fetchVisits(insightsMonth.value, visitRepId.value || undefined).catch(() => [])
   } catch (err: any) {
     error.value = err.message || 'Не удалось загрузить данные аналитики'
     console.error('Analytics data loading error:', err)
   } finally {
     isLoading.value = false
   }
+}
+
+const loadVisits = async () => {
+  visits.value = await fetchVisits(insightsMonth.value, visitRepId.value || undefined).catch(() => [])
 }
 
 const handleExport = async () => {

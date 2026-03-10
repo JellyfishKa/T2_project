@@ -1,13 +1,3 @@
-"""
-Сервис обработки форс-мажорных ситуаций.
-
-При инциденте:
-1. Находит все плановые визиты сотрудника на дату события.
-2. Равномерно перераспределяет ТТ между другими активными сотрудниками.
-3. Для каждого сотрудника ищет ближайший рабочий день с запасом.
-4. Записывает событие в force_majeure_events.
-5. Если тип «illness» — меняет статус сотрудника на «sick».
-"""
 
 import logging
 import math
@@ -84,9 +74,9 @@ class ForceMajeureService:
                 for target_rep, loc_ids in zip(active_reps, chunks):
                     if not loc_ids:
                         continue
-                    # Ищем ближайший рабочий день с запасом
+                    # Ищем ближайший рабочий день с запасом для всего чанка
                     target_date = await self._find_available_day(
-                        target_rep.id, event_date
+                        target_rep.id, event_date, chunk_size=len(loc_ids)
                     )
                     # Создаём новые плановые записи
                     for loc_id in loc_ids:
@@ -136,11 +126,12 @@ class ForceMajeureService:
             "created_at": event.created_at.isoformat() if event.created_at else None,
         }
 
-    async def _find_available_day(self, rep_id: str, after_date: date) -> date:
-        """Ищет ближайший рабочий день после after_date, где у сотрудника < MAX_TT_PER_DAY."""
+    async def _find_available_day(
+        self, rep_id: str, after_date: date, chunk_size: int = 1
+    ) -> date:
+        """Ищет ближайший рабочий день после after_date, где влезает chunk_size ТТ."""
         candidate = _next_working_day(after_date)
         for _ in range(30):  # не дальше месяца вперёд
-            # Считаем сколько уже запланировано
             count_stmt = select(VisitSchedule).where(
                 VisitSchedule.rep_id == rep_id,
                 VisitSchedule.planned_date == candidate,
@@ -148,7 +139,7 @@ class ForceMajeureService:
             )
             count_result = await self.db.execute(count_stmt)
             existing = len(count_result.scalars().all())
-            if existing < MAX_TT_PER_DAY:
+            if existing + chunk_size <= MAX_TT_PER_DAY:
                 return candidate
             candidate = _next_working_day(candidate)
         return candidate

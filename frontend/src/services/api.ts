@@ -17,7 +17,8 @@ import type {
   SalesRep,
   MonthlyPlan,
   ForceMajeureEvent,
-  VisitScheduleItem
+  VisitScheduleItem,
+  VisitLog
 } from './types'
 
 // Конфигурация API
@@ -442,6 +443,18 @@ export const importScheduleExcel = async (
   return response.data
 }
 
+// ========== ЖУРНАЛ ВИЗИТОВ ==========
+
+export const fetchVisits = async (
+  month: string,
+  repId?: string
+): Promise<VisitLog[]> => {
+  const params: Record<string, string> = { month }
+  if (repId) params.rep_id = repId
+  const response = await withRetry(() => api.get('/visits/', { params }))
+  return response.data
+}
+
 // ========== ФОРС-МАЖОРЫ ==========
 
 export const createForceMajeure = async (data: {
@@ -482,5 +495,6 @@ export type {
   SalesRep,
   MonthlyPlan,
   ForceMajeureEvent,
-  VisitScheduleItem
+  VisitScheduleItem,
+  VisitLog
 }

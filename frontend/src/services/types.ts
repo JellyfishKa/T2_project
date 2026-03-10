@@ -121,6 +121,19 @@ export interface Insights {
   force_majeure_count: number
 }
 
+// ─── Visit Log ────────────────────────────────────────────────────────────────
+export interface VisitLog {
+  id: string
+  location_id: string
+  rep_id: string
+  visited_date: string
+  schedule_id: string | null
+  time_in: string | null   // "HH:MM:SS"
+  time_out: string | null  // "HH:MM:SS"
+  notes: string | null
+  created_at: string
+}
+
 // ─── Route Variants (оптимизация с выбором) ──────────────────────────────────
 export interface RouteVariantMetrics {
   distance_km: number
