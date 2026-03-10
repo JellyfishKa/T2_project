@@ -13,6 +13,8 @@ vi.mock('@/services/api', () => ({
   downloadScheduleExcel: vi.fn(),
   optimizeVariants: vi.fn(),
   confirmVariant: vi.fn(),
+  fetchHolidays: vi.fn().mockResolvedValue([]),
+  patchHoliday: vi.fn(),
 }))
 
 // localStorage mock через spy на Storage.prototype (работает в JSDOM)

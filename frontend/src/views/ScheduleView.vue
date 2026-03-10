@@ -10,7 +10,8 @@
         <button class="btn-icon" @click="shiftMonth(1)">▶</button>
       </div>
 
-      <button class="btn-primary" @click="showGenerate = true">Сгенерировать план</button>
+      <button class="btn-primary" @click="openGenerateModal">Сгенерировать план</button>
+      <button class="btn-secondary" @click="showHolidays = true">Праздники</button>
       <button class="btn-secondary" @click="showFM = true">Форс-мажор</button>
       <button
         class="btn-secondary flex items-center gap-1.5"
@@ -98,17 +99,73 @@
     <div v-if="showGenerate" class="modal-overlay" @click.self="showGenerate = false">
       <div class="modal">
         <h2 class="font-semibold text-lg mb-4">Сгенерировать план</h2>
-        <p class="text-sm text-gray-400 mb-4">
+        <p class="text-sm text-gray-400 mb-2">
           Месяц: <strong>{{ currentMonth }}</strong><br>
           Будут сгенерированы маршруты для всех активных сотрудников на основе категорий ТТ.
         </p>
+        <!-- Праздники месяца -->
+        <div v-if="monthHolidays.length > 0" class="mb-4">
+          <p class="text-xs text-gray-500 mb-2">Нерабочие праздничные дни месяца:</p>
+          <div class="space-y-1 max-h-40 overflow-y-auto">
+            <label
+              v-for="h in monthHolidays"
+              :key="h.date"
+              class="flex items-center gap-2 text-sm cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                :checked="!h.is_working"
+                @change="toggleHoliday(h)"
+                class="accent-blue-500"
+              />
+              <span :class="h.is_working ? 'line-through text-gray-500' : 'text-gray-200'">
+                {{ h.date }} — {{ h.name }}
+              </span>
+            </label>
+          </div>
+          <p class="text-xs text-gray-600 mt-1">Снимите галочку, чтобы сделать день рабочим</p>
+        </div>
         <div class="flex gap-3 justify-end">
           <button class="btn-secondary" @click="showGenerate = false">Отмена</button>
           <button class="btn-primary" :disabled="generating" @click="generatePlan">
             {{ generating ? 'Генерация…' : 'Сгенерировать' }}
           </button>
         </div>
-        <div v-if="genResult" class="mt-3 text-sm text-green-400">{{ genResult }}</div>
+        <div v-if="genResult" class="mt-3 text-sm" :class="genResult.startsWith('Ошибка') ? 'text-red-400' : 'text-green-400'">{{ genResult }}</div>
+      </div>
+    </div>
+
+    <!-- Модал: праздники года -->
+    <div v-if="showHolidays" class="modal-overlay" @click.self="showHolidays = false">
+      <div class="modal" style="max-width:480px">
+        <h2 class="font-semibold text-lg mb-4">Праздничные дни 2026</h2>
+        <p class="text-xs text-gray-500 mb-3">
+          Отмеченные дни считаются нерабочими. Снимите галочку, чтобы сделать день рабочим.
+        </p>
+        <div v-if="allHolidaysLoading" class="text-sm text-gray-400">Загрузка…</div>
+        <div v-else class="space-y-1 max-h-96 overflow-y-auto">
+          <label
+            v-for="h in allHolidays"
+            :key="h.date"
+            class="flex items-center gap-2 text-sm cursor-pointer py-0.5"
+          >
+            <input
+              type="checkbox"
+              :checked="!h.is_working"
+              @change="toggleHoliday(h)"
+              class="accent-blue-500"
+            />
+            <span :class="h.is_working ? 'line-through text-gray-500' : 'text-gray-200'">
+              {{ h.date }} — {{ h.name }}
+            </span>
+          </label>
+        </div>
+        <div v-if="holidayToggleMsg" class="mt-2 text-xs" :class="holidayToggleMsgError ? 'text-red-400' : 'text-blue-400'">
+          {{ holidayToggleMsg }}
+        </div>
+        <div class="flex justify-end mt-4">
+          <button class="btn-secondary" @click="showHolidays = false">Закрыть</button>
+        </div>
       </div>
     </div>
 
@@ -353,7 +410,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import type { DailyRoute, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
+import type { DailyRoute, Holiday, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
 import {
   optimizeVariants,
   confirmVariant,
@@ -363,6 +420,8 @@ import {
   fetchReps,
   generateSchedule,
   createForceMajeure,
+  fetchHolidays,
+  patchHoliday,
 } from '@/services/api'
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -376,11 +435,19 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const showGenerate = ref(false)
 const showFM = ref(false)
+const showHolidays = ref(false)
 const exportLoading = ref(false)
 const generating = ref(false)
 const genResult = ref<string | null>(null)
 const submittingFM = ref(false)
 const fmResult = ref<string | null>(null)
+
+// ─── Holidays state ───────────────────────────────────────────────────────────
+const monthHolidays = ref<Holiday[]>([])
+const allHolidays = ref<Holiday[]>([])
+const allHolidaysLoading = ref(false)
+const holidayToggleMsg = ref<string | null>(null)
+const holidayToggleMsgError = ref(false)
 
 // ─── Visit modal state ────────────────────────────────────────────────────────
 const showVisitModal = ref(false)
@@ -457,6 +524,36 @@ async function loadReps() {
   reps.value = await fetchReps().catch(() => [])
 }
 
+async function openGenerateModal() {
+  showGenerate.value = true
+  genResult.value = null
+  monthHolidays.value = await fetchHolidays({ month: currentMonth.value }).catch(() => [])
+}
+
+async function toggleHoliday(h: Holiday) {
+  const newIsWorking = !h.is_working
+  try {
+    const result = await patchHoliday(h.date, newIsWorking)
+    h.is_working = result.is_working
+    // Синхронизируем в обоих списках
+    const inAll = allHolidays.value.find(x => x.date === h.date)
+    if (inAll) inAll.is_working = result.is_working
+    const inMonth = monthHolidays.value.find(x => x.date === h.date)
+    if (inMonth) inMonth.is_working = result.is_working
+
+    if (!newIsWorking && result.affected_visits_count > 0) {
+      holidayToggleMsg.value = `На ${h.date} запланировано ${result.affected_visits_count} визитов — пересоздайте план для их переноса.`
+      holidayToggleMsgError.value = true
+    } else {
+      holidayToggleMsg.value = `День ${h.date} теперь ${newIsWorking ? 'рабочий' : 'нерабочий'}.`
+      holidayToggleMsgError.value = false
+    }
+  } catch (e: any) {
+    holidayToggleMsg.value = `Ошибка: ${e?.message ?? e}`
+    holidayToggleMsgError.value = true
+  }
+}
+
 async function generatePlan() {
   generating.value = true
   genResult.value = null
@@ -465,7 +562,7 @@ async function generatePlan() {
     genResult.value = `Готово: ${data.total_visits_planned} визитов, охват ${data.coverage_pct}%`
     await loadSchedule()
   } catch (e: any) {
-    genResult.value = `Ошибка: ${e.message}`
+    genResult.value = `Ошибка: ${e?.message ?? e}`
   } finally {
     generating.value = false
   }
@@ -632,6 +729,16 @@ function visitChipClass(visit: VisitScheduleItem) {
   if (visit.status === 'cancelled') return 'bg-gray-700 text-gray-500 line-through'
   return `${catColor(visit.location_category ?? '?')} text-white`
 }
+
+watch(showHolidays, async (val) => {
+  if (val && allHolidays.value.length === 0) {
+    allHolidaysLoading.value = true
+    holidayToggleMsg.value = null
+    allHolidays.value = await fetchHolidays({ year: 2026 }).catch(() => [])
+    allHolidaysLoading.value = false
+  }
+  if (!val) holidayToggleMsg.value = null
+})
 
 onMounted(() => {
   loadSchedule()

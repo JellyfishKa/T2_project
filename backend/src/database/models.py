@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timezone
 from dotenv import load_dotenv
 
 from sqlalchemy import (
-    Column, Date, DateTime, Float,
+    Boolean, Column, Date, DateTime, Float,
     ForeignKey, Integer, JSON, String, Text, Time)
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base, relationship
@@ -207,6 +207,19 @@ class OptimizationResult(Base):
 
     def __repr__(self):
         return "<OptimizationResult(imp={self.improvement_percentage}%)>"
+
+
+class Holiday(Base):
+    """Праздничный день с возможностью ручного управления статусом."""
+    __tablename__ = "holidays"
+
+    date = Column(Date, primary_key=True)
+    name = Column(Text, nullable=False)
+    is_working = Column(Boolean, nullable=False, default=False)
+    # False = нерабочий (дефолт), True = рабочий (переопределён пользователем)
+
+    def __repr__(self):
+        return f"<Holiday(date={self.date}, name={self.name}, is_working={self.is_working})>"
 
 
 class AuditLog(Base):

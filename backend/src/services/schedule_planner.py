@@ -4,7 +4,7 @@ import math
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,18 +29,46 @@ MAX_TT_PER_DAY = math.floor(
 
 CATEGORY_PRIORITY = {"A": 1, "B": 2, "C": 3, "D": 4}
 
+# ---------------------------------------------------------------------------
+# Российские праздники 2026 (используются для сидирования БД)
+# ---------------------------------------------------------------------------
+HOLIDAYS_2026: List[Tuple[date, str]] = [
+    (date(2026, 1, 1),  "Новый год"),
+    (date(2026, 1, 2),  "Новогодние каникулы"),
+    (date(2026, 1, 3),  "Новогодние каникулы"),
+    (date(2026, 1, 4),  "Новогодние каникулы"),
+    (date(2026, 1, 5),  "Новогодние каникулы"),
+    (date(2026, 1, 6),  "Новогодние каникулы"),
+    (date(2026, 1, 7),  "Рождество Христово"),
+    (date(2026, 1, 8),  "Новогодние каникулы"),
+    (date(2026, 1, 9),  "Перенос (Новый год)"),
+    (date(2026, 2, 23), "День защитника Отечества"),
+    (date(2026, 3, 8),  "Международный женский день"),
+    (date(2026, 3, 9),  "Перенос (Женский день)"),
+    (date(2026, 5, 1),  "Праздник Весны и Труда"),
+    (date(2026, 5, 9),  "День Победы"),
+    (date(2026, 5, 11), "Перенос (День Победы)"),
+    (date(2026, 6, 12), "День России"),
+    (date(2026, 11, 4), "День народного единства"),
+]
+
 
 # ---------------------------------------------------------------------------
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
 
-def _working_days(year: int, month: int) -> List[date]:
-    """Возвращает список рабочих дней месяца (пн–пт)."""
+def _is_working_day(d: date, non_working: FrozenSet[date]) -> bool:
+    """Рабочий день: не выходной и не праздник."""
+    return d.weekday() < 5 and d not in non_working
+
+
+def _working_days(year: int, month: int, non_working: FrozenSet[date] = frozenset()) -> List[date]:
+    """Возвращает список рабочих дней месяца (пн–пт, без праздников)."""
     _, last = monthrange(year, month)
     return [
         date(year, month, d)
         for d in range(1, last + 1)
-        if date(year, month, d).weekday() < 5  # 0=пн … 4=пт
+        if _is_working_day(date(year, month, d), non_working)
     ]
 
 
@@ -93,10 +121,10 @@ def _visit_dates(
     return []
 
 
-def _next_working_day(d: date) -> date:
-    """Следующий рабочий день после d."""
+def _next_working_day(d: date, non_working: FrozenSet[date] = frozenset()) -> date:
+    """Следующий рабочий день после d (не выходной и не праздник)."""
     nxt = d + timedelta(days=1)
-    while nxt.weekday() >= 5:
+    while not _is_working_day(nxt, non_working):
         nxt += timedelta(days=1)
     return nxt
 
@@ -106,8 +134,12 @@ def _next_working_day(d: date) -> date:
 # ---------------------------------------------------------------------------
 
 class SchedulePlanner:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, non_working_dates: Optional[Set[date]] = None):
         self.db = db
+        self.non_working: FrozenSet[date] = (
+            frozenset(non_working_dates) if non_working_dates is not None
+            else frozenset(d for d, _ in HOLIDAYS_2026)
+        )
 
     async def build_monthly_plan(
         self,
@@ -134,7 +166,7 @@ class SchedulePlanner:
             return {"error": "Нет торговых точек с категорией A/B/C/D в базе"}
 
         # --- Рабочие дни и недели ---
-        all_days = _working_days(year, month)
+        all_days = _working_days(year, month, self.non_working)
         work_weeks = _week_groups(all_days)
 
         # Первый месяц текущего квартала
@@ -178,9 +210,9 @@ class SchedulePlanner:
 
             # Ограниченный lookahead: не дальше ~2 месяца
             for _ in range(len(all_days) + 31):
-                # Пропускаем выходные
-                if check_date.weekday() >= 5:
-                    check_date = _next_working_day(check_date)
+                # Пропускаем выходные и праздники
+                if not _is_working_day(check_date, self.non_working):
+                    check_date = _next_working_day(check_date, self.non_working)
                     continue
 
                 # Выбираем сотрудника с наибольшим остатком слотов (fairness)
@@ -199,7 +231,7 @@ class SchedulePlanner:
                     assigned = True
                     break
 
-                check_date = _next_working_day(check_date)
+                check_date = _next_working_day(check_date, self.non_working)
 
             if not assigned:
                 logger.warning(

@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import AuditLog, Location, SalesRep, VisitLog, VisitSchedule, get_session
+from src.database.models import AuditLog, Holiday, Location, SalesRep, VisitLog, VisitSchedule, get_session
 from src.schemas.schedule import (
     DailyRoute,
     GenerateScheduleRequest,
@@ -101,7 +101,16 @@ async def generate_schedule(
             await session.delete(vs)
         await session.flush()
 
-    planner = SchedulePlanner(session)
+    # Загружаем нерабочие праздники из БД за этот месяц
+    holidays_q = await session.execute(
+        select(Holiday.date).where(
+            Holiday.date.between(month_start, month_end),
+            Holiday.is_working.is_(False),
+        )
+    )
+    non_working = set(holidays_q.scalars().all())
+
+    planner = SchedulePlanner(session, non_working_dates=non_working)
     result = await planner.build_monthly_plan(req.month, req.rep_ids)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -230,14 +239,25 @@ async def _reschedule_skipped_visit(
     """
     import logging
     import uuid as uuid_mod
+    from src.services.schedule_planner import _is_working_day
     log = logging.getLogger("schedule")
 
     start_from = skipped.planned_date + timedelta(days=1)
+    lookahead_end = start_from + timedelta(days=60)
+
+    # Загружаем нерабочие праздники на период поиска
+    holidays_q = await session.execute(
+        select(Holiday.date).where(
+            Holiday.date.between(start_from, lookahead_end),
+            Holiday.is_working.is_(False),
+        )
+    )
+    non_working = frozenset(holidays_q.scalars().all())
 
     async def _find_slot(rep_id: str) -> Optional[date]:
         candidate = start_from
-        for _ in range(30):
-            if candidate.weekday() >= 5:
+        for _ in range(60):
+            if not _is_working_day(candidate, non_working):
                 candidate += timedelta(days=1)
                 continue
             count_q = select(func.count()).where(

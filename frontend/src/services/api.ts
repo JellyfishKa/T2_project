@@ -18,7 +18,9 @@ import type {
   MonthlyPlan,
   ForceMajeureEvent,
   VisitScheduleItem,
-  VisitLog
+  VisitLog,
+  Holiday,
+  HolidayPatchResponse,
 } from './types'
 
 // Конфигурация API
@@ -472,6 +474,26 @@ export const fetchForceMajeure = async (
 ): Promise<ForceMajeureEvent[]> => {
   const response = await withRetry(() =>
     api.get('/force_majeure/', { params: { month } })
+  )
+  return response.data
+}
+
+// ========== ПРАЗДНИКИ ==========
+
+export const fetchHolidays = async (params: {
+  month?: string
+  year?: number
+}): Promise<Holiday[]> => {
+  const response = await withRetry(() => api.get('/holidays/', { params }))
+  return response.data
+}
+
+export const patchHoliday = async (
+  date: string,
+  isWorking: boolean
+): Promise<HolidayPatchResponse> => {
+  const response = await withRetry(() =>
+    api.patch(`/holidays/${date}`, { is_working: isWorking })
   )
   return response.data
 }

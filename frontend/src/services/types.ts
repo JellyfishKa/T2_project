@@ -171,6 +171,17 @@ export interface ConfirmVariantRequest {
   original_location_ids: string[]
 }
 
+// ─── Holiday ──────────────────────────────────────────────────────────────────
+export interface Holiday {
+  date: string       // "YYYY-MM-DD"
+  name: string
+  is_working: boolean
+}
+
+export interface HolidayPatchResponse extends Holiday {
+  affected_visits_count: number
+}
+
 // ─── Metrics / Benchmark ─────────────────────────────────────────────────────
 export interface Metric {
   id: string

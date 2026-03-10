@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import Base, VisitLog, engine, get_session
+from src.database.models import Base, Holiday, VisitLog, engine, get_session
 from src.middleware.main import AdvancedMiddleware
 from src.routes.export import router as export_router
 from src.routes.import_excel import router as import_router
@@ -24,6 +24,7 @@ from src.routes.qwen import router as qwen_router
 from src.routes.reps import router as reps_router
 from src.routes.routes import router as routes_router
 from src.routes.schedule import router as schedule_router
+from src.routes.holidays import router as holidays_router
 from src.routes.visits import router as visits_router
 
 import uvicorn
@@ -60,6 +61,24 @@ async def lifespan(app: FastAPI):
                 ))
             except Exception as e:
                 logger.warning(f"Could not add column locations.{col_name}: {e}")
+    # Сидирование праздников 2026 (если таблица пуста)
+    try:
+        from sqlalchemy import text as sql_text
+        from src.services.schedule_planner import HOLIDAYS_2026
+        from src.database.models import new_session
+        async with new_session() as session:
+            count_result = await session.execute(sql_text("SELECT COUNT(*) FROM holidays"))
+            count = count_result.scalar() or 0
+            if count == 0:
+                for h_date, h_name in HOLIDAYS_2026:
+                    session.add(Holiday(date=h_date, name=h_name, is_working=False))
+                await session.commit()
+                logger.info("Сидировано %d праздников 2026.", len(HOLIDAYS_2026))
+            else:
+                logger.info("Таблица holidays уже содержит %d записей, сидирование пропущено.", count)
+    except Exception as e:
+        logger.warning("Не удалось сидировать праздники: %s", e)
+
     yield
     logger.info("Shutting down: Closing database engine...")
     await engine.dispose()
@@ -106,6 +125,7 @@ api_v1_router.include_router(force_majeure_router)
 api_v1_router.include_router(visits_router)
 api_v1_router.include_router(export_router)
 api_v1_router.include_router(import_router)
+api_v1_router.include_router(holidays_router)
 
 app.include_router(api_v1_router)
 
