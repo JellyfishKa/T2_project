@@ -12,6 +12,8 @@ vi.mock('@/services/api', () => ({
   getInsights: vi.fn(),
   downloadScheduleExcel: vi.fn(),
   importScheduleExcel: vi.fn(),
+  fetchReps: vi.fn(),
+  fetchVisits: vi.fn(),
 }))
 
 // Мокаем Chart.js компоненты
@@ -154,6 +156,8 @@ describe('AnalyticsView.vue', () => {
     vi.mocked(api.getInsights).mockResolvedValue(null as any)
     vi.mocked(api.downloadScheduleExcel).mockResolvedValue(undefined)
     vi.mocked(api.importScheduleExcel).mockResolvedValue({ updated: 0, skipped: 0, errors: [] })
+    vi.mocked(api.fetchReps).mockResolvedValue([])
+    vi.mocked(api.fetchVisits).mockResolvedValue([])
 
     await router.push('/analytics')
     await router.isReady()

@@ -2,7 +2,7 @@
 
 **Соглашение Frontend-Backend по структуре API**
 
-> Последнее обновление: 27 февраля 2026 (Неделя 4)
+> Последнее обновление: 10 марта 2026
 
 ---
 
@@ -50,8 +50,6 @@ Production:  http://<server-ip>/api/v1
   "id": "rep-001",
   "name": "Иванов А.А.",
   "status": "active",
-  "phone": "+7 927 123-45-67",
-  "email": "ivanov@t2.ru",
   "created_at": "2026-01-15T08:00:00Z"
 }
 ```
@@ -90,8 +88,26 @@ Production:  http://<server-ip>/api/v1
   "rep_name": "Иванов А.А.",
   "visits": [...],
   "total_tt": 12,
-  "estimated_distance_km": 45.3,
-  "estimated_duration_hours": 7.2
+  "estimated_duration_hours": 7.2,
+  "lunch_break_at": "13:00"
+}
+```
+
+---
+
+### VisitLog (Фактический визит)
+
+```json
+{
+  "id": "log-101",
+  "location_id": "store-123",
+  "rep_id": "rep-001",
+  "visited_date": "2026-02-13",
+  "schedule_id": "sched-456",
+  "time_in": "10:00:00",
+  "time_out": "10:22:00",
+  "notes": null,
+  "created_at": "2026-02-13T10:22:05Z"
 }
 ```
 
@@ -157,17 +173,29 @@ Production:  http://<server-ip>/api/v1
   "id": "fm-789",
   "type": "illness",
   "rep_id": "rep-001",
+  "rep_name": "Иванов А.А.",
   "event_date": "2026-02-20",
   "description": "Грипп, больничный лист",
-  "redistributed_to": {
-    "sched-100": "rep-002",
-    "sched-101": "rep-003"
-  },
+  "affected_tt_count": 7,
+  "redistributed_to": [
+    {
+      "rep_id": "rep-002",
+      "rep_name": "Петров В.В.",
+      "location_ids": ["store-1", "store-2", "store-3", "store-4"],
+      "new_date": "2026-02-21"
+    },
+    {
+      "rep_id": "rep-003",
+      "rep_name": "Сидоров С.С.",
+      "location_ids": ["store-5", "store-6", "store-7"],
+      "new_date": "2026-02-21"
+    }
+  ],
   "created_at": "2026-02-20T07:30:00Z"
 }
 ```
 
-Допустимые значения `type`: `illness` | `vacation` | `accident` | `other`
+Допустимые значения `type`: `illness` | `weather` | `vehicle_breakdown` | `other`
 
 ---
 
@@ -193,25 +221,30 @@ Production:  http://<server-ip>/api/v1
 {
   "month": "2026-02",
   "total_tt": 250,
-  "covered_tt": 198,
-  "coverage_percent": 79.2,
-  "category_stats": {
-    "A": {"planned": 60, "completed": 57, "skipped": 3, "pct": 95.0},
-    "B": {"planned": 80, "completed": 72, "skipped": 8, "pct": 90.0},
-    "C": {"planned": 35, "completed": 28, "skipped": 7, "pct": 80.0},
-    "D": {"planned": 23, "completed": 18, "skipped": 5, "pct": 78.3}
+  "coverage_pct": 79.2,
+  "visits_this_month": {
+    "planned": 198,
+    "completed": 157,
+    "completion_rate": 79.3
   },
+  "by_category": {
+    "A": {"total": 50, "planned": 150, "completed": 143, "pct": 95.3},
+    "B": {"total": 75, "planned": 150, "completed": 135, "pct": 90.0},
+    "C": {"total": 50, "planned": 50, "completed": 40, "pct": 80.0},
+    "D": {"total": 75, "planned": 75, "completed": 60, "pct": 80.0}
+  },
+  "by_district": [
+    {"district": "Саранск", "total": 50, "coverage_pct": 88.0}
+  ],
   "rep_activity": [
     {
       "rep_id": "rep-001",
       "rep_name": "Иванов А.А.",
-      "outings": 20,
-      "planned": 48,
-      "completed": 45,
-      "skipped": 3,
-      "pct": 93.75
+      "outings_count": 20,
+      "tt_visited": 45
     }
-  ]
+  ],
+  "force_majeure_count": 2
 }
 ```
 
@@ -309,16 +342,10 @@ Production:  http://<server-ip>/api/v1
 #### `GET /reps`
 
 ```
-Query params: ?status=active&limit=100&offset=0
+Query params: ?status=active
 ```
 
-**Response** `200`:
-```json
-{
-  "total": 5,
-  "items": [<SalesRep>, ...]
-}
-```
+**Response** `200`: `[<SalesRep>, ...]` (плоский массив)
 
 #### `POST /reps`
 
@@ -350,8 +377,7 @@ Query params: ?status=active&limit=100&offset=0
 ```json
 {
   "month": "2026-02",
-  "rep_ids": ["rep-001", "rep-002"],
-  "location_ids": ["store-1", "store-2", "..."]
+  "rep_ids": ["rep-001", "rep-002"]
 }
 ```
 
@@ -359,8 +385,11 @@ Query params: ?status=active&limit=100&offset=0
 ```json
 {
   "month": "2026-02",
-  "total_visits": 248,
-  "routes": [<DailyRoute>, ...]
+  "total_visits_planned": 248,
+  "total_tt_planned": 198,
+  "total_locations": 250,
+  "coverage_pct": 79.2,
+  "reps_count": 4
 }
 ```
 
@@ -369,18 +398,20 @@ Query params: ?status=active&limit=100&offset=0
 #### `GET /schedule/`
 
 ```
-Query params: ?month=2026-02&rep_id=rep-001&location_id=store-1&status=planned&limit=100&offset=0
+Query params: ?month=2026-02&rep_id=rep-001
 ```
 
-**Response** `200`:
+**Response** `200`: `MonthlyPlan`
 ```json
 {
-  "total": 248,
-  "items": [<VisitScheduleItem>, ...]
+  "month": "2026-02",
+  "routes": [<DailyRoute>, ...],
+  "total_tt_planned": 248,
+  "coverage_pct": 79.2
 }
 ```
 
-> `time_in` и `time_out` заполнены если существует `VisitLog` для этого визита.
+> `time_in` и `time_out` в `VisitScheduleItem` заполнены если существует `VisitLog` для этого визита.
 
 ---
 
@@ -402,14 +433,6 @@ Query params: ?month=2026-02&rep_id=rep-001&location_id=store-1&status=planned&l
 > При `status=completed` + наличии `time_in`/`time_out` → создаётся или обновляется `VisitLog`.
 
 ---
-
-#### `GET /schedule/daily`
-
-```
-Query params: ?date=2026-02-13&rep_id=rep-001
-```
-
-**Response** `200`: `DailyRoute`
 
 ---
 
@@ -464,10 +487,10 @@ Query params: ?month=2026-02&rep_id=rep-001
 #### `GET /visits`
 
 ```
-Query params: ?month=2026-02&rep_id=rep-001&location_id=store-123
+Query params: ?month=2026-02&rep_id=rep-001   (month обязательный)
 ```
 
-**Response** `200`: `{"total": N, "items": [...]}`
+**Response** `200`: `[<VisitLog>, ...]` (плоский массив, отсортирован по visited_date)
 
 ---
 
@@ -647,7 +670,6 @@ Query params: ?month=2026-02   (обязательный)
 | POST | `/api/v1/schedule/generate` | Schedule | ✅ |
 | GET | `/api/v1/schedule/` | Schedule | ✅ |
 | PATCH | `/api/v1/schedule/{id}/status` | Schedule | ✅ |
-| GET | `/api/v1/schedule/daily` | Schedule | ✅ |
 | POST | `/api/v1/force_majeure` | ForceMajeure | ✅ |
 | GET | `/api/v1/force_majeure` | ForceMajeure | ✅ |
 | POST | `/api/v1/visits` | Visits | ✅ |

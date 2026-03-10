@@ -354,9 +354,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { DailyRoute, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
-import { optimizeVariants, confirmVariant, updateVisitStatus, downloadScheduleExcel } from '@/services/api'
-
-const API = '/api/v1'
+import {
+  optimizeVariants,
+  confirmVariant,
+  updateVisitStatus,
+  downloadScheduleExcel,
+  fetchMonthlySchedule,
+  fetchReps,
+  generateSchedule,
+  createForceMajeure,
+} from '@/services/api'
 
 // ─── State ───────────────────────────────────────────────────────────────────
 const today = new Date()
@@ -435,9 +442,7 @@ async function loadSchedule() {
   loading.value = true
   error.value = null
   try {
-    const res = await fetch(`${API}/schedule/?month=${currentMonth.value}`)
-    if (!res.ok) throw new Error(await res.text())
-    const plan = await res.json()
+    const plan = await fetchMonthlySchedule(currentMonth.value)
     routes.value = plan.routes ?? []
   } catch (e: any) {
     error.value = e.message
@@ -447,21 +452,15 @@ async function loadSchedule() {
 }
 
 async function loadReps() {
-  const res = await fetch(`${API}/reps/`)
-  reps.value = await res.json()
+  reps.value = await fetchReps().catch(() => [])
 }
 
 async function generatePlan() {
   generating.value = true
   genResult.value = null
   try {
-    const res = await fetch(`${API}/schedule/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: currentMonth.value }),
-    })
-    const data = await res.json()
-    genResult.value = `Готово: ${data.total_visits_planned} визитов, ${data.total_tt_planned} ТТ, охват ${data.coverage_pct}%`
+    const data = await generateSchedule(currentMonth.value)
+    genResult.value = `Готово: ${data.total_visits_planned} визитов, охват ${data.coverage_pct}%`
     await loadSchedule()
   } catch (e: any) {
     genResult.value = `Ошибка: ${e.message}`
@@ -474,12 +473,12 @@ async function submitFM() {
   submittingFM.value = true
   fmResult.value = null
   try {
-    const res = await fetch(`${API}/force_majeure/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fm.value),
+    const data = await createForceMajeure({
+      type: fm.value.type,
+      rep_id: fm.value.rep_id,
+      event_date: fm.value.event_date,
+      description: fm.value.description || undefined,
     })
-    const data = await res.json()
     fmResult.value = `Зафиксировано. Перераспределено ${data.affected_tt_count} ТТ.`
     await loadSchedule()
   } catch (e: any) {

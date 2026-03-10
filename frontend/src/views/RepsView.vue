@@ -74,8 +74,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { SalesRep } from '@/services/types'
+import {
+  fetchReps,
+  createRep as apiCreateRep,
+  updateRep,
+  deleteRep as apiDeleteRep,
+} from '@/services/api'
 
-const API = '/api/v1'
 const reps = ref<SalesRep[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -87,8 +92,7 @@ async function loadReps() {
   loading.value = true
   error.value = null
   try {
-    const res = await fetch(`${API}/reps/`)
-    reps.value = await res.json()
+    reps.value = await fetchReps()
   } catch (e) {
     error.value = 'Ошибка загрузки сотрудников'
   } finally {
@@ -98,28 +102,20 @@ async function loadReps() {
 
 async function createRep() {
   if (!newName.value.trim()) return
-  await fetch(`${API}/reps/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: newName.value.trim(), status: newStatus.value }),
-  })
+  await apiCreateRep(newName.value.trim(), newStatus.value)
   newName.value = ''
   showForm.value = false
   await loadReps()
 }
 
 async function updateStatus(id: string, status: string) {
-  await fetch(`${API}/reps/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
-  })
+  await updateRep(id, { status: status as SalesRep['status'] })
   await loadReps()
 }
 
 async function deleteRep(id: string) {
   if (!confirm('Удалить сотрудника?')) return
-  await fetch(`${API}/reps/${id}`, { method: 'DELETE' })
+  await apiDeleteRep(id)
   await loadReps()
 }
 
