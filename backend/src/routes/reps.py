@@ -1,10 +1,11 @@
+from datetime import date
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import SalesRep, get_session
+from src.database.models import SalesRep, VisitSchedule, get_session
 from src.schemas.reps import SalesRepCreate, SalesRepResponse, SalesRepUpdate
 
 router = APIRouter(prefix="/reps", tags=["Sales Reps"])
@@ -46,7 +47,37 @@ async def update_rep(
         rep.status = data.status
     await session.commit()
     await session.refresh(rep)
-    return rep
+
+    # Warning: если новый статус sick/vacation — считаем будущие planned-визиты
+    warning: str | None = None
+    pending_count = 0
+    if data.status in ("sick", "vacation"):
+        today = date.today()
+        cnt_result = await session.execute(
+            select(func.count()).where(
+                VisitSchedule.rep_id == rep_id,
+                VisitSchedule.planned_date >= today,
+                VisitSchedule.status == "planned",
+            )
+        )
+        pending_count = cnt_result.scalar() or 0
+        if pending_count > 0:
+            status_label = "на больничном" if data.status == "sick" else "в отпуске"
+            warning = (
+                f"Сотрудник переведён {status_label}. "
+                f"Есть {pending_count} незакрытых плановых визитов — "
+                f"рекомендуется создать форс-мажор для перераспределения."
+            )
+
+    result = SalesRepResponse(
+        id=rep.id,
+        name=rep.name,
+        status=rep.status,
+        created_at=rep.created_at,
+        warning=warning,
+        pending_visits_count=pending_count,
+    )
+    return result
 
 
 @router.delete("/{rep_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -19,5 +19,7 @@ class SalesRepResponse(BaseModel):
     name: str
     status: str
     created_at: datetime
+    warning: Optional[str] = None           # "Есть N незакрытых визитов..."
+    pending_visits_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)

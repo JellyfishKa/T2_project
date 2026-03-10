@@ -187,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import OptimizationForm from '@/components/optimize/OptimizationForm.vue'
 import OptimizationResult from '@/components/optimize/OptimizationResult.vue'
 import OptimizationProgress from '@/components/optimize/OptimizationProgress.vue'
@@ -223,7 +223,8 @@ type ViewState = 'form' | 'loading' | 'error' | 'variants' | 'result'
 const currentView = ref<ViewState>('form')
 
 // ─── Состояние формы ──────────────────────────────────────────────────────────
-const selectedModel = ref<string>('qwen')
+const savedModel = localStorage.getItem('t2_preferred_model') ?? 'qwen'
+const selectedModel = ref<string>(savedModel)
 const constraints = ref<Constraints>({
   vehicleCapacity: 1,
   maxDistance: 500,
@@ -254,6 +255,9 @@ const formLocations = ref<Array<{
   time_window_start: string
   time_window_end: string
 }>>([])
+
+// Сохранять выбранную модель в localStorage
+watch(selectedModel, (v) => localStorage.setItem('t2_preferred_model', v))
 
 // ─── Обработчики формы ────────────────────────────────────────────────────────
 const handleSubmit = (formData: any) => {

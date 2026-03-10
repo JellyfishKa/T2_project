@@ -65,6 +65,19 @@
             }}</span>
           </div>
         </div>
+
+        <!-- Extended metrics row -->
+        <div v-if="status.disk_free_mb != null || status.visits_today != null || status.version" class="mt-3 flex flex-wrap gap-4 text-xs text-gray-500 border-t border-gray-100 pt-3">
+          <span v-if="status.disk_free_mb != null" :class="status.disk_free_mb > 1000 ? 'text-green-600' : 'text-red-600'">
+            💾 {{ (status.disk_free_mb / 1024).toFixed(1) }} GB свободно
+          </span>
+          <span v-if="status.visits_today != null" class="text-blue-600">
+            📋 {{ status.visits_today }} визитов сегодня
+          </span>
+          <span v-if="status.version" class="text-gray-400">
+            v{{ status.version }}
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -101,9 +114,11 @@ const borderColor = computed(() => {
 const getServiceStatusColor = (status: string): string => {
   const colorMap: Record<string, string> = {
     connected: 'bg-green-500',
+    loaded: 'bg-green-500',
     available: 'bg-blue-500',
     disconnected: 'bg-red-500',
     unavailable: 'bg-yellow-500',
+    not_loaded: 'bg-yellow-500',
     error: 'bg-red-500'
   }
   return colorMap[status] || 'bg-gray-500'
@@ -112,9 +127,11 @@ const getServiceStatusColor = (status: string): string => {
 const getServiceStatusText = (status: string): string => {
   const textMap: Record<string, string> = {
     connected: 'Подключено',
+    loaded: 'Загружена',
     available: 'Доступно',
     disconnected: 'Отключено',
     unavailable: 'Недоступно',
+    not_loaded: 'Не загружена',
     error: 'Ошибка'
   }
   return textMap[status] || status

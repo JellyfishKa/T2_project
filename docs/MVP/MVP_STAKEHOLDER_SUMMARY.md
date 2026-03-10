@@ -1,6 +1,6 @@
 # T2 — MVP Stakeholder Summary
 
-**AI-Powered Route Optimization Platform | Февраль 2026**
+**AI-Powered Route Optimization Platform | v1.2.0 — Март 2026**
 
 ---
 
@@ -14,11 +14,12 @@ T2 — платформа оптимизации маршрутов рознич
 
 | Достижение | Детали |
 |------------|--------|
-| **15 API-эндпоинтов** | Оптимизация, локации, маршруты, метрики, бенчмарки, insights |
+| **33+ API-эндпоинтов** | Оптимизация, локации, маршруты, метрики, расписание, форс-мажоры |
 | **2 LLM-модели** | Qwen (основная) + Llama (fallback), автоматическое переключение |
-| **4 UI-страницы** | Home, Dashboard, Optimize, Analytics |
+| **6 UI-страниц** | Home, Dashboard, Optimize, Analytics, Schedule, Reps |
+| **Расписание и аудит** | SchedulePlanner, state machine визитов, AuditLog, Excel-экспорт (5 листов) |
 | **Docker-инфраструктура** | 4 сервиса запускаются одной командой |
-| **CI/CD** | Автоматические тесты, линтинг и coverage через GitHub Actions |
+| **CI/CD** | ~189 тестов (Vitest + pytest), линтинг, coverage через GitHub Actions |
 
 ---
 
@@ -58,9 +59,10 @@ T2 — платформа оптимизации маршрутов рознич
 
 ## Следующие шаги
 
-1. **v1.1** — Кеширование в Redis, интеграция с крупными LLM-моделями
-2. **v1.2** — Аутентификация (JWT), мониторинг (Prometheus/Grafana)
-3. **v2.0** — Визуализация маршрутов на карте, production-деплой с HTTPS
+1. **v1.1** ✅ — Расписание, форс-мажоры, Excel-экспорт/импорт, RepsView, ScheduleView
+2. **v1.2** ✅ — State machine визитов, AuditLog, health метрики, localStorage, новые тесты
+3. **v1.3** — Аутентификация (JWT), мониторинг (Prometheus/Grafana)
+4. **v2.0** — Визуализация маршрутов на карте, production-деплой с HTTPS
 
 ---
 

@@ -1,14 +1,15 @@
+import json
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, time, timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import Location, SalesRep, VisitLog, VisitSchedule, get_session
+from src.database.models import AuditLog, Location, SalesRep, VisitLog, VisitSchedule, get_session
 from src.schemas.schedule import (
     DailyRoute,
     GenerateScheduleRequest,
@@ -24,6 +25,15 @@ from src.services.schedule_planner import (
 )
 
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
+
+# ── Машина состояний визита ──────────────────────────────────────────────────
+VALID_TRANSITIONS: Dict[str, set] = {
+    "planned":     {"completed", "skipped", "cancelled", "rescheduled"},
+    "skipped":     {"planned", "cancelled"},
+    "rescheduled": {"completed", "skipped", "cancelled"},
+    "completed":   set(),
+    "cancelled":   set(),
+}
 
 LUNCH_BREAK_TIME = "13:00"  # фиксированный обед
 
@@ -48,13 +58,69 @@ def _estimated_duration(visit_count: int) -> float:
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
 async def generate_schedule(
     req: GenerateScheduleRequest,
+    force: bool = Query(False, description="Если true — удалить существующие planned и создать заново"),
     session: AsyncSession = Depends(get_session),
 ):
     """Сгенерировать план визитов на месяц."""
+    # Защита от дублирования: проверяем наличие planned-визитов за месяц
+    try:
+        year, m = map(int, req.month.split("-"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат месяца. Используй YYYY-MM")
+    _, last_day = monthrange(year, m)
+    month_start = date(year, m, 1)
+    month_end = date(year, m, last_day)
+
+    existing_q = await session.execute(
+        select(func.count()).where(
+            VisitSchedule.planned_date.between(month_start, month_end),
+            VisitSchedule.status == "planned",
+        )
+    )
+    existing_count = existing_q.scalar() or 0
+
+    if existing_count > 0 and not force:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": f"Расписание на {req.month} уже существует ({existing_count} плановых визитов). "
+                           "Используйте ?force=true для перегенерации.",
+                "existing_count": existing_count,
+            },
+        )
+
+    if existing_count > 0 and force:
+        # Удаляем существующие planned-визиты за этот месяц
+        planned_q = await session.execute(
+            select(VisitSchedule).where(
+                VisitSchedule.planned_date.between(month_start, month_end),
+                VisitSchedule.status == "planned",
+            )
+        )
+        for vs in planned_q.scalars().all():
+            await session.delete(vs)
+        await session.flush()
+
     planner = SchedulePlanner(session)
     result = await planner.build_monthly_plan(req.month, req.rep_ids)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+
+    # AuditLog: генерация расписания
+    audit = AuditLog(
+        action="schedule_generated",
+        table_name="visit_schedule",
+        record_id=req.month,
+        new_value=json.dumps({
+            "month": req.month,
+            "total_visits_planned": result.get("total_visits_planned"),
+            "coverage_pct": result.get("coverage_pct"),
+            "forced": force,
+        }, ensure_ascii=False),
+    )
+    session.add(audit)
+    await session.commit()
+
     return result
 
 
@@ -83,6 +149,21 @@ async def update_visit_status(
     if not sched:
         raise HTTPException(status_code=404, detail="Визит не найден")
 
+    # ── Проверка машины состояний ────────────────────────────────────────────
+    current_status = sched.status
+    allowed = VALID_TRANSITIONS.get(current_status, set())
+    if data.status not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": f"Переход {current_status!r} → {data.status!r} не разрешён.",
+                "current_status": current_status,
+                "requested_status": data.status,
+                "allowed_transitions": sorted(allowed),
+            },
+        )
+
+    old_status = sched.status
     sched.status = data.status
 
     if data.status == "completed":
@@ -110,6 +191,21 @@ async def update_visit_status(
         # Конкурсное требование: гарантия 100% охвата базы ТТ, включая механизм
         # добавления ТТ из пройденного маршрута в случае, если точка не работала.
         await _reschedule_skipped_visit(session, sched)
+
+    # AuditLog: смена статуса визита
+    audit = AuditLog(
+        action="visit_status_change",
+        table_name="visit_schedule",
+        record_id=sched.id,
+        old_value=json.dumps({"status": old_status}, ensure_ascii=False),
+        new_value=json.dumps({"status": data.status}, ensure_ascii=False),
+        details=json.dumps({
+            "location_id": sched.location_id,
+            "rep_id": sched.rep_id,
+            "planned_date": str(sched.planned_date),
+        }, ensure_ascii=False),
+    )
+    session.add(audit)
 
     await session.commit()
     await session.refresh(sched, ["location", "rep"])
@@ -144,12 +240,12 @@ async def _reschedule_skipped_visit(
             if candidate.weekday() >= 5:
                 candidate += timedelta(days=1)
                 continue
-            count_q = select(VisitSchedule).where(
+            count_q = select(func.count()).where(
                 VisitSchedule.rep_id == rep_id,
                 VisitSchedule.planned_date == candidate,
                 VisitSchedule.status.in_(["planned", "rescheduled"]),
             )
-            cnt = len((await session.execute(count_q)).scalars().all())
+            cnt = (await session.execute(count_q)).scalar() or 0
             if cnt < MAX_TT_PER_DAY:
                 return candidate
             candidate += timedelta(days=1)
@@ -249,10 +345,12 @@ async def get_rep_schedule(
 @router.get("/", response_model=MonthlyPlan)
 async def get_monthly_schedule(
     month: str = Query(..., description="Месяц YYYY-MM"),
+    from_date: Optional[str] = Query(None, description="Фильтр с даты YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="Фильтр по дату YYYY-MM-DD"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Полный план всех сотрудников на месяц."""
-    return await _build_monthly_plan_response(session, month)
+    """Полный план всех сотрудников на месяц с опциональной фильтрацией по датам."""
+    return await _build_monthly_plan_response(session, month, from_date=from_date, to_date=to_date)
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +361,8 @@ async def _build_monthly_plan_response(
     session: AsyncSession,
     month: str,
     rep_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
 ) -> MonthlyPlan:
     try:
         year, m = map(int, month.split("-"))
@@ -273,11 +373,25 @@ async def _build_monthly_plan_response(
     month_start = date(year, m, 1)
     month_end = date(year, m, last_day)
 
+    # Применяем опциональные фильтры by date range
+    effective_start = month_start
+    effective_end = month_end
+    if from_date:
+        try:
+            effective_start = max(month_start, date.fromisoformat(from_date))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Неверный формат from_date. Используй YYYY-MM-DD")
+    if to_date:
+        try:
+            effective_end = min(month_end, date.fromisoformat(to_date))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Неверный формат to_date. Используй YYYY-MM-DD")
+
     stmt = (
         select(VisitSchedule)
         .where(
-            VisitSchedule.planned_date >= month_start,
-            VisitSchedule.planned_date <= month_end,
+            VisitSchedule.planned_date >= effective_start,
+            VisitSchedule.planned_date <= effective_end,
         )
         .options(selectinload(VisitSchedule.location), selectinload(VisitSchedule.rep))
     )
@@ -292,8 +406,8 @@ async def _build_monthly_plan_response(
     logs_by_schedule = await _load_logs_by_schedule(session, schedule_ids)
 
     # Количество всех ТТ для расчёта покрытия
-    total_tt_result = await session.execute(select(Location))
-    total_tt = len(total_tt_result.scalars().all())
+    total_tt_result = await session.execute(select(func.count()).select_from(Location))
+    total_tt = total_tt_result.scalar() or 0
 
     by_rep_date = defaultdict(lambda: defaultdict(list))
     for s in schedules:

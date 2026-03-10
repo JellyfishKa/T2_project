@@ -50,11 +50,17 @@ Production:  http://<server-ip>/api/v1
   "id": "rep-001",
   "name": "Иванов А.А.",
   "status": "active",
-  "created_at": "2026-01-15T08:00:00Z"
+  "created_at": "2026-01-15T08:00:00Z",
+  "warning": null,
+  "pending_visits_count": 0
 }
 ```
 
 Допустимые значения `status`: `active` | `sick` | `vacation` | `unavailable`
+
+> **Новое (v1.2.0)**: При `PATCH /reps/{id}` с `status=sick` или `status=vacation` — в ответе могут присутствовать:
+> - `warning`: строка с предупреждением о незакрытых визитах
+> - `pending_visits_count`: кол-во плановых будущих визитов сотрудника
 
 ---
 
@@ -357,7 +363,9 @@ Query params: ?status=active
 
 **Request**: `{"status": "sick"}` или `{"name": "Новое имя"}`
 
-**Response** `200`: обновлённый `SalesRep`
+**Response** `200`: обновлённый `SalesRep` с полями `warning` и `pending_visits_count`
+
+> **v1.2.0**: При переводе в `sick` или `vacation` — ответ содержит `warning` (строка предупреждения о незакрытых визитах) и `pending_visits_count` (кол-во плановых будущих визитов).
 
 **Errors**: `404` — не найден | `422` — недопустимый статус
 
@@ -373,6 +381,10 @@ Query params: ?status=active
 
 Генерация месячного плана визитов.
 
+```
+Query params: ?force=false   (true — удалить существующие planned и создать заново)
+```
+
 **Request**:
 ```json
 {
@@ -381,7 +393,7 @@ Query params: ?status=active
 }
 ```
 
-**Response** `200`:
+**Response** `201`:
 ```json
 {
   "month": "2026-02",
@@ -393,12 +405,23 @@ Query params: ?status=active
 }
 ```
 
+**Errors**: `409` — расписание уже существует (при `force=false`):
+```json
+{
+  "message": "Расписание на 2026-02 уже существует (248 плановых визитов). Используйте ?force=true для перегенерации.",
+  "existing_count": 248
+}
+```
+
 ---
 
 #### `GET /schedule/`
 
 ```
-Query params: ?month=2026-02&rep_id=rep-001
+Query params: ?month=2026-02   (обязательный)
+              &rep_id=rep-001  (опционально)
+              &from_date=2026-02-10  (опционально, YYYY-MM-DD)
+              &to_date=2026-02-20    (опционально, YYYY-MM-DD)
 ```
 
 **Response** `200`: `MonthlyPlan`
@@ -412,10 +435,12 @@ Query params: ?month=2026-02&rep_id=rep-001
 ```
 
 > `time_in` и `time_out` в `VisitScheduleItem` заполнены если существует `VisitLog` для этого визита.
+>
+> **v1.2.0**: `from_date` / `to_date` фильтруют визиты внутри месяца.
 
 ---
 
-#### `PATCH /schedule/{id}/status`
+#### `PATCH /schedule/{id}`
 
 Обновление статуса визита (и опционально — времени).
 
@@ -430,7 +455,27 @@ Query params: ?month=2026-02&rep_id=rep-001
 
 **Response** `200`: обновлённый `VisitScheduleItem`
 
-> При `status=completed` + наличии `time_in`/`time_out` → создаётся или обновляется `VisitLog`.
+> При `status=completed` + наличии `time_in`/`time_out` → создаётся `VisitLog`.
+
+#### State Machine (v1.2.0)
+
+| Текущий статус | Допустимые переходы |
+|----------------|---------------------|
+| `planned` | `completed`, `skipped`, `cancelled`, `rescheduled` |
+| `skipped` | `planned`, `cancelled` |
+| `rescheduled` | `completed`, `skipped`, `cancelled` |
+| `completed` | — (заблокировано) |
+| `cancelled` | — (заблокировано) |
+
+**Errors**: `422` — недопустимый переход статуса:
+```json
+{
+  "message": "Переход 'completed' → 'planned' не разрешён.",
+  "current_status": "completed",
+  "requested_status": "planned",
+  "allowed_transitions": []
+}
+```
 
 ---
 
@@ -572,7 +617,7 @@ Query params: ?month=2026-02   (обязательный)
 - `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
 - `Content-Disposition: attachment; filename="t2_schedule_2026-02.xlsx"`
 
-Структура файла (4 листа):
+Структура файла (5 листов):
 
 | Лист | Содержимое |
 |------|-----------|
@@ -580,6 +625,7 @@ Query params: ?month=2026-02   (обязательный)
 | Журнал визитов | Выполненные визиты с длительностью (мин) |
 | Статистика по ТТ | Охват, плановые/выполненные/пропущенные, % |
 | Активность ТП | Выходы на маршрут, % выполнения |
+| Журнал изменений | AuditLog за месяц: смена статусов, форс-мажоры, генерации |
 
 ---
 
@@ -611,18 +657,23 @@ Query params: ?month=2026-02   (обязательный)
 
 #### `GET /health` и `GET /api/v1/health`
 
-**Response** `200`:
+**Response** `200` (v1.2.0):
 ```json
 {
   "status": "healthy",
   "database": "connected",
   "services": {
     "database": "connected",
-    "qwen": "available",
-    "llama": "unavailable"
-  }
+    "qwen": "loaded",
+    "llama": "not_loaded"
+  },
+  "disk_free_mb": 4200,
+  "visits_today": 12,
+  "version": "1.2.0"
 }
 ```
+
+Значения `qwen`/`llama`: `"loaded"` | `"not_loaded"` | `"error"`
 
 **Response** `503` — если БД недоступна.
 
@@ -634,9 +685,20 @@ Query params: ?month=2026-02   (обязательный)
 |-----|---------|
 | 400 | Неверный запрос (формат, параметры) |
 | 404 | Ресурс не найден |
-| 422 | Ошибка валидации Pydantic |
+| 409 | Конфликт — например, расписание уже существует (`POST /schedule/generate`) |
+| 422 | Недопустимое действие — invalid state machine transition, ошибка валидации |
 | 500 | Внутренняя ошибка сервера |
 | 503 | Сервис недоступен (БД, модели) |
+
+> **409 (Conflict)** при `POST /schedule/generate?force=false`:
+> ```json
+> {"detail": {"message": "...", "existing_count": 248}}
+> ```
+>
+> **422 (Unprocessable)** при `PATCH /schedule/{id}` с недопустимым переходом:
+> ```json
+> {"detail": {"message": "Переход 'completed' → 'planned' не разрешён.", "current_status": "completed", "requested_status": "planned", "allowed_transitions": []}}
+> ```
 
 Формат ошибки:
 ```json

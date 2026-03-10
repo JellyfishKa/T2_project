@@ -220,11 +220,24 @@ export interface PaginatedResponse<T> {
 
 export interface HealthStatus {
   status: 'healthy' | 'unhealthy'
+  database?: string
   services: {
-    database: 'connected' | 'disconnected'
-    qwen: 'connected' | 'available' | 'unavailable' | 'error'
-    llama: 'connected' | 'available' | 'unavailable' | 'error'
+    database: string
+    qwen: 'loaded' | 'not_loaded' | 'available' | 'unavailable' | 'error'
+    llama: 'loaded' | 'not_loaded' | 'available' | 'unavailable' | 'error'
   }
+  disk_free_mb?: number
+  visits_today?: number
+  version?: string
+}
+
+export interface SalesRepResponse {
+  id: string
+  name: string
+  status: 'active' | 'sick' | 'vacation' | 'unavailable'
+  created_at: string
+  warning?: string | null
+  pending_visits_count?: number
 }
 
 export interface ApiError {

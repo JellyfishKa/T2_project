@@ -1,14 +1,16 @@
 import logging
 import os
+import shutil
 from contextlib import asynccontextmanager
+from datetime import date
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import Base, engine, get_session
+from src.database.models import Base, VisitLog, engine, get_session
 from src.middleware.main import AdvancedMiddleware
 from src.routes.export import router as export_router
 from src.routes.import_excel import router as import_router
@@ -64,7 +66,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="T2 Logistics API",
-    version="1.0.0",
+    version="1.2.0",
     lifespan=lifespan,
 )
 
@@ -116,15 +118,35 @@ async def _health_response(session: AsyncSession):
         from src.models.llama_client import LlamaClient
         qwen_loaded = QwenClient._llm is not None
         llama_loaded = LlamaClient._llm is not None
-        # Формат совместим и с Docker healthcheck, и с фронтендом
+
+        # Disk free (в MB)
+        try:
+            disk = shutil.disk_usage("/")
+            disk_free_mb = round(disk.free / 1024 / 1024)
+        except Exception:
+            disk_free_mb = None
+
+        # Визиты за сегодня
+        try:
+            today = date.today()
+            visits_result = await session.execute(
+                select(func.count()).where(VisitLog.visited_date == today)
+            )
+            visits_today = visits_result.scalar() or 0
+        except Exception:
+            visits_today = None
+
         return {
             "status": "healthy",
             "database": "connected",
             "services": {
                 "database": "connected",
-                "qwen": "available" if qwen_loaded else "unavailable",
-                "llama": "available" if llama_loaded else "unavailable",
+                "qwen": "loaded" if qwen_loaded else "not_loaded",
+                "llama": "loaded" if llama_loaded else "not_loaded",
             },
+            "disk_free_mb": disk_free_mb,
+            "visits_today": visits_today,
+            "version": "1.2.0",
         }
     except Exception as exc:
         logger.error(f"Health check failed: {exc}")
@@ -134,8 +156,8 @@ async def _health_response(session: AsyncSession):
                 "status": "unhealthy",
                 "services": {
                     "database": "disconnected",
-                    "qwen": "unavailable",
-                    "llama": "unavailable",
+                    "qwen": "error",
+                    "llama": "error",
                 },
             },
         )

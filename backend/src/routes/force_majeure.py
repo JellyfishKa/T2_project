@@ -1,3 +1,4 @@
+import json
 from calendar import monthrange
 from datetime import date
 from typing import List
@@ -7,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import ForceMajeureEvent, get_session
+from src.database.models import AuditLog, ForceMajeureEvent, get_session
 from src.schemas.force_majeure import ForceMajeureRequest, ForceMajeureResponse, RedistributedItem
 from src.services.force_majeure_service import ForceMajeureService
 
@@ -30,6 +31,21 @@ async def create_force_majeure(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+    # AuditLog: создание форс-мажора
+    audit = AuditLog(
+        action="force_majeure_created",
+        table_name="force_majeure_events",
+        record_id=result.get("id"),
+        new_value=json.dumps({
+            "type": req.type,
+            "rep_id": req.rep_id,
+            "event_date": str(req.event_date),
+            "affected_tt_count": result.get("affected_tt_count"),
+        }, ensure_ascii=False),
+    )
+    session.add(audit)
+    await session.commit()
 
     return _dict_to_response(result)
 

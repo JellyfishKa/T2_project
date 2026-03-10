@@ -13,7 +13,7 @@ import io
 import logging
 from calendar import monthrange
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import Location, SalesRep, VisitLog, VisitSchedule, get_session
+from src.database.models import AuditLog, Location, SalesRep, VisitLog, VisitSchedule, get_session
 
 try:
     import openpyxl
@@ -195,7 +195,6 @@ async def export_schedule(
         lg = logs_by_sched.get(s.id)
         loc = s.location
         duration = _calc_duration(lg)
-        ws2.append([])  # append нельзя с row-gap, используем cell
         row_data = [
             s.planned_date.strftime("%d.%m.%Y") if s.planned_date else "",
             rep_map.get(s.rep_id, s.rep_id),
@@ -307,6 +306,59 @@ async def export_schedule(
         ws4.cell(row=i, column=6, value=f"{pct}%")
 
     _autofit(ws4)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # Лист 5: Журнал изменений (AuditLog)
+    # ════════════════════════════════════════════════════════════════════════
+    import json as _json
+    audit_q = (
+        select(AuditLog)
+        .where(
+            AuditLog.created_at >= month_start,
+            AuditLog.created_at < month_end + timedelta(days=1),
+        )
+        .order_by(AuditLog.created_at)
+    )
+    audit_records = (await session.execute(audit_q)).scalars().all()
+
+    ws5 = wb.create_sheet("Журнал изменений")
+    ws5.merge_cells("A1:F1")
+    ws5["A1"] = f"ЖУРНАЛ ИЗМЕНЕНИЙ — {month}"
+    ws5["A1"].font = Font(bold=True, size=13)
+    ws5["A1"].alignment = Alignment(horizontal="center")
+
+    AUDIT_COLS = [
+        "Дата/время", "Действие", "Таблица / Объект", "Старое значение",
+        "Новое значение", "Детали",
+    ]
+    _apply_header(ws5, 2, AUDIT_COLS)
+
+    ACTION_LABELS = {
+        "visit_status_change": "Смена статуса визита",
+        "force_majeure_created": "Форс-мажор",
+        "schedule_generated": "Генерация расписания",
+    }
+    for i, rec in enumerate(audit_records, start=3):
+        ts = rec.created_at.strftime("%d.%m.%Y %H:%M") if rec.created_at else ""
+        action_label = ACTION_LABELS.get(rec.action, rec.action)
+        table_obj = f"{rec.table_name or ''} / {rec.record_id or ''}"
+
+        def _fmt_json(s: str | None) -> str:
+            if not s:
+                return ""
+            try:
+                return _json.dumps(_json.loads(s), ensure_ascii=False, indent=None)
+            except Exception:
+                return s or ""
+
+        ws5.cell(row=i, column=1, value=ts)
+        ws5.cell(row=i, column=2, value=action_label)
+        ws5.cell(row=i, column=3, value=table_obj)
+        ws5.cell(row=i, column=4, value=_fmt_json(rec.old_value))
+        ws5.cell(row=i, column=5, value=_fmt_json(rec.new_value))
+        ws5.cell(row=i, column=6, value=_fmt_json(rec.details))
+
+    _autofit(ws5)
 
     # ── Отдаём файл ──────────────────────────────────────────────────────────
     buf = io.BytesIO()

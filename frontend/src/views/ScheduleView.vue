@@ -352,7 +352,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { DailyRoute, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
 import {
   optimizeVariants,
@@ -367,7 +367,9 @@ import {
 
 // ─── State ───────────────────────────────────────────────────────────────────
 const today = new Date()
-const monthOffset = ref(0)
+const savedOffset = parseInt(localStorage.getItem('t2_month_offset') ?? '0', 10)
+const monthOffset = ref(isNaN(savedOffset) ? 0 : savedOffset)
+watch(monthOffset, (v) => localStorage.setItem('t2_month_offset', String(v)))
 const routes = ref<DailyRoute[]>([])
 const reps = ref<SalesRep[]>([])
 const loading = ref(false)

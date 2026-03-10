@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from dotenv import load_dotenv
 
@@ -207,3 +207,23 @@ class OptimizationResult(Base):
 
     def __repr__(self):
         return "<OptimizationResult(imp={self.improvement_percentage}%)>"
+
+
+class AuditLog(Base):
+    """Журнал изменений — логирует ключевые действия в системе."""
+    __tablename__ = "audit_log"
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    action = Column(String, nullable=False)
+    # "visit_status_change" | "force_majeure_created" | "schedule_generated"
+    table_name = Column(String, nullable=True)
+    record_id = Column(String, nullable=True)
+    old_value = Column(Text, nullable=True)   # JSON string
+    new_value = Column(Text, nullable=True)   # JSON string
+    details = Column(Text, nullable=True)     # JSON string, доп. контекст
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(UTC))
+
+    def __repr__(self):
+        return f"<AuditLog(action={self.action}, table={self.table_name}, record={self.record_id})>"

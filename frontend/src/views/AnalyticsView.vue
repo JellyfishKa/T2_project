@@ -584,7 +584,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   Chart as ChartJS,
   Title,
@@ -647,6 +647,7 @@ interface Stats {
 const isLoading = ref(true)
 const isRefreshing = ref(false)
 const error = ref<string | null>(null)
+const currentRequestId = ref(0)
 
 const routes = ref<Route[]>([])
 const metrics = ref<Metric[]>([])
@@ -975,6 +976,7 @@ const repNameMap = computed<Record<string, string>>(() => {
 })
 
 const loadAnalyticsData = async () => {
+  const myId = ++currentRequestId.value
   try {
     isLoading.value = true
     error.value = null
@@ -987,6 +989,8 @@ const loadAnalyticsData = async () => {
       fetchReps().catch(() => []),
     ])
 
+    if (currentRequestId.value !== myId) return  // запрос устарел — игнорируем
+
     routes.value = routesData.items ?? []
     metrics.value = metricsData?.metrics ?? []
     modelComparison.value = comparisonData
@@ -994,8 +998,11 @@ const loadAnalyticsData = async () => {
     repsForFilter.value = repsData
 
     // Загружаем журнал визитов для текущего месяца
-    visits.value = await fetchVisits(insightsMonth.value, visitRepId.value || undefined).catch(() => [])
+    const visitsData = await fetchVisits(insightsMonth.value, visitRepId.value || undefined).catch(() => [])
+    if (currentRequestId.value !== myId) return  // запрос устарел — игнорируем
+    visits.value = visitsData
   } catch (err: any) {
+    if (currentRequestId.value !== myId) return
     error.value = err.message || 'Не удалось загрузить данные аналитики'
     console.error('Analytics data loading error:', err)
   } finally {
@@ -1044,5 +1051,10 @@ const refreshData = async () => {
 // Lifecycle
 onMounted(() => {
   loadAnalyticsData()
+})
+
+onUnmounted(() => {
+  // Инвалидируем текущий requestId — все pending await больше не применят данные
+  currentRequestId.value = -1
 })
 </script>
