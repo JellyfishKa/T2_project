@@ -196,7 +196,7 @@ export const mockHealthStatus: HealthStatus = {
   status: 'healthy',
   services: {
     database: 'connected',
-    llama: 'connected',
+    llama: 'loaded',
     qwen: 'available',
   }
 }
