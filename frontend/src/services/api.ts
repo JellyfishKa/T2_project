@@ -361,10 +361,11 @@ export const deleteRep = async (repId: string): Promise<void> => {
 
 export const generateSchedule = async (
   month: string,
-  repIds?: string[]
+  repIds?: string[],
+  force?: boolean
 ): Promise<{ total_visits_planned: number; coverage_pct: number }> => {
   const response = await withRetry(() =>
-    api.post('/schedule/generate', { month, rep_ids: repIds })
+    api.post('/schedule/generate', { month, rep_ids: repIds }, { params: force ? { force: true } : undefined })
   )
   return response.data
 }

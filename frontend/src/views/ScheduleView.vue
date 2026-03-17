@@ -127,11 +127,16 @@
         </div>
         <div class="flex gap-3 justify-end">
           <button class="btn-secondary" @click="showGenerate = false">Отмена</button>
-          <button class="btn-primary" :disabled="generating" @click="generatePlan">
+          <button class="btn-primary" :disabled="generating" @click="generatePlan()">
             {{ generating ? 'Генерация…' : 'Сгенерировать' }}
           </button>
         </div>
-        <div v-if="genResult" class="mt-3 text-sm" :class="genResult.startsWith('Ошибка') ? 'text-red-400' : 'text-green-400'">{{ genResult }}</div>
+        <div v-if="genResult" class="mt-3 text-sm" :class="genResult.startsWith('Ошибка') ? 'text-red-400' : 'text-green-400'">
+          {{ genResult }}
+          <button v-if="genCanForce" class="ml-2 underline text-yellow-400 hover:text-yellow-300" @click="generatePlan(true)">
+            Пересоздать
+          </button>
+        </div>
       </div>
     </div>
 
@@ -439,6 +444,7 @@ const showHolidays = ref(false)
 const exportLoading = ref(false)
 const generating = ref(false)
 const genResult = ref<string | null>(null)
+const genCanForce = ref(false)
 const submittingFM = ref(false)
 const fmResult = ref<string | null>(null)
 
@@ -527,6 +533,7 @@ async function loadReps() {
 async function openGenerateModal() {
   showGenerate.value = true
   genResult.value = null
+  genCanForce.value = false
   monthHolidays.value = await fetchHolidays({ month: currentMonth.value }).catch(() => [])
 }
 
@@ -554,15 +561,22 @@ async function toggleHoliday(h: Holiday) {
   }
 }
 
-async function generatePlan() {
+async function generatePlan(force = false) {
   generating.value = true
   genResult.value = null
+  genCanForce.value = false
   try {
-    const data = await generateSchedule(currentMonth.value)
+    const data = await generateSchedule(currentMonth.value, undefined, force)
     genResult.value = `Готово: ${data.total_visits_planned} визитов, охват ${data.coverage_pct}%`
     await loadSchedule()
   } catch (e: any) {
-    genResult.value = `Ошибка: ${e?.message ?? e}`
+    const status = e?.response?.status
+    const detail = e?.response?.data?.detail
+    const msg = typeof detail === 'string'
+      ? detail
+      : detail?.message ?? e?.message ?? String(e)
+    genResult.value = `Ошибка: ${msg}`
+    if (status === 409) genCanForce.value = true
   } finally {
     generating.value = false
   }
