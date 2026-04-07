@@ -15,6 +15,12 @@ vi.mock('@/services/api', () => ({
   confirmVariant: vi.fn(),
   fetchHolidays: vi.fn().mockResolvedValue([]),
   patchHoliday: vi.fn(),
+  fetchAllLocations: vi.fn().mockResolvedValue([]),
+}))
+
+// Stub RouteMap so ScheduleView tests don't need Leaflet
+vi.mock('@/components/RouteMap.vue', () => ({
+  default: { name: 'RouteMap', render: () => null },
 }))
 
 // localStorage mock через spy на Storage.prototype (работает в JSDOM)

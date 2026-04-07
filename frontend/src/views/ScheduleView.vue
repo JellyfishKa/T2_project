@@ -247,6 +247,11 @@
           </div>
         </div>
 
+        <!-- Карта маршрута дня -->
+        <div v-if="dayRoutePoints.length" class="mb-4">
+          <RouteMap :points="dayRoutePoints" height="18rem" />
+        </div>
+
         <!-- Выбор модели + кнопка оптимизации -->
         <div class="border-t border-gray-700 pt-3 mt-1">
           <p class="text-xs text-gray-500 mb-2">Модель для оценки вариантов:</p>
@@ -415,7 +420,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import type { DailyRoute, Holiday, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
+import type { DailyRoute, Holiday, Location, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
 import {
   optimizeVariants,
   confirmVariant,
@@ -427,7 +432,9 @@ import {
   createForceMajeure,
   fetchHolidays,
   patchHoliday,
+  fetchAllLocations,
 } from '@/services/api'
+import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
 // ─── State ───────────────────────────────────────────────────────────────────
 const today = new Date()
@@ -501,6 +508,30 @@ const monthLabel = computed(() => {
   const names = ['Январь','Февраль','Март','Апрель','Май','Июнь',
                  'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
   return `${names[Number(m) - 1]} ${y}`
+})
+
+// Locations cache for joining visits → coordinates (used by RouteMap in day modal)
+const locationsById = ref<Map<string, Location>>(new Map())
+
+const dayRoutePoints = computed<RoutePoint[]>(() => {
+  if (!selectedDayRoute.value) return []
+  const out: RoutePoint[] = []
+  selectedDayRoute.value.visits.forEach((v, i) => {
+    const loc = locationsById.value.get(v.location_id)
+    if (!loc) {
+      console.warn('RouteMap: location not found for visit', v.location_id)
+      return
+    }
+    out.push({
+      id: v.id,
+      name: v.location_name,
+      address: loc.address,
+      lat: loc.lat,
+      lon: loc.lon,
+      order: i + 1,
+    })
+  })
+  return out
 })
 
 const sortedRoutes = computed(() =>
@@ -754,9 +785,21 @@ watch(showHolidays, async (val) => {
   if (!val) holidayToggleMsg.value = null
 })
 
+async function loadLocations() {
+  try {
+    const list = await fetchAllLocations()
+    const m = new Map<string, Location>()
+    for (const loc of list) m.set(loc.id, loc)
+    locationsById.value = m
+  } catch (e) {
+    console.warn('Failed to load locations for RouteMap', e)
+  }
+}
+
 onMounted(() => {
   loadSchedule()
   loadReps()
+  loadLocations()
 })
 </script>
 

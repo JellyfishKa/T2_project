@@ -154,9 +154,10 @@
          СОСТОЯНИЕ 3: Выбор из 3 вариантов
     ════════════════════════════════════════════════════════════════════════ -->
     <template v-else-if="currentView === 'variants' && variantsResponse">
-      <div class="max-w-2xl mx-auto">
+      <div class="max-w-3xl mx-auto">
         <OptimizationVariants
           :variants="variantsResponse.variants"
+          :locations="formLocations"
           :model-used="variantsResponse.model_used"
           :llm-evaluation-success="variantsResponse.llm_evaluation_success"
           :response-time-ms="variantsResponse.response_time_ms"
@@ -252,6 +253,8 @@ const formLocations = ref<Array<{
   id: string
   name: string
   address: string
+  lat: number
+  lon: number
   time_window_start: string
   time_window_end: string
 }>>([])
@@ -265,6 +268,8 @@ const handleSubmit = (formData: any) => {
     id: loc.id,
     name: loc.name,
     address: `г. ${loc.city}, ул. ${loc.street}, д. ${loc.houseNumber}`,
+    lat: Number(loc.latitude),
+    lon: Number(loc.longitude),
     time_window_start: loc.timeWindowStart,
     time_window_end: loc.timeWindowEnd
   }))
@@ -308,6 +313,8 @@ const handleOptimize = async () => {
     id: loc.id,
     name: loc.name,
     address: `г. ${loc.city ?? ''}, ул. ${loc.street ?? ''}, д. ${loc.houseNumber ?? ''}`,
+    lat: Number(loc.latitude),
+    lon: Number(loc.longitude),
     time_window_start: loc.timeWindowStart ?? '',
     time_window_end: loc.timeWindowEnd ?? ''
   }))
