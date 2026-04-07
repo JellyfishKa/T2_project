@@ -9,6 +9,11 @@ vi.mock('@/services/api', () => ({
   optimize: vi.fn()
 }))
 
+// Stub RouteMap so Leaflet is not imported in jsdom
+vi.mock('@/components/RouteMap.vue', () => ({
+  default: { name: 'RouteMap', render: () => null },
+}))
+
 // Мокаем компоненты
 vi.mock('@/components/optimize/OptimizationForm.vue', () => ({
   default: {

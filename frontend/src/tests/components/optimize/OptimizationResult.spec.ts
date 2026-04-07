@@ -1,4 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+vi.mock('@/components/RouteMap.vue', () => ({
+  default: { name: 'RouteMap', render: () => null },
+}))
+
 import { mount, VueWrapper } from '@vue/test-utils'
 import OptimizationResult from '@/components/optimize/OptimizationResult.vue'
 import type { Route } from '@/services/types'
@@ -27,6 +32,8 @@ describe('OptimizationResult.vue', () => {
       id: 'loc-1',
       name: 'Store A',
       address: 'г. Москва, ул. Тверская, д. 15',
+      lat: 55.76,
+      lon: 37.61,
       time_window_start: '09:00',
       time_window_end: '18:00'
     },
@@ -34,6 +41,8 @@ describe('OptimizationResult.vue', () => {
       id: 'loc-2',
       name: 'Store B',
       address: 'г. Москва, ул. Арбат, д. 10',
+      lat: 55.75,
+      lon: 37.59,
       time_window_start: '10:00',
       time_window_end: '19:00'
     },
@@ -41,6 +50,8 @@ describe('OptimizationResult.vue', () => {
       id: 'loc-3',
       name: 'Store C',
       address: 'г. Москва, ул. Новый Арбат, д. 24',
+      lat: 55.755,
+      lon: 37.585,
       time_window_start: '09:00',
       time_window_end: '20:00'
     }

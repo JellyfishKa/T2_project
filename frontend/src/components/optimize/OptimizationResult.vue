@@ -196,6 +196,12 @@
         </div>
       </div>
 
+      <!-- Карта маршрута -->
+      <div v-if="mapPoints.length >= 2" class="px-6 py-5">
+        <h4 class="text-sm font-medium text-gray-900 mb-3">Карта маршрута</h4>
+        <RouteMap :points="mapPoints" height="22rem" />
+      </div>
+
       <!-- Actions -->
       <div class="px-6 py-4 bg-gray-50 flex justify-end space-x-3">
         <button
@@ -218,6 +224,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Route } from '@/services/types'
+import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
 const props = defineProps<{
   result: Route | null
@@ -232,6 +239,8 @@ const props = defineProps<{
     id: string
     name: string
     address: string
+    lat: number
+    lon: number
     time_window_start: string
     time_window_end: string
   }>
@@ -277,6 +286,27 @@ const getLocationTimeWindow = (locationId: string): string => {
   if (!location) return ''
   return `${location.time_window_start} - ${location.time_window_end}`
 }
+
+// Точки маршрута для карты (присоединяем lat/lon к result.locations по ID)
+const mapPoints = computed<RoutePoint[]>(() => {
+  if (!props.result || !props.locations?.length) return []
+  const byId = new Map(props.locations.map((l) => [l.id, l]))
+  const pts: RoutePoint[] = []
+  props.result.locations.forEach((id, i) => {
+    const loc = byId.get(id)
+    if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) {
+      pts.push({
+        id,
+        name: loc.name,
+        address: loc.address,
+        lat: loc.lat,
+        lon: loc.lon,
+        order: i + 1,
+      })
+    }
+  })
+  return pts
+})
 
 // Числовое значение для сравнения
 const improvementPercentageNumber = computed(() => {
