@@ -9,7 +9,7 @@
             @click="$emit('toggle-sidebar')"
             class="lg:hidden p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-900"
           >
-            <span class="sr-only">Open sidebar</span>
+            <span class="sr-only">Открыть меню</span>
             <svg
               class="h-6 w-6"
               fill="none"
@@ -35,9 +35,9 @@
               </div>
             </div>
             <div class="ml-3">
-              <h1 class="text-xl font-semibold text-gray-900">LLM Platform</h1>
+              <h1 class="text-xl font-semibold text-gray-900">T2 Платформа</h1>
               <p class="text-sm text-gray-500 hidden sm:block">
-                AI Models Dashboard
+                Панель AI-моделей
               </p>
             </div>
           </div>
@@ -66,10 +66,10 @@ import { useRoute } from 'vue-router'
 const emit = defineEmits(['toggle-sidebar'])
 
 const navigation = [
-  { name: 'Home', to: '/' },
-  { name: 'Dashboard', to: '/dashboard' },
-  { name: 'Optimize', to: '/optimize' },
-  { name: 'Analytics', to: '/analytics' }
+  { name: 'Главная', to: '/' },
+  { name: 'Дашборд', to: '/dashboard' },
+  { name: 'Оптимизация', to: '/optimize' },
+  { name: 'Аналитика', to: '/analytics' }
 ]
 
 const route = useRoute()

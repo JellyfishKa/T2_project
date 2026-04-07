@@ -167,7 +167,7 @@
       </svg>
       <h3 class="mt-2 text-sm font-medium text-gray-900">Нет маршрутов</h3>
       <p class="mt-1 text-sm text-gray-500">
-        Создайте первый маршрут в разделе Optimize
+        Создайте первый маршрут в разделе «Оптимизация»
       </p>
     </div>
   </div>

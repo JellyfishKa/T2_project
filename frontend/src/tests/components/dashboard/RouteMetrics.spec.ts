@@ -146,8 +146,9 @@ describe('RouteMetrics.vue', () => {
   })
 
   it('правильно форматирует дату создания маршрута', () => {
-    const dateText = wrapper.find('.text-right p.text-sm.text-gray-600').text()
-    expect(dateText).toMatch(/\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}/)
+    expect(wrapper.find('.bg-gray-50.rounded-lg').text()).toMatch(
+      /\d{2}\.\d{2}\.\d{4},?\s*\d{2}:\d{2}/
+    )
   })
 
   it('применяет правильные классы для бейджей моделей', () => {

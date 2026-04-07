@@ -5,7 +5,7 @@
       class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Dashboard</h1>
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Дашборд</h1>
         <p class="mt-2 text-gray-600">
           Обзор оптимизированных маршрутов и сравнение производительности
           моделей
