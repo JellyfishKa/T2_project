@@ -58,6 +58,12 @@ export interface DailyRoute {
   rep_name: string
   date: string
   visits: VisitScheduleItem[]
+  current_location_ids?: string[]
+  original_location_ids?: string[]
+  route_source?: 'generated' | 'ai' | 'manual'
+  route_label?: string | null
+  route_updated_at?: string | null
+  has_route_override?: boolean
   total_tt: number
   estimated_duration_hours: number
   lunch_break_at?: string  // "HH:MM"
@@ -194,6 +200,15 @@ export interface Holiday {
 
 export interface HolidayPatchResponse extends Holiday {
   affected_visits_count: number
+}
+
+export interface DayRouteOverrideRequest {
+  rep_id: string
+  date: string
+  location_ids: string[]
+  original_location_ids?: string[]
+  source: 'ai' | 'manual'
+  label?: string
 }
 
 // ─── Metrics / Benchmark ─────────────────────────────────────────────────────

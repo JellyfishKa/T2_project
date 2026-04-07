@@ -1,7 +1,7 @@
 import json
 from calendar import monthrange
 from collections import defaultdict
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,8 +9,18 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import AuditLog, Holiday, Location, SalesRep, VisitLog, VisitSchedule, get_session
+from src.database.models import (
+    AuditLog,
+    DailyRouteOverride,
+    Holiday,
+    Location,
+    SalesRep,
+    VisitLog,
+    VisitSchedule,
+    get_session,
+)
 from src.schemas.schedule import (
+    DayRouteOverrideRequest,
     DailyRoute,
     GenerateScheduleRequest,
     MonthlyPlan,
@@ -324,6 +334,7 @@ async def get_daily_schedule(
     stmt = (
         select(VisitSchedule)
         .where(VisitSchedule.planned_date == target_date)
+        .order_by(VisitSchedule.rep_id, VisitSchedule.created_at, VisitSchedule.id)
         .options(selectinload(VisitSchedule.location), selectinload(VisitSchedule.rep))
     )
     result = await session.execute(stmt)
@@ -336,19 +347,22 @@ async def get_daily_schedule(
     for s in schedules:
         by_rep[s.rep_id].append(s)
 
+    override_map = await _load_route_overrides(
+        session,
+        rep_ids=list(by_rep.keys()),
+        start_date=target_date,
+        end_date=target_date,
+    )
+
     routes: List[DailyRoute] = []
     for rep_id, rep_schedules in by_rep.items():
-        rep = rep_schedules[0].rep
-        visits = [_schedule_to_item(s, logs_by_schedule.get(s.id)) for s in rep_schedules]
-        routes.append(DailyRoute(
-            rep_id=rep_id,
-            rep_name=rep.name if rep else rep_id,
-            date=target_date,
-            visits=visits,
-            total_tt=len(visits),
-            estimated_duration_hours=_estimated_duration(len(visits)),
-            lunch_break_at=LUNCH_BREAK_TIME,
-        ))
+        routes.append(
+            _build_daily_route(
+                rep_schedules,
+                logs_by_schedule,
+                override_map.get((rep_id, target_date)),
+            )
+        )
     return routes
 
 
@@ -413,6 +427,7 @@ async def _build_monthly_plan_response(
             VisitSchedule.planned_date >= effective_start,
             VisitSchedule.planned_date <= effective_end,
         )
+        .order_by(VisitSchedule.planned_date, VisitSchedule.rep_id, VisitSchedule.created_at, VisitSchedule.id)
         .options(selectinload(VisitSchedule.location), selectinload(VisitSchedule.rep))
     )
     if rep_id:
@@ -433,20 +448,23 @@ async def _build_monthly_plan_response(
     for s in schedules:
         by_rep_date[s.rep_id][s.planned_date].append(s)
 
+    override_map = await _load_route_overrides(
+        session,
+        rep_ids=list(by_rep_date.keys()),
+        start_date=effective_start,
+        end_date=effective_end,
+    )
+
     routes: List[DailyRoute] = []
     for r_id, date_map in by_rep_date.items():
         for d, day_schedules in sorted(date_map.items()):
-            rep = day_schedules[0].rep
-            visits = [_schedule_to_item(s, logs_by_schedule.get(s.id)) for s in day_schedules]
-            routes.append(DailyRoute(
-                rep_id=r_id,
-                rep_name=rep.name if rep else r_id,
-                date=d,
-                visits=visits,
-                total_tt=len(visits),
-                estimated_duration_hours=_estimated_duration(len(visits)),
-                lunch_break_at=LUNCH_BREAK_TIME,
-            ))
+            routes.append(
+                _build_daily_route(
+                    day_schedules,
+                    logs_by_schedule,
+                    override_map.get((r_id, d)),
+                )
+            )
 
     planned_locs = {s.location_id for s in schedules}
     coverage_pct = round(len(planned_locs) / total_tt * 100, 1) if total_tt else 0.0
@@ -457,6 +475,108 @@ async def _build_monthly_plan_response(
         coverage_pct=coverage_pct,
         routes=routes,
     )
+
+
+@router.put("/day-route", response_model=DailyRoute)
+async def save_day_route_override(
+    payload: DayRouteOverrideRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    schedules = await _load_schedules_for_rep_day(session, payload.rep_id, payload.date)
+    if not schedules:
+        raise HTTPException(status_code=404, detail="Маршрут дня не найден")
+
+    schedule_location_ids = [s.location_id for s in schedules]
+    if set(schedule_location_ids) != set(payload.location_ids):
+        raise HTTPException(
+            status_code=422,
+            detail="Набор точек маршрута не совпадает с расписанием дня",
+        )
+
+    existing_override = await _get_route_override(session, payload.rep_id, payload.date)
+    original_location_ids = (
+        payload.original_location_ids
+        if payload.original_location_ids
+        else (
+            existing_override.original_location_order
+            if existing_override and existing_override.original_location_order
+            else schedule_location_ids
+        )
+    )
+
+    if existing_override:
+        existing_override.current_location_order = payload.location_ids
+        existing_override.original_location_order = original_location_ids
+        existing_override.source = payload.source
+        existing_override.label = payload.label
+        existing_override.updated_at = datetime.now(timezone.utc)
+        override = existing_override
+    else:
+        override = DailyRouteOverride(
+            rep_id=payload.rep_id,
+            route_date=payload.date,
+            original_location_order=original_location_ids,
+            current_location_order=payload.location_ids,
+            source=payload.source,
+            label=payload.label,
+        )
+        session.add(override)
+
+    session.add(
+        AuditLog(
+            action="day_route_override_saved",
+            table_name="daily_route_overrides",
+            record_id=f"{payload.rep_id}:{payload.date}",
+            old_value=json.dumps({
+                "original_location_ids": schedule_location_ids,
+            }, ensure_ascii=False),
+            new_value=json.dumps({
+                "location_ids": payload.location_ids,
+                "source": payload.source,
+                "label": payload.label,
+            }, ensure_ascii=False),
+        )
+    )
+
+    await session.commit()
+    return await _build_daily_route_response(session, payload.rep_id, payload.date)
+
+
+@router.delete("/day-route", response_model=DailyRoute)
+async def revert_day_route_override(
+    rep_id: str = Query(...),
+    date_str: str = Query(..., alias="date"),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        target_date = date.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат даты. Используй YYYY-MM-DD")
+
+    override = await _get_route_override(session, rep_id, target_date)
+    if override is None:
+        raise HTTPException(status_code=404, detail="Переопределение маршрута не найдено")
+
+    session.add(
+        AuditLog(
+            action="day_route_override_reverted",
+            table_name="daily_route_overrides",
+            record_id=f"{rep_id}:{target_date}",
+            old_value=json.dumps({
+                "location_ids": override.current_location_order,
+                "source": override.source,
+                "label": override.label,
+            }, ensure_ascii=False),
+            new_value=json.dumps({
+                "location_ids": override.original_location_order,
+                "source": "generated",
+            }, ensure_ascii=False),
+        )
+    )
+
+    await session.delete(override)
+    await session.commit()
+    return await _build_daily_route_response(session, rep_id, target_date)
 
 
 def _schedule_to_item(s: VisitSchedule, log: Optional[VisitLog] = None) -> VisitScheduleItem:
@@ -473,4 +593,128 @@ def _schedule_to_item(s: VisitSchedule, log: Optional[VisitLog] = None) -> Visit
         status=s.status,
         time_in=str(log.time_in)[:5] if log and log.time_in else None,
         time_out=str(log.time_out)[:5] if log and log.time_out else None,
+    )
+
+
+async def _get_route_override(
+    session: AsyncSession,
+    rep_id: str,
+    target_date: date,
+) -> Optional[DailyRouteOverride]:
+    result = await session.execute(
+        select(DailyRouteOverride).where(
+            DailyRouteOverride.rep_id == rep_id,
+            DailyRouteOverride.route_date == target_date,
+        )
+    )
+    return result.scalars().first()
+
+
+async def _load_route_overrides(
+    session: AsyncSession,
+    rep_ids: List[str],
+    start_date: date,
+    end_date: date,
+) -> Dict[tuple[str, date], DailyRouteOverride]:
+    if not rep_ids:
+        return {}
+    result = await session.execute(
+        select(DailyRouteOverride).where(
+            DailyRouteOverride.rep_id.in_(rep_ids),
+            DailyRouteOverride.route_date >= start_date,
+            DailyRouteOverride.route_date <= end_date,
+        )
+    )
+    overrides = result.scalars().all()
+    return {(override.rep_id, override.route_date): override for override in overrides}
+
+
+async def _load_schedules_for_rep_day(
+    session: AsyncSession,
+    rep_id: str,
+    target_date: date,
+) -> List[VisitSchedule]:
+    result = await session.execute(
+        select(VisitSchedule)
+        .where(
+            VisitSchedule.rep_id == rep_id,
+            VisitSchedule.planned_date == target_date,
+        )
+        .order_by(VisitSchedule.created_at, VisitSchedule.id)
+        .options(selectinload(VisitSchedule.location), selectinload(VisitSchedule.rep))
+    )
+    return result.scalars().all()
+
+
+async def _build_daily_route_response(
+    session: AsyncSession,
+    rep_id: str,
+    target_date: date,
+) -> DailyRoute:
+    schedules = await _load_schedules_for_rep_day(session, rep_id, target_date)
+    if not schedules:
+        raise HTTPException(status_code=404, detail="Маршрут дня не найден")
+
+    logs_by_schedule = await _load_logs_by_schedule(session, [s.id for s in schedules])
+    override = await _get_route_override(session, rep_id, target_date)
+    return _build_daily_route(schedules, logs_by_schedule, override)
+
+
+def _sort_schedules_by_location_order(
+    schedules: List[VisitSchedule],
+    location_order: List[str],
+) -> List[VisitSchedule]:
+    order_index = {location_id: index for index, location_id in enumerate(location_order)}
+    with_known_order = []
+    without_order = []
+
+    for idx, schedule in enumerate(schedules):
+        if schedule.location_id in order_index:
+            with_known_order.append(schedule)
+        else:
+            without_order.append((idx, schedule))
+
+    with_known_order.sort(key=lambda schedule: order_index[schedule.location_id])
+    without_order.sort(key=lambda item: item[0])
+
+    return with_known_order + [schedule for _, schedule in without_order]
+
+
+def _build_daily_route(
+    schedules: List[VisitSchedule],
+    logs_by_schedule: Dict[str, VisitLog],
+    override: Optional[DailyRouteOverride],
+) -> DailyRoute:
+    if not schedules:
+        raise HTTPException(status_code=404, detail="Маршрут дня не найден")
+
+    rep = schedules[0].rep
+    target_date = schedules[0].planned_date
+    original_location_ids = [schedule.location_id for schedule in schedules]
+    active_location_order = (
+        override.current_location_order
+        if override and override.current_location_order
+        else original_location_ids
+    )
+    sorted_schedules = _sort_schedules_by_location_order(schedules, active_location_order)
+    visits = [_schedule_to_item(schedule, logs_by_schedule.get(schedule.id)) for schedule in sorted_schedules]
+
+    return DailyRoute(
+        rep_id=schedules[0].rep_id,
+        rep_name=rep.name if rep else schedules[0].rep_id,
+        date=target_date,
+        visits=visits,
+        current_location_ids=[schedule.location_id for schedule in sorted_schedules],
+        original_location_ids=(
+            override.original_location_order
+            if override and override.original_location_order
+            else original_location_ids
+        ),
+        route_source=override.source if override else "generated",
+        route_label=override.label if override else None,
+        route_updated_at=override.updated_at if override else None,
+        has_route_override=override is not None,
+        total_tt=len(visits),
+        estimated_duration_hours=_estimated_duration(len(visits)),
+        lunch_break_at=LUNCH_BREAK_TIME,
     )

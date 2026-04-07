@@ -13,6 +13,9 @@ vi.mock('@/services/api', () => ({
   downloadScheduleExcel: vi.fn(),
   optimizeVariants: vi.fn(),
   confirmVariant: vi.fn(),
+  fetchRoutePreview: vi.fn(),
+  saveDayRouteOverride: vi.fn(),
+  revertDayRouteOverride: vi.fn(),
   fetchHolidays: vi.fn().mockResolvedValue([]),
   patchHoliday: vi.fn(),
   fetchAllLocations: vi.fn().mockResolvedValue([]),
@@ -80,6 +83,16 @@ describe('ScheduleView.vue', () => {
     ;(api.createForceMajeure as any).mockResolvedValue({ affected_tt_count: 3 })
     ;(api.updateVisitStatus as any).mockResolvedValue({ ...mockPlan.routes[0].visits[0], status: 'completed' })
     ;(api.downloadScheduleExcel as any).mockResolvedValue(new Blob())
+    ;(api.fetchRoutePreview as any).mockResolvedValue({
+      geometry: [],
+      distance_km: 12,
+      time_minutes: 30,
+      cost_rub: 84,
+      traffic_lights_count: 3,
+      source: 'road_network',
+    })
+    ;(api.saveDayRouteOverride as any).mockResolvedValue(mockPlan.routes[0])
+    ;(api.revertDayRouteOverride as any).mockResolvedValue(mockPlan.routes[0])
   })
 
   it('отображает текущий месяц при монтировании', async () => {

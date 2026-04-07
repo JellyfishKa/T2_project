@@ -123,7 +123,7 @@ curl -X POST http://localhost:8000/api/v1/qwen/optimize \
   -d '{
     "locations": [
       {"ID": "loc_1", "name": "Красная площадь", "address": "Москва, Кремль", "lat": 55.7539, "lon": 37.6208, "time_window_start": "10:00", "time_window_end": "22:00", "priority": "high"},
-      {"ID": "loc_2", "name": "Парк Горького", "address": "Москва, Крымский вал", "lat": 55.7298, "lon": 37.5995, "time_window_start": "08:00", "time_window_end": "23:00", "priority": "medium"},
+      {"ID": "loc_2", "name": "Парк Горького", "address": "Москва, ул. Тверская, 9", "lat": 55.7298, "lon": 37.5995, "time_window_start": "08:00", "time_window_end": "23:00", "priority": "medium"},
       {"ID": "loc_3", "name": "ВДНХ", "address": "Москва, пр-т Мира", "lat": 55.8264, "lon": 37.6377, "time_window_start": "09:00", "time_window_end": "21:00", "priority": "high"},
       {"ID": "loc_4", "name": "Москва-Сити", "address": "Москва, Пресненская наб.", "lat": 55.7494, "lon": 37.5392, "time_window_start": "08:00", "time_window_end": "20:00", "priority": "low"}
     ],

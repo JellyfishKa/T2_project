@@ -58,6 +58,15 @@
         >
           <span class="font-medium text-sm text-gray-900">{{ route.date }}</span>
           <span class="text-blue-600 font-medium">{{ route.rep_name }}</span>
+          <span
+            class="text-[11px] px-2 py-0.5 rounded-full"
+            :class="routeSourceBadgeClass(route.route_source)"
+          >
+            {{ routeSourceLabel(route.route_source) }}
+          </span>
+          <span v-if="route.route_label" class="text-xs text-gray-500 truncate max-w-[12rem]">
+            {{ route.route_label }}
+          </span>
           <span class="text-gray-500 text-xs">
             {{ route.total_tt }} ТТ · ~{{ route.estimated_duration_hours }}ч
           </span>
@@ -215,142 +224,275 @@
 
     <!-- Модал: детальный просмотр дня + LLM оптимизация -->
     <div v-if="showDayModal && selectedDayRoute" class="modal-overlay" @click.self="showDayModal = false">
-      <div class="modal" style="max-width: 540px;">
+      <div class="modal" style="max-width: 980px;">
         <div class="flex items-start justify-between mb-4">
           <div>
-            <h2 class="font-semibold text-lg text-gray-900">{{ selectedDayRoute.rep_name }}</h2>
-            <p class="text-sm text-gray-600">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="font-semibold text-lg text-gray-900">{{ selectedDayRoute.rep_name }}</h2>
+              <span
+                class="text-xs px-2 py-0.5 rounded-full"
+                :class="routeSourceBadgeClass(selectedDayRoute.route_source)"
+              >
+                {{ routeSourceLabel(selectedDayRoute.route_source) }}
+              </span>
+              <span v-if="selectedDayRoute.route_label" class="text-xs text-gray-500">
+                {{ selectedDayRoute.route_label }}
+              </span>
+            </div>
+            <p class="text-sm text-gray-600 mt-1">
               {{ selectedDayRoute.date }} · {{ selectedDayRoute.total_tt }} ТТ
               · ~{{ selectedDayRoute.estimated_duration_hours }}ч
+            </p>
+            <p class="text-xs text-gray-500 mt-1">
+              Активный маршрут: {{ formatRouteMetrics(currentRouteMetrics) }}
             </p>
           </div>
           <button class="btn-icon text-xs" @click="showDayModal = false">✕</button>
         </div>
 
-        <!-- Список визитов дня -->
-        <div class="space-y-0.5 mb-4 max-h-56 overflow-y-auto pr-1">
-          <div
-            v-for="(v, i) in selectedDayRoute.visits"
-            :key="v.id"
-            class="flex items-center gap-2 text-sm py-1 border-b border-gray-100"
-          >
-            <span class="text-gray-400 w-5 shrink-0">{{ i + 1 }}.</span>
-            <span :class="catColor(v.location_category ?? '?')" class="visit-chip shrink-0 text-white">
-              {{ v.location_category ?? '?' }}
-            </span>
-            <span class="flex-1 truncate text-xs text-gray-800">{{ v.location_name }}</span>
-            <span v-if="v.time_in" class="text-xs text-gray-500 shrink-0">
-              {{ v.time_in }}–{{ v.time_out ?? '?' }}
-              <span v-if="visitDuration(v)" class="text-green-600 ml-0.5">({{ visitDuration(v) }}м)</span>
-            </span>
-            <span class="text-xs shrink-0" :class="statusColor(v.status)">{{ statusLabel(v.status) }}</span>
-          </div>
+        <div v-if="dayRouteMessage" class="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          {{ dayRouteMessage }}
         </div>
 
-        <!-- Карта маршрута дня -->
-        <div v-if="dayRoutePoints.length" class="mb-4">
-          <RouteMap :points="dayRoutePoints" height="18rem" />
-        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-5">
+          <div class="space-y-4">
+            <div class="border border-gray-200 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-900">Текущий маршрут дня</h3>
+                  <p class="text-xs text-gray-500">
+                    {{ selectedDayRoute.has_route_override ? 'Этот порядок уже применён в расписании.' : 'Базовый порядок из расписания.' }}
+                  </p>
+                </div>
+                <span class="text-xs text-gray-500">
+                  {{ formatRouteMetrics(currentRouteMetrics) }}
+                </span>
+              </div>
 
-        <!-- Выбор модели + кнопка оптимизации -->
-        <div class="border-t border-gray-200 pt-3 mt-1">
-          <p class="text-xs text-gray-500 mb-2">Модель для оценки вариантов:</p>
-          <div class="flex gap-2 mb-3">
-            <button
-              v-for="m in [{ id: 'qwen', label: 'Qwen 0.5B', hint: 'быстрая' }, { id: 'llama', label: 'Llama 1B', hint: 'точнее' }]"
-              :key="m.id"
-              class="flex-1 text-xs py-1.5 rounded font-medium transition-colors border"
-              :class="selectedModel === m.id
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-              :disabled="dayOptLoading"
-              @click="selectedModel = (m.id as 'qwen' | 'llama')"
-            >
-              {{ m.label }}
-              <span class="opacity-60 ml-1">({{ m.hint }})</span>
-            </button>
-          </div>
+              <div class="space-y-0.5 mb-4 max-h-56 overflow-y-auto pr-1">
+                <div
+                  v-for="(v, i) in currentDayVisits"
+                  :key="`${v.id}-current`"
+                  class="flex items-center gap-2 text-sm py-1 border-b border-gray-100"
+                >
+                  <span class="text-gray-400 w-5 shrink-0">{{ i + 1 }}.</span>
+                  <span :class="catColor(v.location_category ?? '?')" class="visit-chip shrink-0 text-white">
+                    {{ v.location_category ?? '?' }}
+                  </span>
+                  <span class="flex-1 truncate text-xs text-gray-800">{{ v.location_name }}</span>
+                  <span v-if="v.time_in" class="text-xs text-gray-500 shrink-0">
+                    {{ v.time_in }}–{{ v.time_out ?? '?' }}
+                    <span v-if="visitDuration(v)" class="text-green-600 ml-0.5">({{ visitDuration(v) }}м)</span>
+                  </span>
+                  <span class="text-xs shrink-0" :class="statusColor(v.status)">{{ statusLabel(v.status) }}</span>
+                </div>
+              </div>
 
-          <button
-            class="btn-primary w-full flex items-center justify-center gap-2"
-            :disabled="dayOptLoading"
-            @click="optimizeDayRoute"
-          >
-            <svg v-if="dayOptLoading" class="animate-spin h-4 w-4 text-white flex-shrink-0" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            <span>{{ dayOptLoading ? 'Строю варианты маршрута…' : 'Получить варианты (ИИ)' }}</span>
-          </button>
-
-          <!-- Прогресс-бар -->
-          <div v-if="dayOptLoading" class="mt-2">
-            <div class="relative w-full bg-gray-200 rounded-full h-1 overflow-hidden">
-              <div class="absolute top-0 left-0 h-1 bg-blue-500 rounded-full animate-pulse w-full" />
+              <div v-if="currentRoutePoints.length" class="mb-2">
+                <RouteMap :points="currentRoutePoints" height="18rem" />
+              </div>
             </div>
-            <p class="text-xs text-gray-500 mt-1 text-center">
-              Строю 3 варианта + оцениваю через {{ selectedModel === 'qwen' ? 'Qwen' : 'Llama' }}…
-            </p>
+
+            <div v-if="showRouteComparison" class="border border-blue-200 rounded-lg p-4 bg-blue-50/40">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-900">Сравнение маршрутов</h3>
+                  <p class="text-xs text-gray-500">
+                    {{ isDraftDirty ? 'Слева текущий активный маршрут, справа черновик/предпросмотр.' : 'Слева исходный маршрут, справа текущий применённый.' }}
+                  </p>
+                </div>
+                <span v-if="previewLoading" class="text-xs text-gray-500">Пересчитываю метрики…</span>
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="bg-white border border-gray-200 rounded-lg p-3">
+                  <p class="text-xs font-semibold text-gray-700 mb-1">{{ comparisonLeftLabel }}</p>
+                  <p class="text-xs text-gray-500 mb-2">{{ formatRouteMetrics(comparisonLeftMetrics) }}</p>
+                  <div class="space-y-1 mb-3 max-h-40 overflow-y-auto">
+                    <div
+                      v-for="(visit, index) in comparisonLeftVisits"
+                      :key="`${visit.id}-left-${index}`"
+                      class="flex items-center gap-2 text-xs"
+                    >
+                      <span class="text-gray-400 w-4">{{ index + 1 }}</span>
+                      <span :class="catColor(visit.location_category ?? '?')" class="visit-chip shrink-0 text-white">
+                        {{ visit.location_category ?? '?' }}
+                      </span>
+                      <span class="truncate text-gray-800">{{ visit.location_name }}</span>
+                    </div>
+                  </div>
+                  <RouteMap v-if="comparisonLeftPoints.length >= 2" :points="comparisonLeftPoints" height="14rem" />
+                </div>
+
+                <div class="bg-white border border-gray-200 rounded-lg p-3">
+                  <p class="text-xs font-semibold text-gray-700 mb-1">{{ comparisonRightLabel }}</p>
+                  <p class="text-xs text-gray-500 mb-2">{{ formatRouteMetrics(comparisonRightMetrics) }}</p>
+                  <div class="space-y-1 mb-3 max-h-40 overflow-y-auto">
+                    <div
+                      v-for="(visit, index) in comparisonRightVisits"
+                      :key="`${visit.id}-right-${index}`"
+                      class="flex items-center gap-2 text-xs"
+                    >
+                      <span class="text-gray-400 w-4">{{ index + 1 }}</span>
+                      <span :class="catColor(visit.location_category ?? '?')" class="visit-chip shrink-0 text-white">
+                        {{ visit.location_category ?? '?' }}
+                      </span>
+                      <span class="truncate text-gray-800">{{ visit.location_name }}</span>
+                    </div>
+                  </div>
+                  <RouteMap v-if="comparisonRightPoints.length >= 2" :points="comparisonRightPoints" height="14rem" />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div v-if="dayOptError" class="mt-2 text-sm text-red-600">{{ dayOptError }}</div>
+          <div class="space-y-4">
+            <div class="border border-gray-200 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-900">Черновик маршрута</h3>
+                  <p class="text-xs text-gray-500">
+                    Меняйте порядок вручную или выберите вариант от ИИ. Карта и метрики обновляются сразу.
+                  </p>
+                </div>
+                <span class="text-xs text-gray-500">
+                  {{ isDraftDirty ? formatRouteMetrics(draftRouteMetrics) : 'Совпадает с текущим' }}
+                </span>
+              </div>
 
-        <!-- 3 варианта маршрута -->
-        <div v-if="dayOptResult" class="mt-3 space-y-2">
-          <div class="flex items-center gap-2 text-xs text-gray-500 mb-1">
-            <span>Модель: <strong class="text-blue-700">{{ dayOptResult.model_used }}</strong></span>
-            <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-600 ml-1">
-              · ИИ-оценка недоступна
-            </span>
-          </div>
+              <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                <div
+                  v-for="(visit, index) in draftDayVisits"
+                  :key="`${visit.id}-draft-${index}`"
+                  class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-white"
+                >
+                  <span class="text-gray-400 w-4 text-xs">{{ index + 1 }}</span>
+                  <span :class="catColor(visit.location_category ?? '?')" class="visit-chip shrink-0 text-white">
+                    {{ visit.location_category ?? '?' }}
+                  </span>
+                  <span class="flex-1 truncate text-xs text-gray-800">{{ visit.location_name }}</span>
+                  <div class="flex items-center gap-1">
+                    <button class="btn-icon text-xs !w-7 !h-7" :disabled="index === 0" @click="moveDraftPoint(index, -1)">↑</button>
+                    <button class="btn-icon text-xs !w-7 !h-7" :disabled="index === draftDayVisits.length - 1" @click="moveDraftPoint(index, 1)">↓</button>
+                  </div>
+                </div>
+              </div>
 
-          <div
-            v-for="variant in dayOptResult.variants"
-            :key="variant.id"
-            class="rounded border p-3 cursor-pointer transition-all"
-            :class="selectedVariantId === variant.id
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-200 bg-gray-50 hover:border-gray-300'"
-            @click="selectedVariantId = variant.id"
-          >
-            <div class="flex items-start justify-between mb-1">
-              <p class="text-sm font-medium text-gray-900">{{ variant.name }}</p>
-              <span class="text-xs px-1.5 py-0.5 rounded ml-2 flex-shrink-0"
-                :class="variant.metrics.quality_score >= 80 ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'"
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button
+                  class="btn-secondary text-xs"
+                  :disabled="!isDraftDirty"
+                  @click="resetDraftToCurrent"
+                >
+                  Сбросить черновик
+                </button>
+                <button
+                  v-if="selectedDayRoute.has_route_override"
+                  class="btn-secondary text-xs"
+                  :disabled="revertingDayRoute"
+                  @click="revertAppliedRoute"
+                >
+                  {{ revertingDayRoute ? 'Откат…' : 'Откатить к исходному' }}
+                </button>
+                <button
+                  class="btn-primary text-xs"
+                  :disabled="!isDraftDirty || confirmingVariant"
+                  @click="applyDraftRoute"
+                >
+                  {{ confirmingVariant ? 'Применение…' : 'Применить изменения' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Выбор модели + кнопка оптимизации -->
+            <div class="border border-gray-200 rounded-lg p-4">
+              <p class="text-xs text-gray-500 mb-2">Модель для оценки вариантов:</p>
+              <div class="flex gap-2 mb-3">
+                <button
+                  v-for="m in [{ id: 'qwen', label: 'Qwen 0.5B', hint: 'быстрая' }, { id: 'llama', label: 'Llama 1B', hint: 'точнее' }]"
+                  :key="m.id"
+                  class="flex-1 text-xs py-1.5 rounded font-medium transition-colors border"
+                  :class="selectedModel === m.id
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                  :disabled="dayOptLoading"
+                  @click="selectedModel = (m.id as 'qwen' | 'llama')"
+                >
+                  {{ m.label }}
+                  <span class="opacity-60 ml-1">({{ m.hint }})</span>
+                </button>
+              </div>
+
+              <button
+                class="btn-primary w-full flex items-center justify-center gap-2"
+                :disabled="dayOptLoading"
+                @click="optimizeDayRoute"
               >
-                {{ variant.metrics.quality_score.toFixed(0) }}%
-              </span>
+                <svg v-if="dayOptLoading" class="animate-spin h-4 w-4 text-white flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <span>{{ dayOptLoading ? 'Строю варианты маршрута…' : 'Получить варианты (ИИ)' }}</span>
+              </button>
+
+              <!-- Прогресс-бар -->
+              <div v-if="dayOptLoading" class="mt-2">
+                <div class="relative w-full bg-gray-200 rounded-full h-1 overflow-hidden">
+                  <div class="absolute top-0 left-0 h-1 bg-blue-500 rounded-full animate-pulse w-full" />
+                </div>
+                <p class="text-xs text-gray-500 mt-1 text-center">
+                  Строю 3 варианта + оцениваю через {{ selectedModel === 'qwen' ? 'Qwen' : 'Llama' }}…
+                </p>
+              </div>
             </div>
-            <p class="text-xs text-gray-600 mb-2">{{ variant.description }}</p>
-            <!-- Метрики -->
-            <div class="flex gap-3 text-xs text-gray-700 mb-2">
-              <span>📍 {{ variant.metrics.distance_km.toFixed(1) }} км</span>
-              <span>⏱ {{ variant.metrics.time_hours.toFixed(1) }} ч</span>
-              <span>💰 {{ variant.metrics.cost_rub.toFixed(0) }} ₽</span>
-            </div>
-            <!-- Pros / Cons -->
-            <div v-if="variant.pros.length || variant.cons.length" class="flex flex-wrap gap-1">
-              <span
-                v-for="p in variant.pros" :key="'p'+p"
-                class="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded"
-              >✓ {{ p }}</span>
-              <span
-                v-for="c in variant.cons" :key="'c'+c"
-                class="text-xs bg-red-100 text-red-800 px-1.5 py-0.5 rounded"
-              >✗ {{ c }}</span>
+
+            <div v-if="dayOptError" class="text-sm text-red-600">{{ dayOptError }}</div>
+
+            <!-- 3 варианта маршрута -->
+            <div v-if="dayOptResult" class="space-y-2">
+              <div class="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                <span>Модель: <strong class="text-blue-700">{{ dayOptResult.model_used }}</strong></span>
+                <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-600 ml-1">
+                  · ИИ-оценка недоступна
+                </span>
+              </div>
+
+              <div
+                v-for="variant in dayOptResult.variants"
+                :key="variant.id"
+                class="rounded border p-3 cursor-pointer transition-all"
+                :class="selectedVariantId === variant.id
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'"
+                @click="previewVariant(variant)"
+              >
+                <div class="flex items-start justify-between mb-1">
+                  <p class="text-sm font-medium text-gray-900">{{ variant.name }}</p>
+                  <span class="text-xs px-1.5 py-0.5 rounded ml-2 flex-shrink-0"
+                    :class="variant.metrics.quality_score >= 80 ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'"
+                  >
+                    {{ variant.metrics.quality_score.toFixed(0) }}%
+                  </span>
+                </div>
+                <p class="text-xs text-gray-600 mb-2">{{ variant.description }}</p>
+                <div class="flex gap-3 text-xs text-gray-700 mb-2">
+                  <span>📍 {{ variant.metrics.distance_km.toFixed(1) }} км</span>
+                  <span>⏱ {{ variant.metrics.time_hours.toFixed(1) }} ч</span>
+                  <span>💰 {{ variant.metrics.cost_rub.toFixed(0) }} ₽</span>
+                </div>
+                <div v-if="variant.pros.length || variant.cons.length" class="flex flex-wrap gap-1">
+                  <span
+                    v-for="p in variant.pros" :key="'p'+p"
+                    class="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded"
+                  >✓ {{ p }}</span>
+                  <span
+                    v-for="c in variant.cons" :key="'c'+c"
+                    class="text-xs bg-red-100 text-red-800 px-1.5 py-0.5 rounded"
+                  >✗ {{ c }}</span>
+                </div>
+              </div>
             </div>
           </div>
-
-          <!-- Сохранить выбранный -->
-          <button
-            v-if="selectedVariantId !== null"
-            class="btn-primary w-full text-sm mt-1"
-            :disabled="confirmingVariant"
-            @click="confirmSelectedVariant"
-          >
-            {{ confirmingVariant ? 'Сохранение…' : 'Сохранить выбранный маршрут' }}
-          </button>
         </div>
       </div>
     </div>
@@ -420,10 +562,20 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import type { DailyRoute, Holiday, Location, OptimizeVariantsResponse, ConfirmVariantRequest, SalesRep, VisitScheduleItem } from '@/services/types'
+import type {
+  DailyRoute,
+  Holiday,
+  Location,
+  OptimizeVariantsResponse,
+  ConfirmVariantRequest,
+  SalesRep,
+  VisitScheduleItem,
+  RouteVariant,
+} from '@/services/types'
 import {
   optimizeVariants,
   confirmVariant,
+  fetchRoutePreview,
   updateVisitStatus,
   downloadScheduleExcel,
   fetchMonthlySchedule,
@@ -433,6 +585,8 @@ import {
   fetchHolidays,
   patchHoliday,
   fetchAllLocations,
+  saveDayRouteOverride,
+  revertDayRouteOverride,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -489,6 +643,15 @@ const dayOptError = ref<string | null>(null)
 const selectedModel = ref<'qwen' | 'llama'>('qwen')
 const selectedVariantId = ref<number | null>(null)
 const confirmingVariant = ref(false)
+const revertingDayRoute = ref(false)
+const draftLocationIds = ref<string[]>([])
+const draftRouteSource = ref<'generated' | 'ai' | 'manual'>('generated')
+const draftRouteLabel = ref<string | null>(null)
+const dayRouteMessage = ref<string | null>(null)
+const previewLoading = ref(false)
+const originalRouteMetrics = ref<RouteMetrics | null>(null)
+const currentRouteMetrics = ref<RouteMetrics | null>(null)
+const draftRouteMetrics = ref<RouteMetrics | null>(null)
 
 const fm = ref({
   type: 'illness' as string,
@@ -496,6 +659,12 @@ const fm = ref({
   event_date: '',
   description: '',
 })
+
+interface RouteMetrics {
+  distance_km: number
+  time_hours: number
+  cost_rub: number
+}
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
 const currentMonth = computed(() => {
@@ -513,30 +682,201 @@ const monthLabel = computed(() => {
 // Locations cache for joining visits → coordinates (used by RouteMap in day modal)
 const locationsById = ref<Map<string, Location>>(new Map())
 
-const dayRoutePoints = computed<RoutePoint[]>(() => {
+const currentLocationIds = computed<string[]>(() => {
   if (!selectedDayRoute.value) return []
-  const out: RoutePoint[] = []
-  selectedDayRoute.value.visits.forEach((v, i) => {
-    const loc = locationsById.value.get(v.location_id)
-    if (!loc) {
-      console.warn('RouteMap: location not found for visit', v.location_id)
-      return
-    }
-    out.push({
-      id: v.id,
-      name: v.location_name,
-      address: loc.address,
-      lat: loc.lat,
-      lon: loc.lon,
-      order: i + 1,
-    })
-  })
-  return out
+  if (selectedDayRoute.value.current_location_ids?.length) {
+    return [...selectedDayRoute.value.current_location_ids]
+  }
+  return selectedDayRoute.value.visits.map((visit) => visit.location_id)
 })
+
+const originalLocationIds = computed<string[]>(() => {
+  if (!selectedDayRoute.value) return []
+  if (selectedDayRoute.value.original_location_ids?.length) {
+    return [...selectedDayRoute.value.original_location_ids]
+  }
+  return currentLocationIds.value
+})
+
+const isDraftDirty = computed(() =>
+  !isSameLocationOrder(draftLocationIds.value, currentLocationIds.value)
+)
+
+const selectedVariant = computed<RouteVariant | null>(() => {
+  if (!dayOptResult.value || selectedVariantId.value === null) return null
+  return dayOptResult.value.variants.find((variant) => variant.id === selectedVariantId.value) ?? null
+})
+
+const currentDayVisits = computed(() => getVisitsByLocationOrder(currentLocationIds.value))
+const originalDayVisits = computed(() => getVisitsByLocationOrder(originalLocationIds.value))
+const draftDayVisits = computed(() =>
+  getVisitsByLocationOrder(isDraftDirty.value ? draftLocationIds.value : currentLocationIds.value)
+)
+
+const currentRoutePoints = computed<RoutePoint[]>(() => buildRoutePoints(currentLocationIds.value))
+const originalRoutePoints = computed<RoutePoint[]>(() => buildRoutePoints(originalLocationIds.value))
+const draftRoutePoints = computed<RoutePoint[]>(() =>
+  buildRoutePoints(isDraftDirty.value ? draftLocationIds.value : currentLocationIds.value)
+)
+
+const showRouteComparison = computed(() => {
+  if (!selectedDayRoute.value) return false
+  if (isDraftDirty.value) return true
+  return !isSameLocationOrder(originalLocationIds.value, currentLocationIds.value)
+})
+
+const comparisonLeftLabel = computed(() =>
+  isDraftDirty.value ? 'Текущий' : 'Исходный'
+)
+
+const comparisonRightLabel = computed(() =>
+  isDraftDirty.value ? 'Предпросмотр' : 'Текущий'
+)
+
+const comparisonLeftVisits = computed(() =>
+  isDraftDirty.value ? currentDayVisits.value : originalDayVisits.value
+)
+
+const comparisonRightVisits = computed(() =>
+  isDraftDirty.value ? draftDayVisits.value : currentDayVisits.value
+)
+
+const comparisonLeftPoints = computed(() =>
+  isDraftDirty.value ? currentRoutePoints.value : originalRoutePoints.value
+)
+
+const comparisonRightPoints = computed(() =>
+  isDraftDirty.value ? draftRoutePoints.value : currentRoutePoints.value
+)
+
+const comparisonLeftMetrics = computed(() =>
+  isDraftDirty.value ? currentRouteMetrics.value : originalRouteMetrics.value
+)
+
+const comparisonRightMetrics = computed(() =>
+  isDraftDirty.value ? draftRouteMetrics.value : currentRouteMetrics.value
+)
 
 const sortedRoutes = computed(() =>
   [...routes.value].sort((a, b) => a.date.localeCompare(b.date) || a.rep_name.localeCompare(b.rep_name))
 )
+
+function isSameLocationOrder(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
+function getVisitLookup() {
+  return new Map(
+    (selectedDayRoute.value?.visits ?? []).map((visit) => [visit.location_id, visit])
+  )
+}
+
+function getVisitsByLocationOrder(locationIds: string[]): VisitScheduleItem[] {
+  const visitLookup = getVisitLookup()
+  return locationIds
+    .map((locationId) => visitLookup.get(locationId))
+    .filter((visit): visit is VisitScheduleItem => !!visit)
+}
+
+function buildRoutePoints(locationIds: string[]): RoutePoint[] {
+  const visitLookup = getVisitLookup()
+  const points: RoutePoint[] = []
+
+  locationIds.forEach((locationId, index) => {
+    const visit = visitLookup.get(locationId)
+    const location = locationsById.value.get(locationId)
+    if (!visit || !location) {
+      console.warn('RouteMap: location not found for visit', locationId)
+      return
+    }
+    points.push({
+      id: visit.id,
+      name: visit.location_name,
+      address: location.address,
+      lat: location.lat,
+      lon: location.lon,
+      order: index + 1,
+    })
+  })
+
+  return points
+}
+
+async function getRouteMetricsForLocationIds(locationIds: string[]): Promise<RouteMetrics> {
+  const points = locationIds
+    .map((locationId) => locationsById.value.get(locationId))
+    .filter((location): location is Location => !!location)
+    .map((location) => ({
+      lat: location.lat,
+      lon: location.lon,
+    }))
+
+  if (points.length < 2) {
+    return {
+      distance_km: 0,
+      time_hours: 0,
+      cost_rub: 0,
+    }
+  }
+
+  const preview = await fetchRoutePreview(points)
+  return {
+    distance_km: preview.distance_km,
+    time_hours: preview.time_minutes / 60,
+    cost_rub: preview.cost_rub,
+  }
+}
+
+async function refreshDayRouteMetrics() {
+  if (!selectedDayRoute.value) return
+
+  previewLoading.value = true
+  try {
+    originalRouteMetrics.value = await getRouteMetricsForLocationIds(originalLocationIds.value)
+    currentRouteMetrics.value = await getRouteMetricsForLocationIds(currentLocationIds.value)
+    draftRouteMetrics.value = isDraftDirty.value
+      ? await getRouteMetricsForLocationIds(draftLocationIds.value)
+      : null
+  } catch (e: any) {
+    dayOptError.value = e?.message ?? 'Не удалось пересчитать метрики маршрута'
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function routeSourceLabel(source?: DailyRoute['route_source']): string {
+  if (source === 'ai') return 'ИИ'
+  if (source === 'manual') return 'Ручной'
+  return 'Базовый'
+}
+
+function routeSourceBadgeClass(source?: DailyRoute['route_source']): string {
+  if (source === 'ai') return 'bg-blue-100 text-blue-700'
+  if (source === 'manual') return 'bg-amber-100 text-amber-700'
+  return 'bg-gray-100 text-gray-600'
+}
+
+function formatRouteMetrics(metrics: RouteMetrics | null): string {
+  if (!metrics) return '—'
+  return `${metrics.distance_km.toFixed(1)} км · ${metrics.time_hours.toFixed(1)} ч · ${metrics.cost_rub.toFixed(0)} ₽`
+}
+
+function updateRouteInState(updatedRoute: DailyRoute) {
+  const routeIndex = routes.value.findIndex(
+    (route) => route.rep_id === updatedRoute.rep_id && route.date === updatedRoute.date
+  )
+  if (routeIndex !== -1) {
+    routes.value.splice(routeIndex, 1, updatedRoute)
+  }
+
+  if (
+    selectedDayRoute.value &&
+    selectedDayRoute.value.rep_id === updatedRoute.rep_id &&
+    selectedDayRoute.value.date === updatedRoute.date
+  ) {
+    selectedDayRoute.value = updatedRoute
+  }
+}
 
 // ─── Methods ──────────────────────────────────────────────────────────────────
 function shiftMonth(delta: number) {
@@ -704,7 +1044,14 @@ function openDayModal(route: DailyRoute) {
   dayOptResult.value = null
   dayOptError.value = null
   selectedVariantId.value = null
+  dayRouteMessage.value = null
+  draftLocationIds.value = route.current_location_ids?.length
+    ? [...route.current_location_ids]
+    : route.visits.map((visit) => visit.location_id)
+  draftRouteSource.value = route.route_source ?? 'generated'
+  draftRouteLabel.value = route.route_label ?? null
   showDayModal.value = true
+  void refreshDayRouteMetrics()
 }
 
 async function optimizeDayRoute() {
@@ -714,7 +1061,7 @@ async function optimizeDayRoute() {
   dayOptResult.value = null
   selectedVariantId.value = null
   try {
-    const locationIds = selectedDayRoute.value.visits.map(v => v.location_id)
+    const locationIds = currentLocationIds.value
     dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {})
   } catch (e: any) {
     dayOptError.value = e?.message ?? 'Ошибка оптимизации'
@@ -723,29 +1070,98 @@ async function optimizeDayRoute() {
   }
 }
 
-async function confirmSelectedVariant() {
-  if (!selectedDayRoute.value || !dayOptResult.value || selectedVariantId.value === null) return
-  const variant = dayOptResult.value.variants.find(v => v.id === selectedVariantId.value)
-  if (!variant) return
+function previewVariant(variant: RouteVariant) {
+  selectedVariantId.value = variant.id
+  draftLocationIds.value = [...variant.locations]
+  draftRouteSource.value = 'ai'
+  draftRouteLabel.value = variant.name
+  dayRouteMessage.value = `Предпросмотр: ${variant.name}`
+  void refreshDayRouteMetrics()
+}
+
+function resetDraftToCurrent() {
+  draftLocationIds.value = [...currentLocationIds.value]
+  draftRouteSource.value = selectedDayRoute.value?.route_source ?? 'generated'
+  draftRouteLabel.value = selectedDayRoute.value?.route_label ?? null
+  selectedVariantId.value = null
+  dayRouteMessage.value = 'Черновик сброшен к текущему маршруту.'
+  void refreshDayRouteMetrics()
+}
+
+function moveDraftPoint(index: number, direction: -1 | 1) {
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= draftLocationIds.value.length) return
+  const nextOrder = [...draftLocationIds.value]
+  ;[nextOrder[index], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[index]]
+  draftLocationIds.value = nextOrder
+  draftRouteSource.value = 'manual'
+  draftRouteLabel.value = 'Ручной порядок'
+  selectedVariantId.value = null
+  dayRouteMessage.value = 'Черновик маршрута изменён вручную.'
+  void refreshDayRouteMetrics()
+}
+
+async function applyDraftRoute() {
+  if (!selectedDayRoute.value || !isDraftDirty.value) return
   confirmingVariant.value = true
   dayOptError.value = null
   try {
-    const payload: ConfirmVariantRequest = {
-      name: `${selectedDayRoute.value.rep_name} — ${selectedDayRoute.value.date} (${variant.name})`,
-      locations: variant.locations,
-      total_distance_km: variant.metrics.distance_km,
-      total_time_hours: variant.metrics.time_hours,
-      total_cost_rub: variant.metrics.cost_rub,
-      quality_score: variant.metrics.quality_score,
-      model_used: dayOptResult.value.model_used,
-      original_location_ids: selectedDayRoute.value.visits.map(v => v.location_id),
+    if (draftRouteSource.value === 'ai' && selectedVariant.value && dayOptResult.value) {
+      const payload: ConfirmVariantRequest = {
+        name: `${selectedDayRoute.value.rep_name} — ${selectedDayRoute.value.date} (${selectedVariant.value.name})`,
+        locations: selectedVariant.value.locations,
+        total_distance_km: selectedVariant.value.metrics.distance_km,
+        total_time_hours: selectedVariant.value.metrics.time_hours,
+        total_cost_rub: selectedVariant.value.metrics.cost_rub,
+        quality_score: selectedVariant.value.metrics.quality_score,
+        model_used: dayOptResult.value.model_used,
+        original_location_ids: originalLocationIds.value,
+      }
+      await confirmVariant(payload)
     }
-    await confirmVariant(payload)
-    showDayModal.value = false
+
+    const updatedRoute = await saveDayRouteOverride({
+      rep_id: selectedDayRoute.value.rep_id,
+      date: selectedDayRoute.value.date,
+      location_ids: draftLocationIds.value,
+      original_location_ids: originalLocationIds.value,
+      source: draftRouteSource.value === 'ai' ? 'ai' : 'manual',
+      label: draftRouteLabel.value ?? undefined,
+    })
+
+    updateRouteInState(updatedRoute)
+    draftLocationIds.value = [...(updatedRoute.current_location_ids ?? updatedRoute.visits.map((visit: VisitScheduleItem) => visit.location_id))]
+    draftRouteSource.value = updatedRoute.route_source ?? 'generated'
+    draftRouteLabel.value = updatedRoute.route_label ?? null
+    dayRouteMessage.value = `Маршрут применён: ${routeSourceLabel(updatedRoute.route_source)}${updatedRoute.route_label ? ` (${updatedRoute.route_label})` : ''}.`
+    await refreshDayRouteMetrics()
   } catch (e: any) {
     dayOptError.value = e?.message ?? 'Ошибка сохранения маршрута'
   } finally {
     confirmingVariant.value = false
+  }
+}
+
+async function revertAppliedRoute() {
+  if (!selectedDayRoute.value || !selectedDayRoute.value.has_route_override) return
+  revertingDayRoute.value = true
+  dayOptError.value = null
+  try {
+    const updatedRoute = await revertDayRouteOverride(
+      selectedDayRoute.value.rep_id,
+      selectedDayRoute.value.date,
+    )
+    updateRouteInState(updatedRoute)
+    draftLocationIds.value = [...(updatedRoute.current_location_ids ?? updatedRoute.visits.map((visit: VisitScheduleItem) => visit.location_id))]
+    draftRouteSource.value = updatedRoute.route_source ?? 'generated'
+    draftRouteLabel.value = updatedRoute.route_label ?? null
+    selectedVariantId.value = null
+    dayRouteMessage.value = 'Маршрут откатан к исходному порядку.'
+    await refreshDayRouteMetrics()
+  } catch (e: any) {
+    dayOptError.value = e?.message ?? 'Ошибка отката маршрута'
+  } finally {
+    revertingDayRoute.value = false
   }
 }
 
@@ -784,6 +1200,16 @@ watch(showHolidays, async (val) => {
   }
   if (!val) holidayToggleMsg.value = null
 })
+
+watch(
+  [() => showDayModal.value, () => locationsById.value],
+  ([isOpen]) => {
+    if (isOpen && selectedDayRoute.value) {
+      void refreshDayRouteMetrics()
+    }
+  },
+  { deep: false }
+)
 
 async function loadLocations() {
   try {
