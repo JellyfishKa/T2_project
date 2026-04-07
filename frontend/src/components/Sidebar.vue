@@ -45,7 +45,7 @@
         :to="item.to"
         @click="$emit('close')"
         class="flex items-center px-4 py-3 text-slate-700 hover:text-blue-700 hover:bg-blue-50 rounded-xl group transition-colors duration-200"
-        :class="{ 'text-blue-700 bg-blue-50': isActive(item.to) }"
+        :class="{ 'text-blue-600 bg-blue-50': isActive(item.to) }"
       >
         <!-- Иконка пункта меню (один <svg> с подстановкой пути) -->
         <div
