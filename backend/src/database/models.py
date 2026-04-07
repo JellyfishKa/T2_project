@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from sqlalchemy import (
     Boolean, Column, Date, DateTime, Float,
-    ForeignKey, Integer, JSON, String, Text, Time)
+    ForeignKey, Integer, JSON, String, Text, Time, UniqueConstraint)
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -96,6 +96,35 @@ class VisitSchedule(Base):
     def __repr__(self):
         return (f"<VisitSchedule(rep={self.rep_id}, loc={self.location_id},"
                 f" date={self.planned_date}, status={self.status})>")
+
+
+class DailyRouteOverride(Base):
+    """Переопределение порядка точек для конкретного сотрудника и дня."""
+    __tablename__ = "daily_route_overrides"
+    __table_args__ = (
+        UniqueConstraint("rep_id", "route_date", name="uq_daily_route_override_rep_date"),
+    )
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    rep_id = Column(String, ForeignKey("sales_reps.id", ondelete="CASCADE"),
+                    nullable=False, index=True)
+    route_date = Column(Date, nullable=False, index=True)
+    original_location_order = Column(JSON, nullable=False, default=list)
+    current_location_order = Column(JSON, nullable=False, default=list)
+    source = Column(String, nullable=False, default="manual")
+    label = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    rep = relationship("SalesRep")
+
+    def __repr__(self):
+        return (f"<DailyRouteOverride(rep={self.rep_id}, date={self.route_date}, "
+                f"source={self.source})>")
 
 
 class VisitLog(Base):

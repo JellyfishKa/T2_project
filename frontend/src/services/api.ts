@@ -18,6 +18,7 @@ import type {
   ModelComparison,
   SalesRep,
   MonthlyPlan,
+  DayRouteOverrideRequest,
   ForceMajeureEvent,
   VisitScheduleItem,
   VisitLog,
@@ -386,6 +387,30 @@ export const fetchMonthlySchedule = async (
 ): Promise<MonthlyPlan> => {
   const response = await withRetry(() =>
     api.get('/schedule/', { params: { month } })
+  )
+  return response.data
+}
+
+export const saveDayRouteOverride = async (
+  payload: DayRouteOverrideRequest
+): Promise<DailyRoute> => {
+  const response = await withRetry(() =>
+    api.put('/schedule/day-route', payload)
+  )
+  return response.data
+}
+
+export const revertDayRouteOverride = async (
+  repId: string,
+  date: string
+): Promise<DailyRoute> => {
+  const response = await withRetry(() =>
+    api.delete('/schedule/day-route', {
+      params: {
+        rep_id: repId,
+        date,
+      }
+    })
   )
   return response.data
 }

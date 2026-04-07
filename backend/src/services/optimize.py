@@ -14,8 +14,6 @@ from src.database.models import (
 )
 from src.models.geo_utils import (
     compute_distance_matrix,
-    detect_region_info,
-    estimate_fuel_cost,
     haversine,
     infer_category,
 )

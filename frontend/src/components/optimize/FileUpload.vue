@@ -542,6 +542,7 @@ const uploadToServer = async () => {
           city: cityGuess || 'Саранск',
           street: streetFromData,
           houseNumber: houseFromData,
+          address: loc.address ?? '',
           latitude: loc.lat ?? loc.latitude ?? 0,
           longitude: loc.lon ?? loc.longitude ?? 0,
           timeWindowStart: loc.time_window_start ?? '09:00',

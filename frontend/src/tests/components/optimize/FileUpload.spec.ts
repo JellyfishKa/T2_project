@@ -400,6 +400,7 @@ describe('FileUpload.vue', () => {
           id: 'loc-a',
           name: 'Салон Т2 Саранск Центр',
           city: 'Саранск',
+          address: 'г. Саранск, ул. Советская, д. 35',
           lat: 54.1871,
           lon: 45.1749,
           time_window_start: '09:00',
@@ -431,6 +432,9 @@ describe('FileUpload.vue', () => {
     await nextTick()
 
     expect(wrapper.vm.uploadedLocations).toHaveLength(2)
+    expect(wrapper.vm.uploadedLocations[0].address).toBe(
+      'г. Саранск, ул. Советская, д. 35'
+    )
     expect(wrapper.vm.uploadedLocations[0].category).toBe('A')
     expect(wrapper.vm.uploadedLocations[0].priority).toBe('high')
     expect(wrapper.vm.uploadedLocations[1].category).toBe('D')

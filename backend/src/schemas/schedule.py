@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,9 +40,24 @@ class DailyRoute(BaseModel):
     rep_name: str
     date: date
     visits: List[VisitScheduleItem]
+    current_location_ids: List[str] = []
+    original_location_ids: List[str] = []
+    route_source: Literal["generated", "ai", "manual"] = "generated"
+    route_label: Optional[str] = None
+    route_updated_at: Optional[datetime] = None
+    has_route_override: bool = False
     total_tt: int
     estimated_duration_hours: float
     lunch_break_at: Optional[str] = None  # "HH:MM", фиксированный обед
+
+
+class DayRouteOverrideRequest(BaseModel):
+    rep_id: str
+    date: date
+    location_ids: List[str]
+    original_location_ids: Optional[List[str]] = None
+    source: Literal["ai", "manual"] = "manual"
+    label: Optional[str] = None
 
 
 class MonthlyPlan(BaseModel):

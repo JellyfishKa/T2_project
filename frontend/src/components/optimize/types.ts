@@ -7,6 +7,7 @@ export interface Location {
   city: string
   street: string
   houseNumber: string
+  address?: string
   latitude: number
   longitude: number
   timeWindowStart: string

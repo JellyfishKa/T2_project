@@ -195,7 +195,8 @@ import OptimizationProgress from '@/components/optimize/OptimizationProgress.vue
 import OptimizationVariants from '@/components/optimize/OptimizationVariants.vue'
 import ConstraintsPanel from '@/components/optimize/ConstraintsPanel.vue'
 import FileUpload from '@/components/optimize/FileUpload.vue'
-import { optimizeVariants, confirmVariant } from '@/services/api'
+import { buildLocationAddress } from '@/components/optimize/address'
+import { optimizeVariants, confirmVariant, fetchRoutePreview } from '@/services/api'
 import type { Constraints, Location } from '@/components/optimize/types'
 import type { Route, RouteVariant, OptimizeVariantsResponse } from '@/services/types'
 
@@ -267,7 +268,7 @@ const handleSubmit = (formData: any) => {
   formLocations.value = formData.locations.map((loc: any) => ({
     id: loc.id,
     name: loc.name,
-    address: `г. ${loc.city}, ул. ${loc.street}, д. ${loc.houseNumber}`,
+    address: buildLocationAddress(loc),
     lat: Number(loc.latitude),
     lon: Number(loc.longitude),
     time_window_start: loc.timeWindowStart,
@@ -312,7 +313,7 @@ const handleOptimize = async () => {
   formLocations.value = (formData.locations ?? []).map((loc: any) => ({
     id: loc.id,
     name: loc.name,
-    address: `г. ${loc.city ?? ''}, ул. ${loc.street ?? ''}, д. ${loc.houseNumber ?? ''}`,
+    address: buildLocationAddress(loc),
     lat: Number(loc.latitude),
     lon: Number(loc.longitude),
     time_window_start: loc.timeWindowStart ?? '',
@@ -321,11 +322,25 @@ const handleOptimize = async () => {
 
   locationIds.value = (formData.locations ?? []).map((loc: any) => loc.id)
 
-  // Исходные метрики (приблизительные)
-  originalMetrics.value = {
-    total_distance_km: locationIds.value.length * 15,
-    total_time_hours: locationIds.value.length * 1.5,
-    total_cost_rub: locationIds.value.length * 1000
+  // Исходные метрики маршрута в текущем порядке точек.
+  try {
+    const preview = await fetchRoutePreview(
+      formLocations.value.map((loc) => ({
+        lat: loc.lat,
+        lon: loc.lon,
+      }))
+    )
+    originalMetrics.value = {
+      total_distance_km: preview.distance_km,
+      total_time_hours: preview.time_minutes / 60,
+      total_cost_rub: preview.cost_rub
+    }
+  } catch {
+    originalMetrics.value = {
+      total_distance_km: locationIds.value.length * 15,
+      total_time_hours: locationIds.value.length * 1.5,
+      total_cost_rub: locationIds.value.length * 1000
+    }
   }
 
   // Переходим в состояние загрузки

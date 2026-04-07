@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 // Stub leaflet image asset imports (Vite handles these in the real build,
 // but Vitest+jsdom does not transform PNGs).
@@ -47,6 +47,17 @@ vi.mock('leaflet', () => {
   return { default: L, ...L }
 })
 
+vi.mock('@/services/api', () => ({
+  fetchRoutePreview: vi.fn(async (points: Array<{ lat: number; lon: number }>) => ({
+    geometry: points.map((point) => [point.lat, point.lon] as [number, number]),
+    distance_km: 10,
+    time_minutes: 25,
+    cost_rub: 70,
+    traffic_lights_count: 3,
+    source: 'road_network',
+  })),
+}))
+
 import RouteMap from '@/components/RouteMap.vue'
 import L from 'leaflet'
 
@@ -55,8 +66,9 @@ describe('RouteMap.vue', () => {
     vi.clearAllMocks()
   })
 
-  it('mounts without errors when points is empty', () => {
+  it('mounts without errors when points is empty', async () => {
     const wrapper = mount(RouteMap, { props: { points: [] } })
+    await flushPromises()
     expect(wrapper.exists()).toBe(true)
     expect(L.map).toHaveBeenCalledTimes(1)
     // No fitBounds when no points
@@ -72,6 +84,7 @@ describe('RouteMap.vue', () => {
       { id: '3', name: 'C', address: 'addr C', lat: 54.2, lon: 45.2, order: 3 },
     ]
     const wrapper = mount(RouteMap, { props: { points } })
+    await flushPromises()
 
     expect(L.marker).toHaveBeenCalledTimes(3)
     expect(L.polyline).toHaveBeenCalledTimes(1)
@@ -82,12 +95,13 @@ describe('RouteMap.vue', () => {
     wrapper.unmount()
   })
 
-  it('skips points with non-finite coordinates', () => {
+  it('skips points with non-finite coordinates', async () => {
     const points = [
       { id: '1', name: 'A', lat: NaN, lon: 45.0, order: 1 },
       { id: '2', name: 'B', lat: 54.1, lon: 45.1, order: 2 },
     ]
     const wrapper = mount(RouteMap, { props: { points } })
+    await flushPromises()
     expect(L.marker).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
@@ -102,13 +116,14 @@ describe('RouteMap.vue', () => {
         { id: '2', name: 'B', lat: 54.1, lon: 45.1, order: 2 },
       ],
     })
+    await flushPromises()
 
     expect(L.marker).toHaveBeenCalledTimes(2)
     expect(L.polyline).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 
-  it('multi-route mode draws one polyline per route and markers only for selected', () => {
+  it('multi-route mode draws one polyline per route and markers only for selected', async () => {
     const routes = [
       {
         id: 1,
@@ -140,6 +155,7 @@ describe('RouteMap.vue', () => {
       },
     ]
     const wrapper = mount(RouteMap, { props: { routes } })
+    await flushPromises()
 
     expect(L.polyline).toHaveBeenCalledTimes(3)
     // Markers only for the selected variant (variant 2 → 3 points)
