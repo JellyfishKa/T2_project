@@ -1,19 +1,29 @@
 <template>
-  <div class="py-6 md:py-8">
-    <!-- Page Header -->
-    <div class="mb-8">
-      <h1 class="text-2xl md:text-3xl font-bold text-gray-900">
-        Оптимизация маршрута
-      </h1>
-      <p class="mt-2 text-gray-600">
-        Настройте параметры, выберите модель и запустите оптимизацию — получите 3 варианта на выбор
-      </p>
-    </div>
+  <div class="space-y-8 py-6 md:py-8">
+    <PageHero
+      eyebrow="Маршрут"
+      title="Оптимизация маршрута"
+      description="Настройте точки, выберите модель и соберите маршрут по шагам: сначала 3 варианта от ИИ, затем ручная доводка и честное сравнение до/после."
+    >
+      <template #meta>
+        <div class="flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">3 варианта</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Ручная доводка</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Сравнение до/после</span>
+        </div>
+      </template>
+    </PageHero>
 
     <!-- ═══════════════════════════════════════════════════════════════════════
          СОСТОЯНИЕ 1: Форма ввода + боковая панель
     ════════════════════════════════════════════════════════════════════════ -->
     <template v-if="currentView === 'form'">
+      <div class="grid gap-4 md:grid-cols-3">
+        <InfoStatCard label="Шаг 1" value="Добавьте точки" hint="Минимум 2 магазина, временные окна и координаты." tone="blue" />
+        <InfoStatCard label="Шаг 2" value="Сравните варианты" hint="ИИ подберёт 3 сценария с описанием и метриками." tone="green" />
+        <InfoStatCard label="Шаг 3" value="Доведите вручную" hint="Перестройте порядок точек и сохраните уже рабочий маршрут." tone="amber" />
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         <!-- Форма -->
         <div class="lg:col-span-2 space-y-6">
@@ -212,6 +222,8 @@ import OptimizationProgress from '@/components/optimize/OptimizationProgress.vue
 import OptimizationVariants from '@/components/optimize/OptimizationVariants.vue'
 import ConstraintsPanel from '@/components/optimize/ConstraintsPanel.vue'
 import FileUpload from '@/components/optimize/FileUpload.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import InfoStatCard from '@/components/common/InfoStatCard.vue'
 import { buildLocationAddress } from '@/components/optimize/address'
 import { optimizeVariants, confirmVariant, fetchRoutePreview } from '@/services/api'
 import type { Constraints, Location } from '@/components/optimize/types'

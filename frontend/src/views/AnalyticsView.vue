@@ -1,37 +1,41 @@
 <template>
-  <div class="py-6 md:py-8">
-    <!-- Page Header -->
-    <div
-      class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between"
+  <div class="space-y-6 py-6 md:py-8">
+    <PageHero
+      eyebrow="Аналитика"
+      title="Аналитика"
+      description="Статистика и визуализация производительности маршрутов и моделей. Сначала ключевые показатели, затем графики и детальная таблица по моделям."
     >
-      <div>
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Аналитика</h1>
-        <p class="mt-2 text-gray-600">
-          Статистика и визуализация производительности маршрутов и моделей
-        </p>
-      </div>
-      <button
-        @click="refreshData"
-        :disabled="isRefreshing"
-        class="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <svg
-          class="h-4 w-4 mr-2"
-          :class="{ 'animate-spin': isRefreshing }"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+      <template #meta>
+        <div class="flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Качество</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Стоимость</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Динамика</span>
+        </div>
+      </template>
+      <template #actions>
+        <button
+          @click="refreshData"
+          :disabled="isRefreshing"
+          class="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-        {{ isRefreshing ? 'Обновление...' : 'Обновить' }}
-      </button>
-    </div>
+          <svg
+            class="h-4 w-4 mr-2"
+            :class="{ 'animate-spin': isRefreshing }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          {{ isRefreshing ? 'Обновление...' : 'Обновить' }}
+        </button>
+      </template>
+    </PageHero>
 
     <!-- Error State -->
     <div
@@ -74,129 +78,43 @@
       <!-- Statistics Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <!-- Total Routes -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-blue-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-blue-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Всего маршрутов</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.totalRoutes }}
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Всего маршрутов"
+          :value="stats.totalRoutes"
+          hint="Общее количество маршрутов в аналитической выборке."
+          tone="blue"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Average Distance -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-green-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-green-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">
-                Среднее расстояние
-              </p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.avgDistance.toFixed(1) }} км
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Среднее расстояние"
+          :value="`${stats.avgDistance.toFixed(1)} км`"
+          hint="Показывает общую транспортную нагрузку маршрутов."
+          tone="green"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Average Cost -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-purple-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-purple-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Средняя стоимость</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.avgCost.toFixed(0) }} ₽
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Средняя стоимость"
+          :value="`${stats.avgCost.toFixed(0)} ₽`"
+          hint="Средняя стоимость выполнения одного маршрута."
+          tone="amber"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Avg Quality -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-yellow-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-yellow-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Среднее качество</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.avgQuality.toFixed(1) }}%
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Среднее качество"
+          :value="`${stats.avgQuality.toFixed(1)}%`"
+          hint="Средний итоговый score по сохранённым решениям."
+          tone="slate"
+        />
         <SkeletonLoader v-else height="120px" />
       </div>
 
@@ -599,6 +517,8 @@ import {
 } from 'chart.js'
 import { Bar as BarChart, Scatter as ScatterChart, Line as LineChart } from 'vue-chartjs'
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import InfoStatCard from '@/components/common/InfoStatCard.vue'
 import {
   fetchRoutes,
   getMetrics,

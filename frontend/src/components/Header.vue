@@ -1,5 +1,5 @@
 <template>
-  <header class="bg-white shadow-sm border-b border-gray-200">
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
     <div class="px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between items-center h-16">
         <!-- Logo and mobile menu button -->
@@ -29,28 +29,33 @@
           <div class="flex items-center ml-4 lg:ml-0">
             <div class="flex-shrink-0">
               <div
-                class="h-8 w-8 bg-black rounded-lg flex items-center justify-center"
+                class="h-9 w-9 rounded-xl bg-slate-950 flex items-center justify-center shadow-sm"
               >
-                <span class="text-white font-bold text-lg">T2</span>
+                <span class="text-white font-bold text-sm">T2</span>
               </div>
             </div>
             <div class="ml-3">
-              <h1 class="text-xl font-semibold text-gray-900">T2 Платформа</h1>
-              <p class="text-sm text-gray-500 hidden sm:block">
-                Панель AI-моделей
+              <div class="flex items-center gap-2">
+                <h1 class="text-lg font-semibold text-slate-950 md:text-xl">T2 Платформа</h1>
+                <span class="hidden rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:inline-flex">
+                  Рабочая зона
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 hidden sm:block">
+                Маршруты, расписание и аналитика без лишнего шума
               </p>
             </div>
           </div>
         </div>
 
         <!-- Desktop Navigation -->
-        <nav class="hidden lg:flex lg:space-x-8">
+        <nav class="hidden lg:flex lg:items-center lg:space-x-2">
           <router-link
             v-for="item in navigation"
             :key="item.name"
             :to="item.to"
-            class="text-gray-700 hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
-            :class="{ 'text-blue-600 bg-blue-50': isActive(item.to) }"
+            class="px-3 py-2 rounded-full text-sm font-medium transition-colors duration-200 text-slate-600 hover:text-blue-700 hover:bg-blue-50"
+            :class="{ 'text-blue-700 bg-blue-50': isActive(item.to) }"
           >
             {{ item.name }}
           </router-link>
@@ -69,6 +74,8 @@ const navigation = [
   { name: 'Главная', to: '/' },
   { name: 'Дашборд', to: '/dashboard' },
   { name: 'Оптимизация', to: '/optimize' },
+  { name: 'Расписание', to: '/schedule' },
+  { name: 'Сотрудники', to: '/reps' },
   { name: 'Аналитика', to: '/analytics' }
 ]
 

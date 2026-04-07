@@ -1,16 +1,19 @@
 <template>
-  <div class="flex h-full flex-col bg-white border-r border-gray-200">
+  <div class="flex h-full flex-col bg-white border-r border-slate-200">
     <!-- Sidebar header -->
     <div
-      class="flex h-16 items-center justify-between px-6 border-b border-gray-200"
+      class="flex h-16 items-center justify-between px-6 border-b border-slate-200"
     >
       <div class="flex items-center">
         <div
-          class="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center"
+          class="h-9 w-9 rounded-xl bg-slate-950 flex items-center justify-center shadow-sm"
         >
-          <span class="text-white font-bold text-lg">T2</span>
+          <span class="text-white font-bold text-sm">T2</span>
         </div>
-        <span class="ml-3 text-lg font-semibold text-gray-900">Меню</span>
+        <div class="ml-3">
+          <span class="text-lg font-semibold text-slate-950">Навигация</span>
+          <p class="text-[11px] text-slate-500">Основные рабочие блоки</p>
+        </div>
       </div>
       <button
         @click="$emit('close')"
@@ -35,14 +38,14 @@
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 space-y-1 px-4 py-6">
+    <nav class="flex-1 space-y-1.5 px-4 py-6">
       <router-link
         v-for="item in navigation"
         :key="item.name"
         :to="item.to"
         @click="$emit('close')"
-        class="flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg group transition-colors duration-200"
-        :class="{ 'text-blue-600 bg-blue-50': isActive(item.to) }"
+        class="flex items-center px-4 py-3 text-slate-700 hover:text-blue-700 hover:bg-blue-50 rounded-xl group transition-colors duration-200"
+        :class="{ 'text-blue-700 bg-blue-50': isActive(item.to) }"
       >
         <!-- Иконка пункта меню (один <svg> с подстановкой пути) -->
         <div
@@ -71,8 +74,18 @@
     </nav>
 
     <!-- Footer -->
-    <div class="border-t border-gray-200 p-4">
-      <div class="flex items-center"></div>
+    <div class="border-t border-slate-200 p-4">
+      <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          Рабочий поток
+        </p>
+        <p class="mt-2 text-sm font-medium text-slate-900">
+          1. Оптимизация
+        </p>
+        <p class="text-xs text-slate-500">
+          Сформируйте маршрут, затем проверьте его в расписании и аналитике.
+        </p>
+      </div>
     </div>
   </div>
 </template>
