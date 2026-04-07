@@ -18,6 +18,7 @@ import type {
   ModelComparison,
   SalesRep,
   MonthlyPlan,
+  DailyRoute,
   DayRouteOverrideRequest,
   ForceMajeureEvent,
   VisitScheduleItem,

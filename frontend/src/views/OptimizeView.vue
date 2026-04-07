@@ -509,7 +509,7 @@ const saveRoute = async () => {
   }
 }
 
-async function getRouteMetrics(routeLocationIds: string[]) {
+async function getRouteMetrics(routeLocationIds: string[]): Promise<RouteMetricsDetails> {
   const points = routeLocationIds
     .map((locationId) => formLocations.value.find((location) => location.id === locationId))
     .filter((location): location is NonNullable<typeof formLocations.value[number]> => !!location)

@@ -1130,7 +1130,7 @@ async function applyDraftRoute() {
     })
 
     updateRouteInState(updatedRoute)
-    draftLocationIds.value = [...(updatedRoute.current_location_ids ?? updatedRoute.visits.map((visit) => visit.location_id))]
+    draftLocationIds.value = [...(updatedRoute.current_location_ids ?? updatedRoute.visits.map((visit: VisitScheduleItem) => visit.location_id))]
     draftRouteSource.value = updatedRoute.route_source ?? 'generated'
     draftRouteLabel.value = updatedRoute.route_label ?? null
     dayRouteMessage.value = `Маршрут применён: ${routeSourceLabel(updatedRoute.route_source)}${updatedRoute.route_label ? ` (${updatedRoute.route_label})` : ''}.`
@@ -1152,7 +1152,7 @@ async function revertAppliedRoute() {
       selectedDayRoute.value.date,
     )
     updateRouteInState(updatedRoute)
-    draftLocationIds.value = [...(updatedRoute.current_location_ids ?? updatedRoute.visits.map((visit) => visit.location_id))]
+    draftLocationIds.value = [...(updatedRoute.current_location_ids ?? updatedRoute.visits.map((visit: VisitScheduleItem) => visit.location_id))]
     draftRouteSource.value = updatedRoute.route_source ?? 'generated'
     draftRouteLabel.value = updatedRoute.route_label ?? null
     selectedVariantId.value = null
