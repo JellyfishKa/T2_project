@@ -42,8 +42,8 @@
         class="card p-4 flex items-center justify-between"
       >
         <div>
-          <div class="font-medium">{{ rep.name }}</div>
-          <div class="text-sm text-gray-400">ID: {{ rep.id.slice(0, 8) }}…</div>
+          <div class="font-medium text-gray-900">{{ rep.name }}</div>
+          <div class="text-sm text-gray-500">ID: {{ rep.id.slice(0, 8) }}…</div>
         </div>
         <div class="flex items-center gap-3">
           <span :class="statusClass(rep.status)" class="badge">
@@ -136,16 +136,16 @@ onMounted(loadReps)
 </script>
 
 <style scoped>
-.card { @apply bg-gray-800 rounded-lg border border-gray-700; }
-.input { @apply bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white w-full; }
-.input-sm { @apply bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white; }
-.label { @apply block text-sm text-gray-400 mb-1; }
+.card { @apply bg-white rounded-lg border border-gray-200 shadow-sm; }
+.input { @apply bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500; }
+.input-sm { @apply bg-white border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500; }
+.label { @apply block text-sm text-gray-600 mb-1; }
 .btn-primary { @apply bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded; }
-.btn-secondary { @apply bg-gray-600 hover:bg-gray-500 text-white text-sm px-4 py-2 rounded; }
+.btn-secondary { @apply bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-sm px-4 py-2 rounded; }
 .btn-danger-sm { @apply bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 rounded; }
 .badge { @apply text-xs px-2 py-0.5 rounded-full font-medium; }
-.badge-green { @apply bg-green-900 text-green-300; }
-.badge-red { @apply bg-red-900 text-red-300; }
-.badge-yellow { @apply bg-yellow-900 text-yellow-300; }
-.badge-gray { @apply bg-gray-700 text-gray-400; }
+.badge-green { @apply bg-green-100 text-green-800; }
+.badge-red { @apply bg-red-100 text-red-800; }
+.badge-yellow { @apply bg-yellow-100 text-yellow-800; }
+.badge-gray { @apply bg-gray-100 text-gray-700; }
 </style>

@@ -22,28 +22,28 @@
           to="/dashboard"
           class="bg-blue-50 hover:bg-blue-100 text-blue-700 p-4 rounded-lg text-center transition-colors duration-200"
         >
-          <div class="text-lg font-semibold mb-1">Dashboard</div>
+          <div class="text-lg font-semibold mb-1">Дашборд</div>
         </router-link>
 
         <router-link
           to="/optimize"
           class="bg-green-50 hover:bg-green-100 text-green-700 p-4 rounded-lg text-center transition-colors duration-200"
         >
-          <div class="text-lg font-semibold mb-1">Test Models</div>
+          <div class="text-lg font-semibold mb-1">Тест моделей</div>
         </router-link>
 
         <router-link
           to="/optimize"
           class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 p-4 rounded-lg text-center transition-colors duration-200"
         >
-          <div class="text-lg font-semibold mb-1">Optimize</div>
+          <div class="text-lg font-semibold mb-1">Оптимизация</div>
         </router-link>
 
         <router-link
           to="/analytics"
           class="bg-purple-50 hover:bg-purple-100 text-purple-700 p-4 rounded-lg text-center transition-colors duration-200"
         >
-          <div class="text-lg font-semibold mb-1">Analytics</div>
+          <div class="text-lg font-semibold mb-1">Аналитика</div>
         </router-link>
       </div>
     </div>

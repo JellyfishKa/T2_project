@@ -138,6 +138,10 @@
 import { reactive } from 'vue'
 import LocationInput from './LocationInput.vue'
 import type { OptimizationFormData, Location } from './types'
+import {
+  normalizeLocationCategory,
+  resolveLocationPriority,
+} from './locationPriority'
 
 const emit = defineEmits<{
   submit: [formData: OptimizationFormData]
@@ -327,7 +331,11 @@ const addLocationFromImport = (locationData: Location) => {
     longitude: locationData.longitude,
     timeWindowStart: locationData.timeWindowStart || '09:00',
     timeWindowEnd: locationData.timeWindowEnd || '18:00',
-    priority: locationData.priority || 'medium'
+    priority: resolveLocationPriority({
+      priority: locationData.priority,
+      category: locationData.category
+    }),
+    category: normalizeLocationCategory(locationData.category)
   })
   validateForm()
 }

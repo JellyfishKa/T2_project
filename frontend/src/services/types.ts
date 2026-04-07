@@ -171,6 +171,20 @@ export interface ConfirmVariantRequest {
   original_location_ids: string[]
 }
 
+export interface RoutePreviewPoint {
+  lat: number
+  lon: number
+}
+
+export interface RoutePreviewResponse {
+  geometry: Array<[number, number]>
+  distance_km: number
+  time_minutes: number
+  cost_rub: number
+  traffic_lights_count: number
+  source: string
+}
+
 // ─── Holiday ──────────────────────────────────────────────────────────────────
 export interface Holiday {
   date: string       // "YYYY-MM-DD"

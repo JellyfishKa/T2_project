@@ -36,14 +36,14 @@
         <span :class="catDot(cat)"></span>{{ cat }}
       </span>
       <span class="flex items-center gap-2 ml-4">
-        <span class="w-3 h-3 rounded-full bg-green-600"></span><span class="text-green-400">выполнен</span>
-        <span class="w-3 h-3 rounded-full bg-red-800 ml-2"></span><span class="text-red-400">пропущен</span>
+        <span class="w-3 h-3 rounded-full bg-green-600"></span><span class="text-green-700">выполнен</span>
+        <span class="w-3 h-3 rounded-full bg-red-700 ml-2"></span><span class="text-red-700">пропущен</span>
       </span>
     </div>
 
     <!-- Загрузка / ошибка -->
-    <div v-if="loading" class="text-gray-400">Загрузка расписания…</div>
-    <div v-else-if="error" class="text-red-400">{{ error }}</div>
+    <div v-if="loading" class="text-gray-500">Загрузка расписания…</div>
+    <div v-else-if="error" class="text-red-600">{{ error }}</div>
 
     <!-- Таблица по дням -->
     <div v-else class="space-y-2">
@@ -53,26 +53,26 @@
         class="card p-3"
       >
         <div
-          class="flex items-center gap-3 mb-2 cursor-pointer hover:text-blue-300 transition-colors"
+          class="flex items-center gap-3 mb-2 cursor-pointer hover:text-blue-700 transition-colors"
           @click="openDayModal(route)"
         >
-          <span class="font-medium text-sm">{{ route.date }}</span>
-          <span class="text-blue-400 font-medium">{{ route.rep_name }}</span>
-          <span class="text-gray-400 text-xs">
+          <span class="font-medium text-sm text-gray-900">{{ route.date }}</span>
+          <span class="text-blue-600 font-medium">{{ route.rep_name }}</span>
+          <span class="text-gray-500 text-xs">
             {{ route.total_tt }} ТТ · ~{{ route.estimated_duration_hours }}ч
           </span>
-          <span class="text-gray-600 text-xs ml-auto">↗ детали</span>
+          <span class="text-gray-400 text-xs ml-auto">↗ детали</span>
         </div>
         <div class="flex flex-wrap gap-1 items-center">
           <template v-for="(visit, idx) in route.visits" :key="visit.id">
             <!-- Разделитель обеда после 7-го визита -->
             <div
               v-if="route.lunch_break_at && idx === 7"
-              class="w-full flex items-center gap-2 my-1 text-xs text-yellow-500"
+              class="w-full flex items-center gap-2 my-1 text-xs text-yellow-700"
             >
               <span>🍽</span>
               <span>Обед {{ route.lunch_break_at }}</span>
-              <div class="flex-1 border-t border-yellow-700"></div>
+              <div class="flex-1 border-t border-yellow-300"></div>
             </div>
             <span
               :class="visitChipClass(visit)"
@@ -98,8 +98,8 @@
     <!-- Модал: генерация плана -->
     <div v-if="showGenerate" class="modal-overlay" @click.self="showGenerate = false">
       <div class="modal">
-        <h2 class="font-semibold text-lg mb-4">Сгенерировать план</h2>
-        <p class="text-sm text-gray-400 mb-2">
+        <h2 class="font-semibold text-lg mb-4 text-gray-900">Сгенерировать план</h2>
+        <p class="text-sm text-gray-600 mb-2">
           Месяц: <strong>{{ currentMonth }}</strong><br>
           Будут сгенерированы маршруты для всех активных сотрудников на основе категорий ТТ.
         </p>
@@ -118,12 +118,12 @@
                 @change="toggleHoliday(h)"
                 class="accent-blue-500"
               />
-              <span :class="h.is_working ? 'line-through text-gray-500' : 'text-gray-200'">
+              <span :class="h.is_working ? 'line-through text-gray-400' : 'text-gray-800'">
                 {{ h.date }} — {{ h.name }}
               </span>
             </label>
           </div>
-          <p class="text-xs text-gray-600 mt-1">Снимите галочку, чтобы сделать день рабочим</p>
+          <p class="text-xs text-gray-500 mt-1">Снимите галочку, чтобы сделать день рабочим</p>
         </div>
         <div class="flex gap-3 justify-end">
           <button class="btn-secondary" @click="showGenerate = false">Отмена</button>
@@ -131,9 +131,9 @@
             {{ generating ? 'Генерация…' : 'Сгенерировать' }}
           </button>
         </div>
-        <div v-if="genResult" class="mt-3 text-sm" :class="genResult.startsWith('Ошибка') ? 'text-red-400' : 'text-green-400'">
+        <div v-if="genResult" class="mt-3 text-sm" :class="genResult.startsWith('Ошибка') ? 'text-red-600' : 'text-green-600'">
           {{ genResult }}
-          <button v-if="genCanForce" class="ml-2 underline text-yellow-400 hover:text-yellow-300" @click="generatePlan(true)">
+          <button v-if="genCanForce" class="ml-2 underline text-yellow-600 hover:text-yellow-700" @click="generatePlan(true)">
             Пересоздать
           </button>
         </div>
@@ -143,11 +143,11 @@
     <!-- Модал: праздники года -->
     <div v-if="showHolidays" class="modal-overlay" @click.self="showHolidays = false">
       <div class="modal" style="max-width:480px">
-        <h2 class="font-semibold text-lg mb-4">Праздничные дни 2026</h2>
+        <h2 class="font-semibold text-lg mb-4 text-gray-900">Праздничные дни 2026</h2>
         <p class="text-xs text-gray-500 mb-3">
           Отмеченные дни считаются нерабочими. Снимите галочку, чтобы сделать день рабочим.
         </p>
-        <div v-if="allHolidaysLoading" class="text-sm text-gray-400">Загрузка…</div>
+        <div v-if="allHolidaysLoading" class="text-sm text-gray-500">Загрузка…</div>
         <div v-else class="space-y-1 max-h-96 overflow-y-auto">
           <label
             v-for="h in allHolidays"
@@ -160,12 +160,12 @@
               @change="toggleHoliday(h)"
               class="accent-blue-500"
             />
-            <span :class="h.is_working ? 'line-through text-gray-500' : 'text-gray-200'">
+            <span :class="h.is_working ? 'line-through text-gray-400' : 'text-gray-800'">
               {{ h.date }} — {{ h.name }}
             </span>
           </label>
         </div>
-        <div v-if="holidayToggleMsg" class="mt-2 text-xs" :class="holidayToggleMsgError ? 'text-red-400' : 'text-blue-400'">
+        <div v-if="holidayToggleMsg" class="mt-2 text-xs" :class="holidayToggleMsgError ? 'text-red-600' : 'text-blue-600'">
           {{ holidayToggleMsg }}
         </div>
         <div class="flex justify-end mt-4">
@@ -177,7 +177,7 @@
     <!-- Модал: форс-мажор -->
     <div v-if="showFM" class="modal-overlay" @click.self="showFM = false">
       <div class="modal">
-        <h2 class="font-semibold text-lg mb-4">Форс-мажор</h2>
+        <h2 class="font-semibold text-lg mb-4 text-gray-900">Форс-мажор</h2>
         <div class="space-y-3">
           <div>
             <label class="label">Тип</label>
@@ -209,7 +209,7 @@
             {{ submittingFM ? 'Обработка…' : 'Зафиксировать' }}
           </button>
         </div>
-        <div v-if="fmResult" class="mt-3 text-sm text-green-400 whitespace-pre-line">{{ fmResult }}</div>
+        <div v-if="fmResult" class="mt-3 text-sm text-green-600 whitespace-pre-line">{{ fmResult }}</div>
       </div>
     </div>
 
@@ -218,8 +218,8 @@
       <div class="modal" style="max-width: 540px;">
         <div class="flex items-start justify-between mb-4">
           <div>
-            <h2 class="font-semibold text-lg">{{ selectedDayRoute.rep_name }}</h2>
-            <p class="text-sm text-gray-400">
+            <h2 class="font-semibold text-lg text-gray-900">{{ selectedDayRoute.rep_name }}</h2>
+            <p class="text-sm text-gray-600">
               {{ selectedDayRoute.date }} · {{ selectedDayRoute.total_tt }} ТТ
               · ~{{ selectedDayRoute.estimated_duration_hours }}ч
             </p>
@@ -232,16 +232,16 @@
           <div
             v-for="(v, i) in selectedDayRoute.visits"
             :key="v.id"
-            class="flex items-center gap-2 text-sm py-1 border-b border-gray-700"
+            class="flex items-center gap-2 text-sm py-1 border-b border-gray-100"
           >
-            <span class="text-gray-600 w-5 shrink-0">{{ i + 1 }}.</span>
+            <span class="text-gray-400 w-5 shrink-0">{{ i + 1 }}.</span>
             <span :class="catColor(v.location_category ?? '?')" class="visit-chip shrink-0 text-white">
               {{ v.location_category ?? '?' }}
             </span>
-            <span class="flex-1 truncate text-xs">{{ v.location_name }}</span>
-            <span v-if="v.time_in" class="text-xs text-gray-400 shrink-0">
+            <span class="flex-1 truncate text-xs text-gray-800">{{ v.location_name }}</span>
+            <span v-if="v.time_in" class="text-xs text-gray-500 shrink-0">
               {{ v.time_in }}–{{ v.time_out ?? '?' }}
-              <span v-if="visitDuration(v)" class="text-green-400 ml-0.5">({{ visitDuration(v) }}м)</span>
+              <span v-if="visitDuration(v)" class="text-green-600 ml-0.5">({{ visitDuration(v) }}м)</span>
             </span>
             <span class="text-xs shrink-0" :class="statusColor(v.status)">{{ statusLabel(v.status) }}</span>
           </div>
@@ -253,16 +253,16 @@
         </div>
 
         <!-- Выбор модели + кнопка оптимизации -->
-        <div class="border-t border-gray-700 pt-3 mt-1">
+        <div class="border-t border-gray-200 pt-3 mt-1">
           <p class="text-xs text-gray-500 mb-2">Модель для оценки вариантов:</p>
           <div class="flex gap-2 mb-3">
             <button
               v-for="m in [{ id: 'qwen', label: 'Qwen 0.5B', hint: 'быстрая' }, { id: 'llama', label: 'Llama 1B', hint: 'точнее' }]"
               :key="m.id"
-              class="flex-1 text-xs py-1.5 rounded font-medium transition-colors"
+              class="flex-1 text-xs py-1.5 rounded font-medium transition-colors border"
               :class="selectedModel === m.id
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
               :disabled="dayOptLoading"
               @click="selectedModel = (m.id as 'qwen' | 'llama')"
             >
@@ -285,7 +285,7 @@
 
           <!-- Прогресс-бар -->
           <div v-if="dayOptLoading" class="mt-2">
-            <div class="relative w-full bg-gray-700 rounded-full h-1 overflow-hidden">
+            <div class="relative w-full bg-gray-200 rounded-full h-1 overflow-hidden">
               <div class="absolute top-0 left-0 h-1 bg-blue-500 rounded-full animate-pulse w-full" />
             </div>
             <p class="text-xs text-gray-500 mt-1 text-center">
@@ -294,13 +294,13 @@
           </div>
         </div>
 
-        <div v-if="dayOptError" class="mt-2 text-sm text-red-400">{{ dayOptError }}</div>
+        <div v-if="dayOptError" class="mt-2 text-sm text-red-600">{{ dayOptError }}</div>
 
         <!-- 3 варианта маршрута -->
         <div v-if="dayOptResult" class="mt-3 space-y-2">
-          <div class="flex items-center gap-2 text-xs text-gray-400 mb-1">
-            <span>Модель: <strong class="text-blue-300">{{ dayOptResult.model_used }}</strong></span>
-            <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-400 ml-1">
+          <div class="flex items-center gap-2 text-xs text-gray-500 mb-1">
+            <span>Модель: <strong class="text-blue-700">{{ dayOptResult.model_used }}</strong></span>
+            <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-600 ml-1">
               · ИИ-оценка недоступна
             </span>
           </div>
@@ -310,21 +310,21 @@
             :key="variant.id"
             class="rounded border p-3 cursor-pointer transition-all"
             :class="selectedVariantId === variant.id
-              ? 'border-blue-500 bg-blue-900/20'
-              : 'border-gray-600 bg-gray-900 hover:border-gray-500'"
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-gray-200 bg-gray-50 hover:border-gray-300'"
             @click="selectedVariantId = variant.id"
           >
             <div class="flex items-start justify-between mb-1">
-              <p class="text-sm font-medium text-white">{{ variant.name }}</p>
+              <p class="text-sm font-medium text-gray-900">{{ variant.name }}</p>
               <span class="text-xs px-1.5 py-0.5 rounded ml-2 flex-shrink-0"
-                :class="variant.metrics.quality_score >= 80 ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-300'"
+                :class="variant.metrics.quality_score >= 80 ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'"
               >
                 {{ variant.metrics.quality_score.toFixed(0) }}%
               </span>
             </div>
-            <p class="text-xs text-gray-400 mb-2">{{ variant.description }}</p>
+            <p class="text-xs text-gray-600 mb-2">{{ variant.description }}</p>
             <!-- Метрики -->
-            <div class="flex gap-3 text-xs text-gray-300 mb-2">
+            <div class="flex gap-3 text-xs text-gray-700 mb-2">
               <span>📍 {{ variant.metrics.distance_km.toFixed(1) }} км</span>
               <span>⏱ {{ variant.metrics.time_hours.toFixed(1) }} ч</span>
               <span>💰 {{ variant.metrics.cost_rub.toFixed(0) }} ₽</span>
@@ -333,11 +333,11 @@
             <div v-if="variant.pros.length || variant.cons.length" class="flex flex-wrap gap-1">
               <span
                 v-for="p in variant.pros" :key="'p'+p"
-                class="text-xs bg-green-900/50 text-green-300 px-1.5 py-0.5 rounded"
+                class="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded"
               >✓ {{ p }}</span>
               <span
                 v-for="c in variant.cons" :key="'c'+c"
-                class="text-xs bg-red-900/40 text-red-300 px-1.5 py-0.5 rounded"
+                class="text-xs bg-red-100 text-red-800 px-1.5 py-0.5 rounded"
               >✗ {{ c }}</span>
             </div>
           </div>
@@ -358,8 +358,8 @@
     <!-- Модал: статус визита -->
     <div v-if="showVisitModal && selectedVisit" class="modal-overlay" @click.self="closeVisitModal">
       <div class="modal">
-        <h2 class="font-semibold text-lg mb-1">Визит</h2>
-        <p class="text-sm text-gray-300 mb-4">
+        <h2 class="font-semibold text-lg mb-1 text-gray-900">Визит</h2>
+        <p class="text-sm text-gray-700 mb-4">
           <span :class="catBadge(selectedVisit.location_category)" class="visit-chip mr-2">
             {{ selectedVisit.location_category ?? '?' }}
           </span>
@@ -367,9 +367,9 @@
         </p>
 
         <!-- Сохранённое время (если уже было посещение) -->
-        <p v-if="selectedVisit?.time_in" class="text-sm text-blue-300 mb-3">
+        <p v-if="selectedVisit?.time_in" class="text-sm text-blue-700 mb-3">
           ⏱ {{ selectedVisit.time_in }} — {{ selectedVisit.time_out ?? '?' }}
-          <span v-if="visitDuration(selectedVisit!)" class="ml-1 text-green-400">
+          <span v-if="visitDuration(selectedVisit!)" class="ml-1 text-green-600">
             ({{ visitDuration(selectedVisit!) }} мин на точке)
           </span>
         </p>
@@ -379,7 +379,7 @@
           <button
             v-for="opt in statusOptions"
             :key="opt.value"
-            :class="[opt.cls, visitForm.status === opt.value ? 'ring-2 ring-white' : 'opacity-70']"
+            :class="[opt.cls, visitForm.status === opt.value ? 'ring-2 ring-blue-500' : 'opacity-80']"
             class="flex-1 text-sm py-1.5 rounded font-medium"
             @click="visitForm.status = opt.value"
           >
@@ -412,7 +412,7 @@
             {{ savingVisit ? 'Сохранение…' : 'Сохранить' }}
           </button>
         </div>
-        <div v-if="visitError" class="mt-2 text-sm text-red-400">{{ visitError }}</div>
+        <div v-if="visitError" class="mt-2 text-sm text-red-600">{{ visitError }}</div>
       </div>
     </div>
   </div>
@@ -755,7 +755,7 @@ function statusLabel(s: string): string {
 }
 
 function statusColor(s: string): string {
-  return ({ completed: 'text-green-400', skipped: 'text-red-400', cancelled: 'text-gray-500', rescheduled: 'text-yellow-400', planned: 'text-gray-400' } as Record<string, string>)[s] ?? 'text-gray-400'
+  return ({ completed: 'text-green-600', skipped: 'text-red-600', cancelled: 'text-gray-400', rescheduled: 'text-yellow-600', planned: 'text-gray-500' } as Record<string, string>)[s] ?? 'text-gray-500'
 }
 
 // ─── Category styling ─────────────────────────────────────────────────────────
@@ -804,13 +804,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.card { @apply bg-gray-800 rounded-lg border border-gray-700; }
-.input { @apply bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white w-full; }
-.label { @apply block text-xs text-gray-400 mb-1; }
+.card { @apply bg-white rounded-lg border border-gray-200 shadow-sm; }
+.input { @apply bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500; }
+.label { @apply block text-xs text-gray-600 mb-1; }
 .btn-primary { @apply bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded disabled:opacity-50; }
-.btn-secondary { @apply bg-gray-600 hover:bg-gray-500 text-white text-sm px-4 py-2 rounded; }
-.btn-icon { @apply bg-gray-700 hover:bg-gray-600 text-white w-8 h-8 rounded flex items-center justify-center; }
+.btn-secondary { @apply bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-sm px-4 py-2 rounded; }
+.btn-icon { @apply bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 w-8 h-8 rounded flex items-center justify-center; }
 .visit-chip { @apply text-xs px-2 py-0.5 rounded-full; }
-.modal-overlay { @apply fixed inset-0 bg-black/60 flex items-center justify-center z-50; }
-.modal { @apply bg-gray-800 border border-gray-600 rounded-lg p-6 w-full max-w-md; }
+.modal-overlay { @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50; }
+.modal { @apply bg-white border border-gray-200 rounded-lg p-6 w-full max-w-md shadow-xl; }
 </style>

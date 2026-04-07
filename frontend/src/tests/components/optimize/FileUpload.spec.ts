@@ -2,6 +2,11 @@ import { mount } from '@vue/test-utils'
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import FileUpload from '@/components/optimize/FileUpload.vue'
 import { nextTick } from 'vue'
+import { uploadLocations } from '@/services/api'
+
+vi.mock('@/services/api', () => ({
+  uploadLocations: vi.fn()
+}))
 
 describe('FileUpload.vue', () => {
   let wrapper: any
@@ -386,6 +391,52 @@ describe('FileUpload.vue', () => {
     // Компонент показывает: "Москва · Тверская, 15 · lat, lon"
     expect(wrapper.text()).toContain('Москва')
     expect(wrapper.text()).toContain('Тверская')
+  })
+
+  it('maps backend category to UI badge and priority on upload', async () => {
+    vi.mocked(uploadLocations).mockResolvedValue({
+      created: [
+        {
+          id: 'loc-a',
+          name: 'Салон Т2 Саранск Центр',
+          city: 'Саранск',
+          lat: 54.1871,
+          lon: 45.1749,
+          time_window_start: '09:00',
+          time_window_end: '18:00',
+          category: 'A'
+        },
+        {
+          id: 'loc-d',
+          name: 'Салон Т2 Светотехника',
+          city: 'Саранск',
+          lat: 54.1756,
+          lon: 45.1834,
+          time_window_start: '09:00',
+          time_window_end: '18:00',
+          category: 'D'
+        }
+      ],
+      errors: [],
+      total_processed: 2
+    } as any)
+
+    wrapper.vm.selectedFile = new File(['[]'], 'locations.json', {
+      type: 'application/json'
+    })
+    wrapper.vm.allFileData = [{ name: 'Салон Т2 Саранск Центр' }]
+    wrapper.vm.validationErrors = []
+
+    await wrapper.vm.uploadToServer()
+    await nextTick()
+
+    expect(wrapper.vm.uploadedLocations).toHaveLength(2)
+    expect(wrapper.vm.uploadedLocations[0].category).toBe('A')
+    expect(wrapper.vm.uploadedLocations[0].priority).toBe('high')
+    expect(wrapper.vm.uploadedLocations[1].category).toBe('D')
+    expect(wrapper.vm.uploadedLocations[1].priority).toBe('low')
+    expect(wrapper.text()).toContain('A')
+    expect(wrapper.text()).toContain('D')
   })
 
   it('clears uploaded data when clear button is clicked', async () => {

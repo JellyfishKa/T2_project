@@ -1,3 +1,6 @@
+export type LocationPriority = 'low' | 'medium' | 'high'
+export type LocationCategory = 'A' | 'B' | 'C' | 'D'
+
 export interface Location {
   id: string
   name: string
@@ -8,7 +11,8 @@ export interface Location {
   longitude: number
   timeWindowStart: string
   timeWindowEnd: string
-  priority: 'low' | 'medium' | 'high'
+  priority: LocationPriority
+  category?: LocationCategory | null
 }
 
 export interface Constraints {

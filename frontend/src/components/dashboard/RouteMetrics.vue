@@ -3,7 +3,7 @@
     <!-- Loading State -->
     <template v-if="isLoading">
       <SkeletonLoader height="120px" />
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div class="grid grid-cols-3 gap-3">
         <SkeletonLoader v-for="i in 3" :key="i" height="100px" />
       </div>
       <SkeletonLoader height="200px" />
@@ -11,27 +11,27 @@
 
     <!-- Selected Route Info -->
     <div v-else-if="route" class="bg-gray-50 rounded-lg p-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h4 class="text-lg font-semibold text-gray-900">{{ route.name }}</h4>
-          <p class="text-sm text-gray-600">ID: {{ route.id }}</p>
+      <div class="flex flex-col gap-2">
+        <div class="min-w-0">
+          <h4 class="text-lg font-semibold text-gray-900 truncate">{{ route.name }}</h4>
+          <p class="text-xs text-gray-600 break-all">ID: {{ route.id }}</p>
         </div>
-        <div class="text-right">
+        <div class="flex items-center gap-2 flex-wrap">
           <span
-            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium"
+            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
             :class="getModelBadgeClass(route.model_used)"
           >
             {{ getModelName(route.model_used) }}
           </span>
-          <p class="mt-1 text-sm text-gray-600">
+          <span class="text-xs text-gray-600">
             {{ formatDate(route.created_at) }}
-          </p>
+          </span>
         </div>
       </div>
     </div>
 
     <!-- Key Metrics -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+    <div class="grid grid-cols-3 gap-3">
       <MetricCard
         title="Общее расстояние"
         :value="route?.total_distance_km || 0"
@@ -66,7 +66,7 @@
         Производительность моделей для этого маршрута
       </h5>
 
-      <div class="overflow-hidden border border-gray-200 rounded-lg">
+      <div class="overflow-x-auto border border-gray-200 rounded-lg">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>

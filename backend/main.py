@@ -22,6 +22,7 @@ from src.routes.metrics import router as metrics_router
 from src.routes.optimize import router as optimize_router
 from src.routes.qwen import router as qwen_router
 from src.routes.reps import router as reps_router
+from src.routes.routing import router as routing_router
 from src.routes.routes import router as routes_router
 from src.routes.schedule import router as schedule_router
 from src.routes.holidays import router as holidays_router
@@ -118,6 +119,7 @@ api_v1_router.include_router(llama_router)
 api_v1_router.include_router(metrics_router)
 api_v1_router.include_router(insights_router)
 api_v1_router.include_router(routes_router)
+api_v1_router.include_router(routing_router)
 # Новые роутеры (Фаза 4–8)
 api_v1_router.include_router(reps_router)
 api_v1_router.include_router(schedule_router)

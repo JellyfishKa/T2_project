@@ -9,6 +9,8 @@ import type {
   OptimizeRequest,
   OptimizeVariantsResponse,
   ConfirmVariantRequest,
+  RoutePreviewPoint,
+  RoutePreviewResponse,
   PaginatedResponse,
   HealthStatus,
   ApiError,
@@ -325,6 +327,15 @@ export const checkHealth = async (): Promise<HealthStatus> => {
  */
 export const fetchAllLocations = async (): Promise<Location[]> => {
   const response = await withRetry(() => api.get('/locations'))
+  return response.data
+}
+
+export const fetchRoutePreview = async (
+  points: RoutePreviewPoint[]
+): Promise<RoutePreviewResponse> => {
+  const response = await withRetry(() =>
+    api.post('/routing/preview', { points })
+  )
   return response.data
 }
 
