@@ -72,6 +72,17 @@ describe('OptimizationResult.vue', () => {
         isLoading: false,
         error: null,
         originalMetrics: mockOriginalMetrics,
+        originalLocationIds: ['loc-1', 'loc-2', 'loc-3'],
+        routeSource: 'ai',
+        routeLabel: 'Вариант 2',
+        canRestoreOriginal: true,
+        canRestoreAi: false,
+        originalRouteSource: 'road_network',
+        originalTrafficLightsCount: 7,
+        currentRouteSource: 'road_network',
+        currentTrafficLightsCount: 5,
+        llmEvaluationStatus: 'current',
+        llmQualityScore: 91,
         locations: mockLocations
       }
     })
@@ -82,7 +93,13 @@ describe('OptimizationResult.vue', () => {
     expect(wrapper.text()).toContain(
       'Маршрут оптимизирован с использованием Qwen'
     )
-    expect(wrapper.find('span.inline-flex').text()).toBe('Qwen')
+    const modelBadge = wrapper
+      .findAll('span.inline-flex')
+      .find((node) => node.text() === 'Qwen')
+    expect(modelBadge?.exists()).toBe(true)
+    expect(wrapper.text()).toContain('Вариант ИИ')
+    expect(wrapper.text()).toContain('Вариант 2')
+    expect(wrapper.text()).toContain('LLM: 91/100')
   })
 
   it('отображает состояние загрузки', () => {
@@ -193,16 +210,67 @@ describe('OptimizationResult.vue', () => {
 
   it('отображает временные окна для каждой локации', () => {
     const timeWindows = wrapper.findAll('.text-sm.text-gray-500')
-    // Последние 3 элемента - временные окна локаций
-    const locationTimeWindows = timeWindows.slice(-3)
+    const locationTimeWindows = timeWindows.filter((node) =>
+      node.text().includes(' - ')
+    )
 
     expect(locationTimeWindows[0].text()).toBe('09:00 - 18:00')
     expect(locationTimeWindows[1].text()).toBe('10:00 - 19:00')
     expect(locationTimeWindows[2].text()).toBe('09:00 - 20:00')
   })
 
+  it('показывает блок сравнения маршрутов', () => {
+    expect(wrapper.text()).toContain('Сравнение маршрутов')
+    expect(wrapper.text()).toContain('До изменений')
+    expect(wrapper.text()).toContain('После изменений')
+    expect(wrapper.text()).toContain('Маршрут по дорогам, учтено светофоров: 7.')
+  })
+
+  it('эмитит событие ручной перестановки точки', async () => {
+    const moveUpButtons = wrapper
+      .findAll('button')
+      .filter((button) => button.text() === '↑')
+
+    expect(moveUpButtons.length).toBeGreaterThan(0)
+
+    await moveUpButtons[1].trigger('click')
+
+    expect(wrapper.emitted('move-location')).toEqual([[{ index: 1, direction: -1 }]])
+  })
+
+  it('эмитит событие drag-and-drop перестановки точки', async () => {
+    const rows = wrapper.findAll('[draggable="true"]')
+    expect(rows.length).toBeGreaterThan(1)
+
+    await rows[0].trigger('dragstart', {
+      dataTransfer: {
+        effectAllowed: 'move',
+        setData: vi.fn(),
+      }
+    })
+    await rows[2].trigger('dragenter')
+    await rows[2].trigger('drop')
+
+    expect(wrapper.emitted('reorder-locations')).toEqual([[{ fromIndex: 0, toIndex: 2 }]])
+  })
+
+  it('эмитит откат к исходному маршруту', async () => {
+    const restoreButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Откатить к исходному'))
+
+    expect(restoreButton).toBeDefined()
+
+    await restoreButton!.trigger('click')
+
+    expect(wrapper.emitted('restore-original')).toBeTruthy()
+  })
+
   it('отображает номера шагов для каждой локации', () => {
-    const stepNumbers = wrapper.findAll('.bg-blue-100.rounded-full')
+    const stepNumbers = wrapper
+      .findAll('.bg-blue-100.rounded-full')
+      .filter((node) => ['1', '2', '3'].includes(node.text()))
+
     expect(stepNumbers.length).toBe(3)
     expect(stepNumbers[0].text()).toBe('1')
     expect(stepNumbers[1].text()).toBe('2')
@@ -229,8 +297,37 @@ describe('OptimizationResult.vue', () => {
     expect(wrapper.emitted('save')).toBeTruthy()
   })
 
+  it('показывает, что ручной маршрут будет сохранён без LLM-оценки', () => {
+    const manualWrapper = mount(OptimizationResult, {
+      props: {
+        result: mockRoute,
+        isLoading: false,
+        error: null,
+        originalMetrics: mockOriginalMetrics,
+        originalLocationIds: ['loc-1', 'loc-2', 'loc-3'],
+        routeSource: 'manual',
+        routeLabel: 'Ручной порядок',
+        canRestoreOriginal: true,
+        canRestoreAi: true,
+        aiRouteLabel: 'Вариант 2',
+        originalRouteSource: 'road_network',
+        originalTrafficLightsCount: 7,
+        currentRouteSource: 'client_fallback',
+        currentTrafficLightsCount: 0,
+        llmEvaluationStatus: 'stale',
+        locations: mockLocations
+      }
+    })
+
+    expect(manualWrapper.text()).toContain('LLM-оценка неактуальна')
+    expect(manualWrapper.text()).toContain('Текущий маршрут: метрики примерные')
+    expect(manualWrapper.text()).toContain('Сохранить без LLM-оценки')
+  })
+
   it('корректно отображает название модели в бейдже', () => {
-    const modelBadge = wrapper.find('span.inline-flex')
+    const modelBadge = wrapper
+      .findAll('span.inline-flex')
+      .find((node) => node.text() === 'Qwen')!
     expect(modelBadge.classes()).toContain('bg-purple-100')
     expect(modelBadge.classes()).toContain('text-purple-800')
   })

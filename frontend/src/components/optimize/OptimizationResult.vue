@@ -7,7 +7,7 @@
       v-if="result"
       class="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50"
     >
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-4">
         <div>
           <h3 class="text-lg font-semibold text-gray-900">
             Результат оптимизации
@@ -18,6 +18,26 @@
               getModelName(result.model_used)
             }}</span>
           </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span
+              class="inline-flex items-center px-2.5 py-1 rounded-full font-medium"
+              :class="routeSourceBadgeClass"
+            >
+              {{ routeSourceLabel }}
+            </span>
+            <span v-if="routeLabel" class="text-gray-500">
+              {{ routeLabel }}
+            </span>
+            <span
+              class="inline-flex items-center px-2.5 py-1 rounded-full font-medium"
+              :class="llmStatusBadgeClass"
+            >
+              {{ llmStatusLabel }}
+            </span>
+            <span v-if="isUpdatingMetrics" class="text-blue-600">
+              Пересчитываю маршрут…
+            </span>
+          </div>
         </div>
         <div class="flex items-center space-x-2">
           <span
@@ -143,6 +163,89 @@
         </div>
       </div>
 
+      <div
+        v-if="originalRouteWarning || currentRouteWarning || llmEvaluationStatus !== 'current'"
+        class="px-6 py-4 bg-amber-50 border-y border-amber-200"
+      >
+        <div class="space-y-2 text-sm text-amber-900">
+          <p v-if="currentRouteWarning">
+            Текущий маршрут: {{ currentRouteWarning }}
+          </p>
+          <p v-if="originalRouteWarning">
+            Исходный маршрут: {{ originalRouteWarning }}
+          </p>
+          <p v-if="llmEvaluationStatus === 'stale'">
+            LLM-оценка снята: после ручной перестановки этот порядок не сравнивался моделью.
+          </p>
+          <p v-else-if="llmEvaluationStatus === 'unavailable'">
+            Для текущего порядка нет актуальной LLM-оценки.
+          </p>
+        </div>
+      </div>
+
+      <div
+        v-if="originalLocationIds.length >= 2"
+        class="px-6 py-5 bg-blue-50/40 border-y border-blue-100"
+      >
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h4 class="text-sm font-medium text-gray-900">Сравнение маршрутов</h4>
+            <p class="text-xs text-gray-500">
+              Слева исходный порядок точек, справа текущая версия маршрута.
+            </p>
+          </div>
+          <span class="text-xs text-gray-500">
+            {{ isUpdatingMetrics ? 'Данные обновляются…' : 'Сравнение по карте и метрикам' }}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="bg-white border border-gray-200 rounded-lg p-4">
+            <p class="text-xs font-semibold text-gray-700 mb-1">До изменений</p>
+            <p class="text-xs text-gray-500 mb-3">{{ originalMetricsLabel }}</p>
+            <p v-if="originalRouteHint" class="text-xs text-amber-700 mb-3">
+              {{ originalRouteHint }}
+            </p>
+            <div class="space-y-2 max-h-48 overflow-y-auto mb-4">
+              <div
+                v-for="(locationId, index) in originalLocationIds"
+                :key="`${locationId}-original-${index}`"
+                class="flex items-center gap-2 text-xs"
+              >
+                <span class="text-gray-400 w-4">{{ index + 1 }}</span>
+                <div class="min-w-0">
+                  <p class="font-medium text-gray-800 truncate">{{ getLocationName(locationId) }}</p>
+                  <p class="text-gray-500 truncate">{{ getLocationAddress(locationId) }}</p>
+                </div>
+              </div>
+            </div>
+            <RouteMap v-if="originalMapPoints.length >= 2" :points="originalMapPoints" height="14rem" />
+          </div>
+
+          <div class="bg-white border border-gray-200 rounded-lg p-4">
+            <p class="text-xs font-semibold text-gray-700 mb-1">После изменений</p>
+            <p class="text-xs text-gray-500 mb-3">{{ currentMetricsLabel }}</p>
+            <p v-if="currentRouteHint" class="text-xs text-amber-700 mb-3">
+              {{ currentRouteHint }}
+            </p>
+            <div class="space-y-2 max-h-48 overflow-y-auto mb-4">
+              <div
+                v-for="(locationId, index) in result.locations"
+                :key="`${locationId}-current-${index}`"
+                class="flex items-center gap-2 text-xs"
+              >
+                <span class="text-gray-400 w-4">{{ index + 1 }}</span>
+                <div class="min-w-0">
+                  <p class="font-medium text-gray-800 truncate">{{ getLocationName(locationId) }}</p>
+                  <p class="text-gray-500 truncate">{{ getLocationAddress(locationId) }}</p>
+                </div>
+              </div>
+            </div>
+            <RouteMap v-if="mapPoints.length >= 2" :points="mapPoints" height="14rem" />
+          </div>
+        </div>
+      </div>
+
       <!-- Fallback Reason (if any) -->
       <div v-if="result.fallback_reason" class="px-6 py-3 bg-yellow-50">
         <div class="flex items-center">
@@ -165,14 +268,46 @@
 
       <!-- Optimized Order -->
       <div class="px-6 py-5">
-        <h4 class="text-sm font-medium text-gray-900 mb-4">
-          Оптимизированный порядок посещения
-        </h4>
-        <div class="space-y-3">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h4 class="text-sm font-medium text-gray-900">
+              Текущий порядок посещения
+            </h4>
+            <p class="text-xs text-gray-500 mt-1">
+              Перетаскивайте точки мышью или меняйте очередность кнопками, карта и метрики обновятся сразу.
+            </p>
+          </div>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button
+              v-if="canRestoreAi"
+              type="button"
+              class="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+              @click="$emit('restore-ai')"
+            >
+              Вернуть {{ aiRouteLabel || 'вариант ИИ' }}
+            </button>
+            <button
+              v-if="canRestoreOriginal"
+              type="button"
+              class="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+              @click="$emit('restore-original')"
+            >
+              Откатить к исходному
+            </button>
+          </div>
+        </div>
+        <div class="space-y-3 max-h-96 overflow-y-auto pr-1">
           <div
             v-for="(locationId, index) in result.locations"
-            :key="locationId"
-            class="flex items-center"
+            :key="`${locationId}-${index}`"
+            class="flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors"
+            :class="dragOverIndex === index ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'"
+            :draggable="!isUpdatingMetrics"
+            @dragstart="onDragStart(index, $event)"
+            @dragenter.prevent="onDragEnter(index)"
+            @dragover.prevent="onDragEnter(index)"
+            @drop.prevent="onDrop(index)"
+            @dragend="onDragEnd"
           >
             <div
               class="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3"
@@ -181,6 +316,9 @@
                 index + 1
               }}</span>
             </div>
+            <div class="text-gray-400 cursor-grab select-none" title="Перетащите для изменения порядка">
+              ⋮⋮
+            </div>
             <div class="flex-1">
               <p class="text-sm font-medium text-gray-900">
                 {{ getLocationName(locationId) }}
@@ -188,6 +326,24 @@
               <p class="text-xs text-gray-500">
                 {{ getLocationAddress(locationId) }}
               </p>
+            </div>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="w-7 h-7 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                :disabled="isUpdatingMetrics || index === 0"
+                @click="$emit('move-location', { index, direction: -1 })"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="w-7 h-7 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                :disabled="isUpdatingMetrics || index === result.locations.length - 1"
+                @click="$emit('move-location', { index, direction: 1 })"
+              >
+                ↓
+              </button>
             </div>
             <div class="text-sm text-gray-500">
               {{ getLocationTimeWindow(locationId) }}
@@ -206,9 +362,10 @@
       <div class="px-6 py-4 bg-gray-50 flex justify-end space-x-3">
         <button
           @click="$emit('save')"
+          :disabled="isUpdatingMetrics"
           class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
         >
-          Сохранить маршрут
+          {{ llmEvaluationStatus === 'current' ? 'Сохранить маршрут' : 'Сохранить без LLM-оценки' }}
         </button>
         <button
           @click="$emit('reset')"
@@ -222,7 +379,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Route } from '@/services/types'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -230,11 +387,24 @@ const props = defineProps<{
   result: Route | null
   isLoading: boolean
   error: string | null
+  routeSource?: 'original' | 'ai' | 'manual'
+  routeLabel?: string | null
+  isUpdatingMetrics?: boolean
   originalMetrics?: {
     total_distance_km: number
     total_time_hours: number
     total_cost_rub: number
   } | null
+  originalLocationIds?: string[]
+  canRestoreOriginal?: boolean
+  canRestoreAi?: boolean
+  aiRouteLabel?: string | null
+  originalRouteSource?: string | null
+  originalTrafficLightsCount?: number | null
+  currentRouteSource?: string | null
+  currentTrafficLightsCount?: number | null
+  llmEvaluationStatus?: 'current' | 'stale' | 'unavailable'
+  llmQualityScore?: number | null
   locations: Array<{
     id: string
     name: string
@@ -246,11 +416,18 @@ const props = defineProps<{
   }>
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   reset: []
   retry: []
   save: []
+  'move-location': [{ index: number; direction: -1 | 1 }]
+  'reorder-locations': [{ fromIndex: number; toIndex: number }]
+  'restore-original': []
+  'restore-ai': []
 }>()
+
+const dragFromIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
 
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
@@ -287,26 +464,80 @@ const getLocationTimeWindow = (locationId: string): string => {
   return `${location.time_window_start} - ${location.time_window_end}`
 }
 
+const routeSourceLabel = computed(() => {
+  if (props.routeSource === 'manual') return 'Ручной порядок'
+  if (props.routeSource === 'ai') return 'Вариант ИИ'
+  return 'Исходный порядок'
+})
+
+const routeSourceBadgeClass = computed(() => {
+  if (props.routeSource === 'manual') return 'bg-amber-100 text-amber-700'
+  if (props.routeSource === 'ai') return 'bg-blue-100 text-blue-700'
+  return 'bg-gray-100 text-gray-700'
+})
+
+const originalLocationIds = computed(() => props.originalLocationIds ?? [])
+
+const llmStatusLabel = computed(() => {
+  if (props.llmEvaluationStatus === 'current' && props.llmQualityScore !== null && props.llmQualityScore !== undefined) {
+    return `LLM: ${props.llmQualityScore.toFixed(0)}/100`
+  }
+  if (props.llmEvaluationStatus === 'stale') {
+    return 'LLM-оценка неактуальна'
+  }
+  return 'LLM-оценка не рассчитана'
+})
+
+const llmStatusBadgeClass = computed(() => {
+  if (props.llmEvaluationStatus === 'current') return 'bg-emerald-100 text-emerald-700'
+  if (props.llmEvaluationStatus === 'stale') return 'bg-amber-100 text-amber-700'
+  return 'bg-gray-100 text-gray-700'
+})
+
 // Точки маршрута для карты (присоединяем lat/lon к result.locations по ID)
 const mapPoints = computed<RoutePoint[]>(() => {
   if (!props.result || !props.locations?.length) return []
-  const byId = new Map(props.locations.map((l) => [l.id, l]))
-  const pts: RoutePoint[] = []
-  props.result.locations.forEach((id, i) => {
-    const loc = byId.get(id)
-    if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) {
-      pts.push({
-        id,
-        name: loc.name,
-        address: loc.address,
-        lat: loc.lat,
-        lon: loc.lon,
-        order: i + 1,
-      })
-    }
-  })
-  return pts
+  return buildMapPoints(props.result.locations)
 })
+
+const originalMapPoints = computed<RoutePoint[]>(() => {
+  if (!props.locations?.length || !originalLocationIds.value.length) return []
+  return buildMapPoints(originalLocationIds.value)
+})
+
+const originalMetricsLabel = computed(() => {
+  if (!props.originalMetrics) return 'Метрики исходного маршрута недоступны'
+  return formatMetrics(
+    props.originalMetrics.total_distance_km,
+    props.originalMetrics.total_time_hours,
+    props.originalMetrics.total_cost_rub
+  )
+})
+
+const currentMetricsLabel = computed(() => {
+  if (!props.result) return '—'
+  return formatMetrics(
+    props.result.total_distance_km,
+    props.result.total_time_hours,
+    props.result.total_cost_rub
+  )
+})
+
+const originalRouteHint = computed(() =>
+  buildRouteHint(props.originalRouteSource, props.originalTrafficLightsCount)
+)
+
+const currentRouteHint = computed(() =>
+  buildRouteHint(props.currentRouteSource, props.currentTrafficLightsCount)
+)
+
+const originalRouteWarning = computed(() =>
+  buildRouteWarning(props.originalRouteSource)
+)
+
+const currentRouteWarning = computed(() =>
+  buildRouteWarning(props.currentRouteSource)
+)
 
 // Числовое значение для сравнения
 const improvementPercentageNumber = computed(() => {
@@ -330,4 +561,81 @@ const improvementPercentageNumber = computed(() => {
 const improvementPercentageString = computed(() => {
   return improvementPercentageNumber.value.toFixed(1)
 })
+
+function buildMapPoints(locationIds: string[]): RoutePoint[] {
+  const byId = new Map(props.locations.map((location) => [location.id, location]))
+  const points: RoutePoint[] = []
+  locationIds.forEach((id, index) => {
+    const location = byId.get(id)
+    if (location && Number.isFinite(location.lat) && Number.isFinite(location.lon)) {
+      points.push({
+        id,
+        name: location.name,
+        address: location.address,
+        lat: location.lat,
+        lon: location.lon,
+        order: index + 1,
+      })
+    }
+  })
+  return points
+}
+
+function formatMetrics(distanceKm: number, timeHours: number, costRub: number): string {
+  return `${distanceKm.toFixed(1)} км · ${timeHours.toFixed(1)} ч · ${costRub.toFixed(0)} ₽`
+}
+
+function buildRouteHint(source?: string | null, trafficLightsCount?: number | null): string | null {
+  if (!source) return null
+  if (source === 'road_network') {
+    return trafficLightsCount && trafficLightsCount > 0
+      ? `Маршрут по дорогам, учтено светофоров: ${trafficLightsCount}.`
+      : 'Маршрут построен по дорожной сети.'
+  }
+  if (source === 'fallback') {
+    return 'Маршрут оценён эвристически: дорожный сервис недоступен.'
+  }
+  if (source === 'client_fallback') {
+    return 'Маршрут оценён приближённо на клиенте из-за ошибки preview.'
+  }
+  return null
+}
+
+function buildRouteWarning(source?: string | null): string | null {
+  if (source === 'fallback') {
+    return 'метрики примерные, потому что серверный дорожный роутинг был недоступен.'
+  }
+  if (source === 'client_fallback') {
+    return 'метрики примерные, потому что не удалось получить маршрут по дорогам.'
+  }
+  return null
+}
+
+function onDragStart(index: number, event: DragEvent) {
+  dragFromIndex.value = index
+  dragOverIndex.value = index
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+  }
+}
+
+function onDragEnter(index: number) {
+  if (dragFromIndex.value === null) return
+  dragOverIndex.value = index
+}
+
+function onDrop(index: number) {
+  if (dragFromIndex.value === null) return
+  const fromIndex = dragFromIndex.value
+  dragFromIndex.value = null
+  dragOverIndex.value = null
+  if (fromIndex === index) return
+  emit('reorder-locations', { fromIndex, toIndex: index })
+}
+
+function onDragEnd() {
+  dragFromIndex.value = null
+  dragOverIndex.value = null
+}
 </script>
