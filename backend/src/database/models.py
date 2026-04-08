@@ -269,3 +269,14 @@ class AuditLog(Base):
 
     def __repr__(self):
         return f"<AuditLog(action={self.action}, table={self.table_name}, record={self.record_id})>"
+
+class Vehicle(Base):
+    """Транспортные средства — содержит информацию об автомобилях."""
+    __tablename__ = "vehicles"
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False)
+    fuel_price_rub = Column(Float, nullable=False)                 # Стоимость 1 литра топлива
+    consumption_city_l_100km = Column(Float, nullable=False)       # Расход в городе (л/100 км)
+    consumption_highway_l_100km = Column(Float, nullable=False)    # Расход на трассе (л/100 км)
