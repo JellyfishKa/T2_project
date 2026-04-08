@@ -1,0 +1,56 @@
+[
+  {
+    "name": "Lada Granta",
+    "fuel_price_rub": 63.0,
+    "consumption_city_l_100km": 9.0,
+    "consumption_highway_l_100km": 6.5
+  },
+  {
+    "name": "Hyundai Solaris",
+    "fuel_price_rub": 63.0,
+    "consumption_city_l_100km": 8.5,
+    "consumption_highway_l_100km": 6.0
+  },
+  {
+    "name": "Kia Rio",
+    "fuel_price_rub": 63.0,
+    "consumption_city_l_100km": 8.7,
+    "consumption_highway_l_100km": 6.2
+  },
+  {
+    "name": "Toyota Corolla",
+    "fuel_price_rub": 60.0,
+    "consumption_city_l_100km": 7.8,
+    "consumption_highway_l_100km": 5.5
+  },
+  {
+    "name": "Volkswagen Polo",
+    "fuel_price_rub": 67.0,
+    "consumption_city_l_100km": 7.5,
+    "consumption_highway_l_100km": 5.3
+  },
+  {
+    "name": "Renault Logan",
+    "fuel_price_rub": 63.0,
+    "consumption_city_l_100km": 8.2,
+    "consumption_highway_l_100km": 6.1
+  },
+  {
+    "name": "Skoda Octavia",
+    "fuel_price_rub": 67.0,
+    "consumption_city_l_100km": 7.9,
+    "consumption_highway_l_100km": 5.6
+  },
+  {
+    "name": "Nissan Qashqai",
+    "fuel_price_rub": 67.0,
+    "consumption_city_l_100km": 9.5,
+    "consumption_highway_l_100km": 6.8
+  },
+  {
+    "name": "Toyota Camry",
+    "fuel_price_rub": 67.0,
+    "consumption_city_l_100km": 10.5,
+    "consumption_highway_l_100km": 7.2
+  }
+]

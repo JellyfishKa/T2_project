@@ -614,10 +614,28 @@ def run_benchmark(
         logger.info(f"  Общая стоимость: {total_cost_rub:.4f} руб")
     
     results_file = BENCH_DIR / "results.json"
+    results_log_file = BENCH_DIR / "results_log.json"
     results_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
+    # 1. Записываем текущий результат (перезаписываем файл)
     with open(results_file, 'w', encoding='utf-8') as f:
         json.dump(benchmark_results, f, indent=2, ensure_ascii=False)
+
+    # 2. Добавляем результат в общий лог (сохраняем историю)
+    all_logs = []
+    if results_log_file.exists():
+        try:
+            with open(results_log_file, 'r', encoding='utf-8') as f:
+                all_logs = json.load(f)
+                if not isinstance(all_logs, list):
+                    all_logs = [all_logs] # На случай, если файл был не списком
+        except (json.JSONDecodeError, ValueError):
+            all_logs = []
+
+    all_logs.append(benchmark_results)
+
+    with open(results_log_file, 'w', encoding='utf-8') as f:
+        json.dump(all_logs, f, indent=2, ensure_ascii=False)
     
     logger.info("\n" + "=" * 70)
     logger.info("БЕНЧМАРК ЗАВЕРШЕН")

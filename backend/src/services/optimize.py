@@ -23,6 +23,7 @@ from src.models.schemas import (
     Location as PydanticLocation,
     Route as PydanticRoute,
 )
+from src.schemas.vehicle import Vehicle 
 from src.services.model_selector import (
     MODEL_QWEN,
     get_model_recommendation,
@@ -62,6 +63,7 @@ class Optimizer:
     async def _calculate_real_metrics(
         self,
         locations: List[PydanticLocation],
+        vehicle: Vehicle = None,
     ) -> Dict[str, Any]:
         if not locations:
             return {
@@ -70,7 +72,8 @@ class Optimizer:
                 "cost_rub": 0.0,
             }
 
-        preview = await self.routing_service.build_route_preview(locations)
+        preview = await self.routing_service.build_route_preview(locations,
+                                                                 vehicle=vehicle)
         service_time_minutes = len(locations) * 12
 
         return {
@@ -85,6 +88,7 @@ class Optimizer:
     async def optimize(
         self,
         db_locations: List[DBLocation],
+        vehicle: Vehicle,
         model: str = "auto",
     ) -> PydanticRoute:
         start_time_ms = int(time.time() * 1000)
@@ -95,7 +99,8 @@ class Optimizer:
         ]
 
         original_ids = [loc.id for loc in db_locations]
-        baseline = await self._calculate_real_metrics(pydantic_locations)
+        baseline = await self._calculate_real_metrics(pydantic_locations,
+                                                      vehicle=vehicle)
 
         target_model = (
             select_best_model(len(pydantic_locations))
@@ -105,12 +110,13 @@ class Optimizer:
 
         optimized_route = await self._generate_with_fallback(
             pydantic_locations[: self.max_locations_per_prompt],
-            {"fuel_rate": 7.0},
+            vehicle.model_dump(), 
             target_model,
         )
 
         real_stats = await self._calculate_real_metrics(
             optimized_route.locations,
+            vehicle,
         )
 
         optimized_route.total_distance_km = real_stats["distance_km"]
@@ -321,6 +327,7 @@ class Optimizer:
     async def generate_variants(
         self,
         db_locations: List[DBLocation],
+        vehicle: Vehicle,
         model: str = "qwen",
     ):
         """
@@ -341,7 +348,7 @@ class Optimizer:
         ]
 
         # Базовые метрики (неупорядоченный маршрут)
-        baseline = await self._calculate_real_metrics(pydantic_locations)
+        baseline = await self._calculate_real_metrics(pydantic_locations, vehicle)
 
         # ── Три варианта ────────────────────────────────────────────────────────
         variant_configs = [
@@ -371,7 +378,7 @@ class Optimizer:
         # Считаем метрики для каждого варианта
         variants_data = []
         for vc in variant_configs:
-            real = await self._calculate_real_metrics(vc["locations_ordered"])
+            real = await self._calculate_real_metrics(vc["locations_ordered"], vehicle)
             q_score = evaluate_route_quality(
                 {**baseline, "constraints_satisfied": True},
                 {**real, "constraints_satisfied": True},
@@ -444,6 +451,7 @@ class Optimizer:
         quality_score: float,
         model_used: str,
         original_location_ids: List[str],
+        vehicle: Vehicle,
     ):
         """
         Сохраняет выбранный пользователем вариант маршрута в БД.
@@ -505,6 +513,7 @@ class Optimizer:
             "response_time_ms": int(time.time() * 1000) - start_time_ms,
             "fallback_reason": None,
             "created_at": datetime.now().isoformat(),
+            "vehicle": vehicle,
         }
 
     # ─── Оригинальный greedy (алгоритм 1, также используется как fallback) ───────

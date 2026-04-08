@@ -1,14 +1,15 @@
 import logging
 import os
-from typing import Any, Sequence
+from typing import Any, Sequence, Optional
 
 import httpx
 
 from src.models.geo_utils import (
     detect_region_info,
-    estimate_fuel_cost,
+    estimate_fuel_cost, # Оставляем как фолбэк, если машина не передана
     haversine,
 )
+from src.schemas.vehicle import Vehicle 
 
 logger = logging.getLogger("routing")
 
@@ -21,9 +22,32 @@ class RoutingService:
         ).rstrip("/")
         self.timeout = float(os.getenv("ROAD_ROUTER_TIMEOUT_SEC", "8"))
 
+    # ─── Новый метод для расчета топлива ──────────────────────────────────────
+    def _calculate_dynamic_cost(
+        self, 
+        distance_km: float, 
+        region_classification: str, 
+        vehicle: Optional[Vehicle]
+    ) -> float:
+        """Считает стоимость топлива на основе типа местности и параметров авто."""
+        if not vehicle:
+            # Если машину не передали, используем старую логику по умолчанию
+            return estimate_fuel_cost(distance_km)
+
+        # Выбираем расход в зависимости от классификации региона
+        if region_classification == "urban":
+            consumption = vehicle.consumption_city_l_100km
+        else:
+            # Для трассы / пригорода
+            consumption = vehicle.consumption_highway_l_100km
+
+        liters_used = (distance_km / 100) * consumption
+        return round(liters_used * vehicle.fuel_price_rub, 2)
+
     async def build_route_preview(
         self,
         points: Sequence[Any],
+        vehicle: Optional[Vehicle] = None,
     ) -> dict[str, Any]:
         valid_points = [
             {"lat": float(point.lat), "lon": float(point.lon)}
@@ -53,15 +77,20 @@ class RoutingService:
                 "source": "single_point",
             }
 
-        road_preview = await self._fetch_osrm_preview(valid_points)
+        # Определяем регион один раз для всего маршрута
+        region_info = detect_region_info(valid_points)
+
+        road_preview = await self._fetch_osrm_preview(valid_points, region_info, vehicle)
         if road_preview is not None:
             return road_preview
 
-        return self._build_fallback_preview(valid_points)
+        return self._build_fallback_preview(valid_points, region_info, vehicle)
 
     async def _fetch_osrm_preview(
         self,
         points: list[dict[str, float]],
+        region_info: dict[str, Any],
+        vehicle: Optional[Vehicle],
     ) -> dict[str, Any] | None:
         coordinates = ";".join(
             f"{point['lon']:.6f},{point['lat']:.6f}" for point in points
@@ -92,19 +121,29 @@ class RoutingService:
             ]
             distance_km = round(float(route.get("distance", 0.0)) / 1000, 2)
             base_time_minutes = float(route.get("duration", 0.0)) / 60
+            
             traffic_lights_count, traffic_delay_minutes = self._estimate_traffic_delay(
                 points,
                 distance_km,
+                region_info, # Передаем уже вычисленный регион
             )
             total_time_minutes = round(
                 base_time_minutes + traffic_delay_minutes,
                 2,
             )
+            
+            # Динамический расчет стоимости
+            cost_rub = self._calculate_dynamic_cost(
+                distance_km, 
+                region_info.get("classification", "urban"), 
+                vehicle
+            )
+
             return {
                 "geometry": geometry,
                 "distance_km": distance_km,
                 "time_minutes": total_time_minutes,
-                "cost_rub": estimate_fuel_cost(distance_km),
+                "cost_rub": cost_rub,
                 "traffic_lights_count": traffic_lights_count,
                 "source": "road_network",
             }
@@ -115,24 +154,31 @@ class RoutingService:
     def _build_fallback_preview(
         self,
         points: list[dict[str, float]],
+        region_info: dict[str, Any],
+        vehicle: Optional[Vehicle],
     ) -> dict[str, Any]:
         total_distance = 0.0
         for start, end in zip(points, points[1:]):
-            total_distance += self._estimate_fallback_leg_distance(start, end, points)
+            total_distance += self._estimate_fallback_leg_distance(start, end, region_info)
 
         traffic_lights_count, traffic_delay_minutes = self._estimate_traffic_delay(
             points,
             total_distance,
+            region_info,
         )
-        region_info = detect_region_info(points)
-        speed_kmh = 24.0 if region_info["classification"] == "urban" else 43.0
+        
+        classification = region_info.get("classification", "urban")
+        speed_kmh = 60.0 if classification == "urban" else 90.0
         drive_time_minutes = (total_distance / speed_kmh) * 60 if speed_kmh else 0.0
+
+        # Динамический расчет стоимости
+        cost_rub = self._calculate_dynamic_cost(total_distance, classification, vehicle)
 
         return {
             "geometry": [(point["lat"], point["lon"]) for point in points],
             "distance_km": round(total_distance, 2),
             "time_minutes": round(drive_time_minutes + traffic_delay_minutes, 2),
-            "cost_rub": estimate_fuel_cost(total_distance),
+            "cost_rub": cost_rub,
             "traffic_lights_count": traffic_lights_count,
             "source": "fallback",
         }
@@ -141,22 +187,21 @@ class RoutingService:
         self,
         start: dict[str, float],
         end: dict[str, float],
-        all_points: list[dict[str, float]],
+        region_info: dict[str, Any],
     ) -> float:
-        region_info = detect_region_info(all_points)
         direct_km = haversine(start["lat"], start["lon"], end["lat"], end["lon"])
-        road_factor = 1.22 if region_info["classification"] == "urban" else 1.12
+        road_factor = 1.22 if region_info.get("classification") == "urban" else 1
         return direct_km * road_factor
 
     def _estimate_traffic_delay(
         self,
         points: list[dict[str, float]],
         distance_km: float,
+        region_info: dict[str, Any],
     ) -> tuple[int, float]:
-        region_info = detect_region_info(points)
-        if region_info["classification"] == "urban":
-            lights_per_km = 0.85
-            delay_per_light_minutes = 0.35
+        if region_info.get("classification") == "urban":
+            lights_per_km = 0.6
+            delay_per_light_minutes = 0.25
         else:
             lights_per_km = 0.18
             delay_per_light_minutes = 0.2
