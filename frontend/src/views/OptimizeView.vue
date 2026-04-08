@@ -1,19 +1,29 @@
 <template>
-  <div class="py-6 md:py-8">
-    <!-- Page Header -->
-    <div class="mb-8">
-      <h1 class="text-2xl md:text-3xl font-bold text-gray-900">
-        Оптимизация маршрута
-      </h1>
-      <p class="mt-2 text-gray-600">
-        Настройте параметры, выберите модель и запустите оптимизацию — получите 3 варианта на выбор
-      </p>
-    </div>
+  <div class="space-y-8 py-6 md:py-8">
+    <PageHero
+      eyebrow="Маршрут"
+      title="Оптимизация маршрута"
+      description="Настройте точки, выберите модель и соберите маршрут по шагам: сначала 3 варианта от ИИ, затем ручная доводка и честное сравнение до/после."
+    >
+      <template #meta>
+        <div class="flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">3 варианта</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Ручная доводка</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Сравнение до/после</span>
+        </div>
+      </template>
+    </PageHero>
 
     <!-- ═══════════════════════════════════════════════════════════════════════
          СОСТОЯНИЕ 1: Форма ввода + боковая панель
     ════════════════════════════════════════════════════════════════════════ -->
     <template v-if="currentView === 'form'">
+      <div class="grid gap-4 md:grid-cols-3">
+        <InfoStatCard label="Шаг 1" value="Добавьте точки" hint="Минимум 2 магазина, временные окна и координаты." tone="blue" />
+        <InfoStatCard label="Шаг 2" value="Сравните варианты" hint="ИИ подберёт 3 сценария с описанием и метриками." tone="green" />
+        <InfoStatCard label="Шаг 3" value="Доведите вручную" hint="Перестройте порядок точек и сохраните уже рабочий маршрут." tone="amber" />
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         <!-- Форма -->
         <div class="lg:col-span-2 space-y-6">
@@ -178,9 +188,26 @@
           :error="null"
           :original-metrics="originalMetrics"
           :locations="formLocations"
+          :original-location-ids="originalLocationIds"
+          :route-source="resultRouteSource"
+          :route-label="resultRouteLabel"
+          :is-updating-metrics="isUpdatingResultMetrics"
+          :can-restore-original="canRestoreOriginal"
+          :can-restore-ai="canRestoreAi"
+          :ai-route-label="selectedAiVariantName"
+          :original-route-source="originalRouteSource"
+          :original-traffic-lights-count="originalTrafficLightsCount"
+          :current-route-source="currentRouteSource"
+          :current-traffic-lights-count="currentTrafficLightsCount"
+          :llm-evaluation-status="resultLlmEvaluationStatus"
+          :llm-quality-score="resultLlmQualityScore"
           @reset="resetAll"
           @retry="handleOptimize"
           @save="saveRoute"
+          @move-location="handleMoveResultLocation"
+          @reorder-locations="handleReorderResultLocations"
+          @restore-original="restoreOriginalRoute"
+          @restore-ai="restoreAiRoute"
         />
       </div>
     </template>
@@ -188,14 +215,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, watch } from 'vue'
+import { computed, ref, nextTick, watch } from 'vue'
 import OptimizationForm from '@/components/optimize/OptimizationForm.vue'
 import OptimizationResult from '@/components/optimize/OptimizationResult.vue'
 import OptimizationProgress from '@/components/optimize/OptimizationProgress.vue'
 import OptimizationVariants from '@/components/optimize/OptimizationVariants.vue'
 import ConstraintsPanel from '@/components/optimize/ConstraintsPanel.vue'
 import FileUpload from '@/components/optimize/FileUpload.vue'
-import { optimizeVariants, confirmVariant } from '@/services/api'
+import PageHero from '@/components/common/PageHero.vue'
+import InfoStatCard from '@/components/common/InfoStatCard.vue'
+import { buildLocationAddress } from '@/components/optimize/address'
+import { optimizeVariants, confirmVariant, fetchRoutePreview } from '@/services/api'
 import type { Constraints, Location } from '@/components/optimize/types'
 import type { Route, RouteVariant, OptimizeVariantsResponse } from '@/services/types'
 
@@ -221,6 +251,18 @@ const models = [
 
 // ─── Машина состояний ──────────────────────────────────────────────────────────
 type ViewState = 'form' | 'loading' | 'error' | 'variants' | 'result'
+type ResultRouteSource = 'original' | 'ai' | 'manual'
+type RoutePreviewSource = 'road_network' | 'fallback' | 'client_fallback' | 'empty' | 'single_point'
+type LlmEvaluationStatus = 'current' | 'stale' | 'unavailable'
+
+interface RouteMetricsDetails {
+  total_distance_km: number
+  total_time_hours: number
+  total_cost_rub: number
+  source: RoutePreviewSource
+  traffic_lights_count: number
+}
+
 const currentView = ref<ViewState>('form')
 
 // ─── Состояние формы ──────────────────────────────────────────────────────────
@@ -242,6 +284,18 @@ const selectedVariant = ref<RouteVariant | null>(null)
 const optimizationResult = ref<Route | null>(null)
 const optimizationError = ref<string | null>(null)
 const locationIds = ref<string[]>([])
+const routeName = ref('')
+const originalLocationIds = ref<string[]>([])
+const resultRouteSource = ref<ResultRouteSource>('original')
+const resultRouteLabel = ref<string | null>(null)
+const selectedAiVariantName = ref<string | null>(null)
+const selectedAiVariantLocationIds = ref<string[] | null>(null)
+const selectedAiVariantQualityScore = ref<number>(0)
+const isUpdatingResultMetrics = ref(false)
+const originalRouteSource = ref<RoutePreviewSource>('empty')
+const originalTrafficLightsCount = ref(0)
+const currentRouteSource = ref<RoutePreviewSource>('empty')
+const currentTrafficLightsCount = ref(0)
 
 const originalMetrics = ref<{
   total_distance_km: number
@@ -259,15 +313,47 @@ const formLocations = ref<Array<{
   time_window_end: string
 }>>([])
 
+const canRestoreOriginal = computed(() =>
+  !!optimizationResult.value &&
+  originalLocationIds.value.length > 0 &&
+  optimizationResult.value.locations.join('|') !== originalLocationIds.value.join('|')
+)
+
+const canRestoreAi = computed(() =>
+  !!optimizationResult.value &&
+  !!selectedAiVariantLocationIds.value?.length &&
+  optimizationResult.value.locations.join('|') !== selectedAiVariantLocationIds.value.join('|')
+)
+
+const resultLlmEvaluationStatus = computed<LlmEvaluationStatus>(() => {
+  if (!optimizationResult.value) return 'unavailable'
+  if (
+    selectedAiVariantLocationIds.value?.length &&
+    optimizationResult.value.locations.join('|') === selectedAiVariantLocationIds.value.join('|') &&
+    selectedAiVariantQualityScore.value > 0
+  ) {
+    return 'current'
+  }
+  if (resultRouteSource.value === 'manual') {
+    return 'stale'
+  }
+  return 'unavailable'
+})
+
+const resultLlmQualityScore = computed<number | null>(() =>
+  resultLlmEvaluationStatus.value === 'current' ? selectedAiVariantQualityScore.value : null
+)
+
 // Сохранять выбранную модель в localStorage
 watch(selectedModel, (v) => localStorage.setItem('t2_preferred_model', v))
 
 // ─── Обработчики формы ────────────────────────────────────────────────────────
 const handleSubmit = (formData: any) => {
+  routeName.value = formData.routeName ?? ''
   formLocations.value = formData.locations.map((loc: any) => ({
     id: loc.id,
     name: loc.name,
-    address: `г. ${loc.city}, ул. ${loc.street}, д. ${loc.houseNumber}`,
+    address: buildLocationAddress(loc),
     lat: Number(loc.latitude),
     lon: Number(loc.longitude),
     time_window_start: loc.timeWindowStart,
@@ -307,12 +393,13 @@ const handleOptimize = async () => {
   }
 
   const formData = optimizationForm.value.getFormData()
+  routeName.value = formData.routeName ?? ''
 
   // Собираем данные формы
   formLocations.value = (formData.locations ?? []).map((loc: any) => ({
     id: loc.id,
     name: loc.name,
-    address: `г. ${loc.city ?? ''}, ул. ${loc.street ?? ''}, д. ${loc.houseNumber ?? ''}`,
+    address: buildLocationAddress(loc),
     lat: Number(loc.latitude),
     lon: Number(loc.longitude),
     time_window_start: loc.timeWindowStart ?? '',
@@ -320,13 +407,18 @@ const handleOptimize = async () => {
   }))
 
   locationIds.value = (formData.locations ?? []).map((loc: any) => loc.id)
+  originalLocationIds.value = [...locationIds.value]
+  selectedAiVariantName.value = null
+  selectedAiVariantLocationIds.value = null
+  selectedAiVariantQualityScore.value = 0
+  resultRouteSource.value = 'original'
+  resultRouteLabel.value = null
 
-  // Исходные метрики (приблизительные)
-  originalMetrics.value = {
-    total_distance_km: locationIds.value.length * 15,
-    total_time_hours: locationIds.value.length * 1.5,
-    total_cost_rub: locationIds.value.length * 1000
-  }
+  // Исходные метрики маршрута в текущем порядке точек.
+  const initialMetrics = await getRouteMetrics(locationIds.value)
+  originalMetrics.value = initialMetrics
+  originalRouteSource.value = initialMetrics.source
+  originalTrafficLightsCount.value = initialMetrics.traffic_lights_count
 
   // Переходим в состояние загрузки
   loadingDone.value = false
@@ -370,6 +462,11 @@ const handleOptimize = async () => {
 // ─── Выбор варианта ───────────────────────────────────────────────────────────
 const handleVariantSelect = (variant: RouteVariant) => {
   selectedVariant.value = variant
+  selectedAiVariantName.value = variant.name
+  selectedAiVariantLocationIds.value = [...variant.locations]
+  selectedAiVariantQualityScore.value = variant.metrics.quality_score
+  resultRouteSource.value = 'ai'
+  resultRouteLabel.value = variant.name
 
   // Конвертируем RouteVariant в Route для отображения в OptimizationResult
   optimizationResult.value = {
@@ -383,33 +480,167 @@ const handleVariantSelect = (variant: RouteVariant) => {
     fallback_reason: null,
     created_at: new Date().toISOString(),
   }
+  currentRouteSource.value = 'road_network'
+  currentTrafficLightsCount.value = 0
 
   currentView.value = 'result'
+  void applyResultRoute(variant.locations, 'ai', variant.name)
 }
 
 // ─── Сохранение выбранного варианта ──────────────────────────────────────────
 const saveRoute = async () => {
-  if (!selectedVariant.value || !variantsResponse.value) {
+  if (!optimizationResult.value || !variantsResponse.value) {
     alert('Нет данных для сохранения')
     return
   }
 
   try {
+    const qualityScore =
+      selectedAiVariantLocationIds.value?.join('|') === optimizationResult.value.locations.join('|')
+        ? selectedAiVariantQualityScore.value
+        : 0
+
     await confirmVariant({
-      name: selectedVariant.value.name,
-      locations: selectedVariant.value.locations,
-      total_distance_km: selectedVariant.value.metrics.distance_km,
-      total_time_hours: selectedVariant.value.metrics.time_hours,
-      total_cost_rub: selectedVariant.value.metrics.cost_rub,
-      quality_score: selectedVariant.value.metrics.quality_score,
+      name: optimizationResult.value.name,
+      locations: optimizationResult.value.locations,
+      total_distance_km: optimizationResult.value.total_distance_km,
+      total_time_hours: optimizationResult.value.total_time_hours,
+      total_cost_rub: optimizationResult.value.total_cost_rub,
+      quality_score: qualityScore,
       model_used: variantsResponse.value.model_used,
-      original_location_ids: locationIds.value,
+      original_location_ids: originalLocationIds.value,
     })
-    alert('Маршрут успешно сохранён!')
+    alert(
+      qualityScore > 0
+        ? 'Маршрут успешно сохранён!'
+        : 'Маршрут успешно сохранён без LLM-оценки для текущего порядка.'
+    )
   } catch (err: any) {
     console.error('Save error:', err)
     alert('Ошибка при сохранении маршрута')
   }
+}
+
+async function getRouteMetrics(routeLocationIds: string[]): Promise<RouteMetricsDetails> {
+  const points = routeLocationIds
+    .map((locationId) => formLocations.value.find((location) => location.id === locationId))
+    .filter((location): location is NonNullable<typeof formLocations.value[number]> => !!location)
+
+  if (points.length < 2) {
+    return {
+      total_distance_km: 0,
+      total_time_hours: 0,
+      total_cost_rub: 0,
+      source: points.length === 1 ? 'single_point' : 'empty',
+      traffic_lights_count: 0,
+    }
+  }
+
+  try {
+    const preview = await fetchRoutePreview(
+      points.map((location) => ({
+        lat: location.lat,
+        lon: location.lon,
+      }))
+    )
+
+    return {
+      total_distance_km: preview.distance_km,
+      total_time_hours: preview.time_minutes / 60,
+      total_cost_rub: preview.cost_rub,
+      source: (preview.source as RoutePreviewSource) ?? 'road_network',
+      traffic_lights_count: preview.traffic_lights_count ?? 0,
+    }
+  } catch {
+    const fallbackStops = Math.max(routeLocationIds.length, points.length)
+    return {
+      total_distance_km: fallbackStops * 15,
+      total_time_hours: fallbackStops * 1.5,
+      total_cost_rub: fallbackStops * 1000,
+      source: 'client_fallback',
+      traffic_lights_count: 0,
+    }
+  }
+}
+
+function buildRouteName(source: ResultRouteSource, label?: string | null) {
+  if (source === 'ai') {
+    return label || routeName.value || 'Маршрут от ИИ'
+  }
+  if (source === 'manual') {
+    return routeName.value
+      ? `${routeName.value} (ручная перестановка)`
+      : 'Маршрут (ручная перестановка)'
+  }
+  return routeName.value
+    ? `${routeName.value} (исходный порядок)`
+    : 'Маршрут (исходный порядок)'
+}
+
+async function applyResultRoute(
+  routeLocationIds: string[],
+  source: ResultRouteSource,
+  label?: string | null,
+) {
+  if (!optimizationResult.value && currentView.value !== 'result') {
+    return
+  }
+
+  isUpdatingResultMetrics.value = true
+  try {
+    const metrics = await getRouteMetrics(routeLocationIds)
+    optimizationResult.value = {
+      id: optimizationResult.value?.id ?? `route-${Date.now()}`,
+      name: buildRouteName(source, label),
+      locations: [...routeLocationIds],
+      total_distance_km: metrics.total_distance_km,
+      total_time_hours: metrics.total_time_hours,
+      total_cost_rub: metrics.total_cost_rub,
+      model_used: variantsResponse.value?.model_used ?? selectedModel.value,
+      fallback_reason: null,
+      created_at: optimizationResult.value?.created_at ?? new Date().toISOString(),
+    }
+    currentRouteSource.value = metrics.source
+    currentTrafficLightsCount.value = metrics.traffic_lights_count
+    resultRouteSource.value = source
+    resultRouteLabel.value = label ?? null
+  } finally {
+    isUpdatingResultMetrics.value = false
+  }
+}
+
+function handleMoveResultLocation(payload: { index: number; direction: -1 | 1 }) {
+  if (!optimizationResult.value) return
+
+  const nextIndex = payload.index + payload.direction
+  if (nextIndex < 0 || nextIndex >= optimizationResult.value.locations.length) return
+
+  const nextOrder = [...optimizationResult.value.locations]
+  ;[nextOrder[payload.index], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[payload.index]]
+  void applyResultRoute(nextOrder, 'manual', 'Ручной порядок')
+}
+
+function handleReorderResultLocations(payload: { fromIndex: number; toIndex: number }) {
+  if (!optimizationResult.value) return
+  if (payload.fromIndex === payload.toIndex) return
+  if (payload.fromIndex < 0 || payload.toIndex < 0) return
+  if (payload.fromIndex >= optimizationResult.value.locations.length) return
+  if (payload.toIndex >= optimizationResult.value.locations.length) return
+
+  const nextOrder = [...optimizationResult.value.locations]
+  const [movedLocation] = nextOrder.splice(payload.fromIndex, 1)
+  nextOrder.splice(payload.toIndex, 0, movedLocation)
+  void applyResultRoute(nextOrder, 'manual', 'Ручной порядок')
+}
+
+function restoreOriginalRoute() {
+  if (!originalLocationIds.value.length) return
+  void applyResultRoute(originalLocationIds.value, 'original')
+}
+
+function restoreAiRoute() {
+  if (!selectedAiVariantLocationIds.value?.length) return
+  void applyResultRoute(selectedAiVariantLocationIds.value, 'ai', selectedAiVariantName.value)
 }
 
 // ─── Сброс ────────────────────────────────────────────────────────────────────
@@ -422,6 +653,18 @@ const resetAll = () => {
   originalMetrics.value = null
   formLocations.value = []
   locationIds.value = []
+  originalLocationIds.value = []
+  routeName.value = ''
+  resultRouteSource.value = 'original'
+  resultRouteLabel.value = null
+  selectedAiVariantName.value = null
+  selectedAiVariantLocationIds.value = null
+  selectedAiVariantQualityScore.value = 0
+  isUpdatingResultMetrics.value = false
+  originalRouteSource.value = 'empty'
+  originalTrafficLightsCount.value = 0
+  currentRouteSource.value = 'empty'
+  currentTrafficLightsCount.value = 0
   loadingDone.value = false
   resetForm()
 }
@@ -430,7 +673,7 @@ const resetForm = () => {
   if (optimizationForm.value) {
     optimizationForm.value.resetForm()
   }
-  selectedModel.value = 'qwen'
+  selectedModel.value = localStorage.getItem('t2_preferred_model') ?? 'qwen'
   constraints.value = {
     vehicleCapacity: 1,
     maxDistance: 500,

@@ -1,17 +1,13 @@
 <template>
-  <div class="bg-white border border-gray-200 rounded-lg p-4">
-    <div class="flex items-center">
-      <div class="ml-4 flex-1">
-        <p class="text-sm font-medium text-gray-600">{{ title }}</p>
-        <div v-if="loading" class="mt-2">
-          <SkeletonLoader height="32px" width="120px" />
-        </div>
-        <p v-else class="text-2xl font-semibold text-gray-900">
-          {{ formattedValue }}
-          <span class="text-lg font-normal text-gray-600">{{ unit }}</span>
-        </p>
-      </div>
+  <div class="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
+    <p class="text-xs font-medium text-gray-600 truncate">{{ title }}</p>
+    <div v-if="loading" class="mt-2">
+      <SkeletonLoader height="28px" width="100%" />
     </div>
+    <p v-else class="mt-1 text-xl font-semibold text-gray-900 truncate">
+      {{ formattedValue }}
+      <span class="text-sm font-normal text-gray-600">{{ unit }}</span>
+    </p>
   </div>
 </template>
 

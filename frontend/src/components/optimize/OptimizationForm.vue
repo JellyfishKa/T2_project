@@ -138,6 +138,11 @@
 import { reactive } from 'vue'
 import LocationInput from './LocationInput.vue'
 import type { OptimizationFormData, Location } from './types'
+import { buildLocationAddress } from './address'
+import {
+  normalizeLocationCategory,
+  resolveLocationPriority,
+} from './locationPriority'
 
 const emit = defineEmits<{
   submit: [formData: OptimizationFormData]
@@ -260,7 +265,7 @@ const handleSubmit = () => {
     // Форматируем адреса перед отправкой
     const formattedLocations = formData.locations.map((loc) => ({
       ...loc,
-      address: `г. ${loc.city}, ул. ${loc.street}, д. ${loc.houseNumber}`
+      address: buildLocationAddress(loc)
     }))
 
     emit('submit', {
@@ -307,7 +312,7 @@ const resetForm = () => {
 const getFormData = (): OptimizationFormData => {
   const formattedLocations = formData.locations.map((loc) => ({
     ...loc,
-    address: `г. ${loc.city}, ул. ${loc.street}, д. ${loc.houseNumber}`
+    address: buildLocationAddress(loc)
   }))
 
   return {
@@ -323,11 +328,16 @@ const addLocationFromImport = (locationData: Location) => {
     city: locationData.city,
     street: locationData.street,
     houseNumber: locationData.houseNumber,
+    address: locationData.address,
     latitude: locationData.latitude,
     longitude: locationData.longitude,
     timeWindowStart: locationData.timeWindowStart || '09:00',
     timeWindowEnd: locationData.timeWindowEnd || '18:00',
-    priority: locationData.priority || 'medium'
+    priority: resolveLocationPriority({
+      priority: locationData.priority,
+      category: locationData.category
+    }),
+    category: normalizeLocationCategory(locationData.category)
   })
   validateForm()
 }

@@ -14,8 +14,6 @@ from src.database.models import (
 )
 from src.models.geo_utils import (
     compute_distance_matrix,
-    detect_region_info,
-    estimate_fuel_cost,
     haversine,
     infer_category,
 )
@@ -31,6 +29,7 @@ from src.services.model_selector import (
     select_best_model,
 )
 from src.services.quality_evaluator import evaluate_route_quality
+from src.services.routing import RoutingService
 
 logger = logging.getLogger("optimizer")
 
@@ -41,6 +40,7 @@ class Optimizer:
         self.qwen_client = QwenClient()
         self.llama_client = LlamaClient()
         self.max_locations_per_prompt = 40
+        self.routing_service = RoutingService()
 
     def _convert_db_to_pydantic(
         self,
@@ -59,7 +59,7 @@ class Optimizer:
             priority=priority,
         )
 
-    def _calculate_real_metrics(
+    async def _calculate_real_metrics(
         self,
         locations: List[PydanticLocation],
     ) -> Dict[str, Any]:
@@ -70,23 +70,16 @@ class Optimizer:
                 "cost_rub": 0.0,
             }
 
-        loc_dicts = [{"lat": loc.lat,
-                      "lon": loc.lon} for loc in locations]
-
-        info = detect_region_info(loc_dicts)
-        matrix = compute_distance_matrix(loc_dicts)
-
-        total_dist = 0.0
-        for i in range(len(locations) - 1):
-            total_dist += matrix[i][i + 1]
-
-        speed = 25.0 if info["classification"] == "urban" else 45.0
-        time_mins = (total_dist / speed) * 60 + (len(locations) * 15)
+        preview = await self.routing_service.build_route_preview(locations)
+        service_time_minutes = len(locations) * 12
 
         return {
-            "distance_km": round(total_dist, 2),
-            "time_minutes": round(time_mins, 2),
-            "cost_rub": estimate_fuel_cost(total_dist),
+            "distance_km": round(preview["distance_km"], 2),
+            "time_minutes": round(
+                preview["time_minutes"] + service_time_minutes,
+                2,
+            ),
+            "cost_rub": preview["cost_rub"],
         }
 
     async def optimize(
@@ -102,7 +95,7 @@ class Optimizer:
         ]
 
         original_ids = [loc.id for loc in db_locations]
-        baseline = self._calculate_real_metrics(pydantic_locations)
+        baseline = await self._calculate_real_metrics(pydantic_locations)
 
         target_model = (
             select_best_model(len(pydantic_locations))
@@ -116,7 +109,7 @@ class Optimizer:
             target_model,
         )
 
-        real_stats = self._calculate_real_metrics(
+        real_stats = await self._calculate_real_metrics(
             optimized_route.locations,
         )
 
@@ -348,7 +341,7 @@ class Optimizer:
         ]
 
         # Базовые метрики (неупорядоченный маршрут)
-        baseline = self._calculate_real_metrics(pydantic_locations)
+        baseline = await self._calculate_real_metrics(pydantic_locations)
 
         # ── Три варианта ────────────────────────────────────────────────────────
         variant_configs = [
@@ -378,7 +371,7 @@ class Optimizer:
         # Считаем метрики для каждого варианта
         variants_data = []
         for vc in variant_configs:
-            real = self._calculate_real_metrics(vc["locations_ordered"])
+            real = await self._calculate_real_metrics(vc["locations_ordered"])
             q_score = evaluate_route_quality(
                 {**baseline, "constraints_satisfied": True},
                 {**real, "constraints_satisfied": True},

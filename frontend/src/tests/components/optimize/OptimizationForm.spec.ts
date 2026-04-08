@@ -130,6 +130,7 @@ describe('OptimizationForm.vue', () => {
       city: 'Москва',
       street: 'Тверская',
       houseNumber: '15',
+      address: 'г. Москва, ул. Тверская, д. 15',
       latitude: 55.7558,
       longitude: 37.6173,
       timeWindowStart: '09:00',
@@ -142,6 +143,9 @@ describe('OptimizationForm.vue', () => {
 
     const newCount = wrapper.vm.getFormData().locations.length
     expect(newCount).toBe(initialCount + 1)
+    expect(wrapper.vm.getFormData().locations.at(-1).address).toBe(
+      'г. Москва, ул. Тверская, д. 15'
+    )
   })
 
   it('exposes clearAllLocations method', async () => {

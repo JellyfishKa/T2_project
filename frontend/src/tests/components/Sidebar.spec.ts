@@ -30,7 +30,7 @@ describe('Sidebar.vue', () => {
 
     // Check if navigation items exist
     const navLinks = wrapper.findAll('a')
-    expect(navLinks.length).toBe(6) // Home, Dashboard, Optimize, Analytics, Расписание, Сотрудники
+    expect(navLinks.length).toBe(6) // Главная, Дашборд, Оптимизация, Аналитика, Расписание, Сотрудники
 
     // Check if the close button exists for mobile view
     expect(wrapper.find('button').exists()).toBe(true)
@@ -86,7 +86,7 @@ describe('Sidebar.vue', () => {
     // Check if the dashboard link is highlighted
     const dashboardLink = wrapper
       .findAll('a')
-      .find((link: any) => link.text().includes('Dashboard'))
+      .find((link: any) => link.text().includes('Дашборд'))
     expect(dashboardLink?.classes()).toContain('text-blue-600')
     expect(dashboardLink?.classes()).toContain('bg-blue-50')
   })
