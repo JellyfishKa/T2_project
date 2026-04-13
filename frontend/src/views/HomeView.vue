@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-8 py-6 md:py-8">
     <PageHero
-      eyebrow="T2 Workspace"
-      title="T2 Розничная сеть"
+      eyebrow="Т2.Логист"
+      title="Т2.Логист"
       description="Комплексная платформа на основе искусственного интеллекта для оптимизации маршрутов магазинов и сетевой аналитики с использованием нескольких LLM-моделей."
     >
       <template #meta>

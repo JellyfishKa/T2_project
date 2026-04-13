@@ -45,6 +45,70 @@
       </span>
     </div>
 
+    <!-- Стеш: пропущенные визиты, ожидающие перераспределения -->
+    <div v-if="skippedStash.length" class="card p-4 border border-amber-200 bg-amber-50">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-sm text-amber-800">
+          Пропущенные точки ({{ skippedStash.length }}) — ожидают переноса
+        </h3>
+        <button
+          v-if="skippedStash.length > 1"
+          class="btn-secondary text-xs"
+          :disabled="stashLoading"
+          @click="resolveAllAI"
+        >
+          Перераспределить все через ИИ
+        </button>
+      </div>
+      <div
+        v-for="entry in skippedStash"
+        :key="entry.id"
+        class="flex items-center gap-3 py-2 border-b border-amber-100 last:border-0 flex-wrap"
+      >
+        <span class="text-xs text-gray-500 w-24 shrink-0">{{ entry.original_date }}</span>
+        <span class="text-xs font-medium text-gray-800 flex-1 min-w-0 truncate">{{ entry.location_name }}</span>
+        <span class="text-xs text-gray-500 shrink-0">{{ entry.rep_name }}</span>
+        <div class="flex gap-2 ml-auto shrink-0">
+          <button class="btn-secondary text-xs" :disabled="stashLoading" @click="openStashModal(entry)">Назначить</button>
+          <button class="btn-secondary text-xs" :disabled="stashLoading" @click="resolveCarryOver(entry.id)">Авто</button>
+          <button class="text-xs text-red-500 hover:text-red-700 px-1" :disabled="stashLoading" @click="discardStash(entry.id)" title="Отменить">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Модал: ручное назначение из стеша -->
+    <div v-if="stashModalEntry" class="modal-overlay" @click.self="stashModalEntry = null">
+      <div class="modal">
+        <h2 class="font-semibold text-lg mb-3">Назначить вручную</h2>
+        <p class="text-sm text-gray-700 mb-4">
+          <strong>{{ stashModalEntry.location_name }}</strong>
+          <span class="text-gray-500 ml-2">{{ stashModalEntry.original_date }}</span>
+        </p>
+        <div class="space-y-3">
+          <div>
+            <label class="label">Сотрудник</label>
+            <select v-model="stashManualRepId" class="input">
+              <option v-for="rep in reps" :key="rep.id" :value="rep.id">{{ rep.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Дата</label>
+            <input v-model="stashManualDate" type="date" class="input" />
+          </div>
+        </div>
+        <div class="flex gap-3 justify-end mt-4">
+          <button class="btn-secondary" @click="stashModalEntry = null">Отмена</button>
+          <button
+            class="btn-primary"
+            :disabled="stashLoading || !stashManualRepId || !stashManualDate"
+            @click="submitStashManual"
+          >
+            {{ stashLoading ? 'Сохранение…' : 'Назначить' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Загрузка / ошибка -->
     <div v-if="loading" class="text-gray-500">Загрузка расписания…</div>
     <div v-else-if="error" class="text-red-600">{{ error }}</div>
@@ -215,6 +279,11 @@
             <label class="label">Описание</label>
             <textarea v-model="fm.description" class="input" rows="2" />
           </div>
+          <div>
+            <label class="label">Сотрудник вернётся в: <span class="text-xs text-gray-400 font-normal">(необязательно)</span></label>
+            <input v-model="fm.return_time" type="time" class="input" />
+            <p class="text-xs text-gray-500 mt-1">Если указано, перераспределятся только визиты после этого времени.</p>
+          </div>
         </div>
         <div class="flex gap-3 justify-end mt-4">
           <button class="btn-secondary" @click="showFM = false">Отмена</button>
@@ -322,8 +391,45 @@
                 </div>
               </div>
 
-              <div v-if="currentRoutePoints.length" class="mb-1">
-                <RouteMap :points="currentRoutePoints" height="20rem" />
+              <div v-if="watchdogRoutePoints.length" class="mb-1">
+                <!-- Watch-dog панель прогресса -->
+                <div class="flex items-center gap-3 mb-2 text-sm flex-wrap">
+                  <span class="text-gray-600">
+                    Осталось: <strong class="text-blue-700">{{ remainingVisitsCount }}</strong>
+                  </span>
+                  <button
+                    class="btn-icon text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50"
+                    :disabled="watchdogLoading"
+                    :title="watchdogLoading ? 'Обновление…' : 'Обновить статусы'"
+                    @click="refreshDayProgress"
+                  >
+                    <span :class="watchdogLoading ? 'animate-spin inline-block' : ''">↻</span>
+                  </button>
+                  <button
+                    v-if="remainingVisitsCount > 0"
+                    class="btn-secondary text-xs"
+                    :disabled="dayOptLoading"
+                    @click="optimizeRemainingVisits"
+                  >
+                    Оптимизировать оставшиеся ({{ remainingVisitsCount }})
+                  </button>
+                </div>
+                <RouteMap :points="watchdogRoutePoints" height="20rem" />
+                <!-- Легенда -->
+                <div class="flex gap-4 text-xs text-gray-500 mt-2 flex-wrap">
+                  <span class="flex items-center gap-1">
+                    <span class="inline-block w-3 h-3 rounded-full bg-green-600" />выполнен
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="inline-block w-3 h-3 rounded-full bg-red-700" />пропущен
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="inline-block w-3 h-3 rounded-full bg-blue-500" />запланирован
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="inline-block w-3 h-3 rounded-full bg-amber-500" />перенесён
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -650,6 +756,7 @@ import type {
   OptimizeVariantsResponse,
   ConfirmVariantRequest,
   SalesRep,
+  SkippedStashItem,
   VisitScheduleItem,
   RouteVariant,
 } from '@/services/types'
@@ -668,6 +775,12 @@ import {
   fetchAllLocations,
   saveDayRouteOverride,
   revertDayRouteOverride,
+  fetchDailySchedule,
+  fetchSkippedStash,
+  resolveStashManual,
+  resolveStashCarryOver,
+  resolveStashAI,
+  discardStashEntry,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -744,6 +857,7 @@ const fm = ref({
   rep_id: '',
   event_date: '',
   description: '',
+  return_time: '',
 })
 
 interface RouteMetrics {
@@ -801,6 +915,145 @@ const draftDayVisits = computed(() =>
 
 const currentRoutePoints = computed<RoutePoint[]>(() => buildRoutePoints(currentLocationIds.value))
 const originalRoutePoints = computed<RoutePoint[]>(() => buildRoutePoints(originalLocationIds.value))
+
+// ─── Watch-dog: прогресс дня ──────────────────────────────────────────────────
+const STATUS_COLORS: Record<string, string> = {
+  completed:   '#16a34a',
+  skipped:     '#b91c1c',
+  cancelled:   '#9ca3af',
+  planned:     '#3b82f6',
+  rescheduled: '#f59e0b',
+}
+const watchdogLoading = ref(false)
+const liveVisitStatuses = ref(new Map<string, string>())
+
+const remainingVisitsCount = computed(() =>
+  currentDayVisits.value.filter(
+    (v) => (liveVisitStatuses.value.get(v.id) ?? v.status) === 'planned'
+  ).length
+)
+
+const watchdogRoutePoints = computed<RoutePoint[]>(() =>
+  buildRoutePoints(currentLocationIds.value).map((p) => {
+    const visit = currentDayVisits.value.find((v) => v.id === p.id)
+    const status = visit
+      ? (liveVisitStatuses.value.get(visit.id) ?? visit.status)
+      : 'planned'
+    return { ...p, color: STATUS_COLORS[status] ?? '#3b82f6' }
+  })
+)
+
+async function refreshDayProgress() {
+  if (!selectedDayRoute.value) return
+  watchdogLoading.value = true
+  try {
+    const daily = await fetchDailySchedule(selectedDayRoute.value.date)
+    const repRoute = daily.find((r) => r.rep_id === selectedDayRoute.value!.rep_id)
+    if (repRoute) {
+      liveVisitStatuses.value = new Map(repRoute.visits.map((v) => [v.id, v.status]))
+    }
+  } catch {
+    // не мешаем работе модала при ошибке обновления
+  } finally {
+    watchdogLoading.value = false
+  }
+}
+
+async function optimizeRemainingVisits() {
+  if (!selectedDayRoute.value) return
+  const ids = currentDayVisits.value
+    .filter((v) => (liveVisitStatuses.value.get(v.id) ?? v.status) === 'planned')
+    .map((v) => v.location_id)
+  if (!ids.length) return
+  plannerPanel.value = 'ai'
+  dayOptLoading.value = true
+  dayOptError.value = null
+  dayOptResult.value = null
+  selectedVariantId.value = null
+  try {
+    dayOptResult.value = await optimizeVariants(ids, selectedModel.value, {})
+  } catch (e: any) {
+    dayOptError.value = e?.message ?? 'Ошибка оптимизации'
+  } finally {
+    dayOptLoading.value = false
+  }
+}
+// ─── Стеш пропущенных визитов ─────────────────────────────────────────────────
+const skippedStash = ref<SkippedStashItem[]>([])
+const stashModalEntry = ref<SkippedStashItem | null>(null)
+const stashManualRepId = ref('')
+const stashManualDate = ref('')
+const stashLoading = ref(false)
+
+async function loadSkippedStash() {
+  try {
+    skippedStash.value = await fetchSkippedStash()
+  } catch {
+    // не блокируем интерфейс при ошибке загрузки
+  }
+}
+
+function openStashModal(entry: SkippedStashItem) {
+  stashModalEntry.value = entry
+  stashManualRepId.value = entry.rep_id
+  stashManualDate.value = ''
+}
+
+async function resolveCarryOver(id: string) {
+  stashLoading.value = true
+  try {
+    await resolveStashCarryOver(id)
+    await loadSkippedStash()
+    await loadSchedule()
+  } catch (e: any) {
+    alert(`Ошибка переноса: ${e?.message ?? 'неизвестная'}`)
+  } finally {
+    stashLoading.value = false
+  }
+}
+
+async function submitStashManual() {
+  if (!stashModalEntry.value || !stashManualRepId.value || !stashManualDate.value) return
+  stashLoading.value = true
+  try {
+    await resolveStashManual(stashModalEntry.value.id, stashManualRepId.value, stashManualDate.value)
+    stashModalEntry.value = null
+    await loadSkippedStash()
+    await loadSchedule()
+  } catch (e: any) {
+    alert(`Ошибка назначения: ${e?.message ?? 'неизвестная'}`)
+  } finally {
+    stashLoading.value = false
+  }
+}
+
+async function resolveAllAI() {
+  const ids = skippedStash.value.map((e) => e.id)
+  if (!ids.length) return
+  stashLoading.value = true
+  try {
+    await resolveStashAI(ids)
+    await loadSkippedStash()
+    await loadSchedule()
+  } catch (e: any) {
+    alert(`Ошибка ИИ-перераспределения: ${e?.message ?? 'неизвестная'}`)
+  } finally {
+    stashLoading.value = false
+  }
+}
+
+async function discardStash(id: string) {
+  stashLoading.value = true
+  try {
+    await discardStashEntry(id)
+    await loadSkippedStash()
+  } catch (e: any) {
+    alert(`Ошибка: ${e?.message ?? 'неизвестная'}`)
+  } finally {
+    stashLoading.value = false
+  }
+}
+
 const draftRoutePoints = computed<RoutePoint[]>(() =>
   buildRoutePoints(isDraftDirty.value ? draftLocationIds.value : currentLocationIds.value)
 )
@@ -1104,6 +1357,7 @@ async function submitFM() {
       rep_id: fm.value.rep_id,
       event_date: fm.value.event_date,
       description: fm.value.description || undefined,
+      return_time: fm.value.return_time || undefined,
     })
     fmResult.value = `Зафиксировано. Перераспределено ${data.affected_tt_count} ТТ.`
     await loadSchedule()
@@ -1152,6 +1406,8 @@ async function submitVisitUpdate() {
       }
     }
     closeVisitModal()
+    void loadSkippedStash()
+    void refreshDayProgress()
   } catch (e: any) {
     visitError.value = e?.message ?? 'Ошибка сохранения'
   } finally {
@@ -1194,8 +1450,10 @@ function openDayModal(route: DailyRoute) {
   draftRouteLabel.value = route.route_label ?? null
   plannerPanel.value = 'draft'
   comparisonExpanded.value = false
+  liveVisitStatuses.value = new Map()
   showDayModal.value = true
   void refreshDayRouteMetrics()
+  void refreshDayProgress()
 }
 
 async function optimizeDayRoute() {
@@ -1414,6 +1672,7 @@ onMounted(() => {
   loadSchedule()
   loadReps()
   loadLocations()
+  loadSkippedStash()
 })
 </script>
 

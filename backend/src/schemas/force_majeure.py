@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +11,7 @@ class ForceMajeureRequest(BaseModel):
     rep_id: str = Field(..., description="ID торгового представителя")
     event_date: date = Field(..., description="Дата инцидента")
     description: Optional[str] = Field(None, description="Описание")
+    return_time: Optional[time] = Field(None, description="Время возвращения (частичный ФМ)")
 
 
 class RedistributedItem(BaseModel):
@@ -29,6 +30,7 @@ class ForceMajeureResponse(BaseModel):
     description: Optional[str]
     affected_tt_count: int
     redistributed_to: List[RedistributedItem]
+    return_time: Optional[time] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

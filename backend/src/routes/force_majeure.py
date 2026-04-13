@@ -28,6 +28,7 @@ async def create_force_majeure(
             event_date=req.event_date,
             fm_type=req.type,
             description=req.description,
+            return_time=req.return_time,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -83,7 +84,7 @@ async def list_force_majeure(
 # ---------------------------------------------------------------------------
 
 def _dict_to_response(d: dict) -> ForceMajeureResponse:
-    from datetime import datetime
+    from datetime import datetime, time
     redist = [
         RedistributedItem(
             rep_id=r["rep_id"],
@@ -93,6 +94,8 @@ def _dict_to_response(d: dict) -> ForceMajeureResponse:
         )
         for r in d.get("redistributed_to", [])
     ]
+    rt_raw = d.get("return_time")
+    return_time = time.fromisoformat(rt_raw) if rt_raw else None
     return ForceMajeureResponse(
         id=d["id"],
         type=d["type"],
@@ -102,6 +105,7 @@ def _dict_to_response(d: dict) -> ForceMajeureResponse:
         description=d.get("description"),
         affected_tt_count=d["affected_tt_count"],
         redistributed_to=redist,
+        return_time=return_time,
         created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else datetime.now(),
     )
 
@@ -127,5 +131,6 @@ def _event_to_response(e: ForceMajeureEvent) -> ForceMajeureResponse:
         description=e.description,
         affected_tt_count=len(e.affected_tt_ids or []),
         redistributed_to=redist,
+        return_time=e.return_time,
         created_at=e.created_at,
     )

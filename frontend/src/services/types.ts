@@ -91,6 +91,22 @@ export interface ForceMajeureEvent {
     location_ids: string[]
     new_date: string
   }>
+  return_time: string | null
+  created_at: string
+}
+
+// ─── Skipped Visit Stash ─────────────────────────────────────────────────────
+export interface SkippedStashItem {
+  id: string
+  visit_schedule_id: string | null
+  location_id: string
+  location_name: string
+  location_category: 'A' | 'B' | 'C' | 'D' | null
+  rep_id: string
+  rep_name: string
+  original_date: string
+  resolution: string | null
+  resolved_at: string | null
   created_at: string
 }
 
