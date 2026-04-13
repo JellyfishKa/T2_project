@@ -62,3 +62,10 @@ backend/src/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf
 htmlcov/
 coverage.xml
 .coverage
+
+# repowise API keys (local)
+.repowise/.env
+/.claude
+.mcp.json
+/.omc
+/.repowise

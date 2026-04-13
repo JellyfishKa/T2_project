@@ -25,6 +25,7 @@ import type {
   VisitLog,
   Holiday,
   HolidayPatchResponse,
+  SkippedStashItem,
 } from './types'
 
 // Конфигурация API
@@ -426,6 +427,15 @@ export const fetchRepSchedule = async (
   return response.data
 }
 
+export const fetchDailySchedule = async (
+  date: string
+): Promise<DailyRoute[]> => {
+  const response = await withRetry(() =>
+    api.get('/schedule/daily', { params: { date } })
+  )
+  return response.data
+}
+
 // ========== ВИЗИТЫ: ОБНОВЛЕНИЕ СТАТУСА ==========
 
 export const updateVisitStatus = async (
@@ -502,6 +512,7 @@ export const createForceMajeure = async (data: {
   rep_id: string
   event_date: string
   description?: string
+  return_time?: string
 }): Promise<ForceMajeureEvent> => {
   const response = await withRetry(() => api.post('/force_majeure/', data))
   return response.data
@@ -534,6 +545,42 @@ export const patchHoliday = async (
     api.patch(`/holidays/${date}`, { is_working: isWorking })
   )
   return response.data
+}
+
+// ========== СТЕШ ПРОПУЩЕННЫХ ВИЗИТОВ ==========
+
+export const fetchSkippedStash = async (): Promise<SkippedStashItem[]> => {
+  const response = await withRetry(() => api.get('/schedule/stash'))
+  return response.data
+}
+
+export const resolveStashManual = async (
+  id: string,
+  repId: string,
+  targetDate: string
+): Promise<SkippedStashItem> => {
+  const response = await withRetry(() =>
+    api.post(`/schedule/stash/${id}/resolve/manual`, { rep_id: repId, target_date: targetDate })
+  )
+  return response.data
+}
+
+export const resolveStashCarryOver = async (id: string): Promise<SkippedStashItem> => {
+  const response = await withRetry(() =>
+    api.post(`/schedule/stash/${id}/resolve/carry_over`)
+  )
+  return response.data
+}
+
+export const resolveStashAI = async (stashIds: string[]): Promise<SkippedStashItem[]> => {
+  const response = await withRetry(() =>
+    api.post('/schedule/stash/resolve/ai', { stash_ids: stashIds })
+  )
+  return response.data
+}
+
+export const discardStashEntry = async (id: string): Promise<void> => {
+  await withRetry(() => api.delete(`/schedule/stash/${id}`))
 }
 
 export { api }

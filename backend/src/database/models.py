@@ -168,6 +168,7 @@ class ForceMajeureEvent(Base):
     description = Column(Text, nullable=True)
     affected_tt_ids = Column(JSON, default=list)
     redistributed_to = Column(JSON, default=list)
+    return_time = Column(Time, nullable=True)
     created_at = Column(DateTime(timezone=True),
                         default=lambda: datetime.now(timezone.utc))
 
@@ -176,6 +177,38 @@ class ForceMajeureEvent(Base):
     def __repr__(self):
         return (f"<ForceMajeureEvent(type={self.type}, rep={self.rep_id},"
                 f" date={self.event_date})>")
+
+
+class SkippedVisitStash(Base):
+    """Стеш пропущенных визитов, ожидающих перераспределения."""
+    __tablename__ = "skipped_visit_stash"
+
+    id = Column(String, primary_key=True, index=True,
+                default=lambda: str(uuid.uuid4()))
+    visit_schedule_id = Column(
+        String, ForeignKey("visit_schedule.id", ondelete="SET NULL"), nullable=True
+    )
+    location_id = Column(
+        String, ForeignKey("locations.id"), nullable=False, index=True
+    )
+    rep_id = Column(
+        String, ForeignKey("sales_reps.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    original_date = Column(Date, nullable=False, index=True)
+    resolution = Column(String, nullable=True)  # manual | ai | carry_over | NULL = pending
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_schedule_id = Column(
+        String, ForeignKey("visit_schedule.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc))
+
+    location = relationship("Location")
+    rep = relationship("SalesRep")
+
+    def __repr__(self):
+        return (f"<SkippedVisitStash(rep={self.rep_id}, loc={self.location_id},"
+                f" date={self.original_date}, resolution={self.resolution})>")
 
 
 class Route(Base):

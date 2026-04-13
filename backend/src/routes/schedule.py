@@ -15,6 +15,7 @@ from src.database.models import (
     Holiday,
     Location,
     SalesRep,
+    SkippedVisitStash,
     VisitLog,
     VisitSchedule,
     get_session,
@@ -24,6 +25,9 @@ from src.schemas.schedule import (
     DailyRoute,
     GenerateScheduleRequest,
     MonthlyPlan,
+    ResolveAIRequest,
+    ResolveManualRequest,
+    SkippedStashItem,
     VisitScheduleItem,
     VisitStatusUpdate,
 )
@@ -206,10 +210,8 @@ async def update_visit_status(
         session.add(log)
 
     elif data.status == "skipped":
-        # ── Автоматический перенос пропущенной ТТ ─────────────────────────────
-        # Конкурсное требование: гарантия 100% охвата базы ТТ, включая механизм
-        # добавления ТТ из пройденного маршрута в случае, если точка не работала.
-        await _reschedule_skipped_visit(session, sched)
+        # ── Добавляем в стеш для ручного перераспределения ───────────────────
+        await _add_to_skipped_stash(session, sched)
 
     # AuditLog: смена статуса визита
     audit = AuditLog(
@@ -318,6 +320,218 @@ async def _reschedule_skipped_visit(
         target_date,
         target_rep_id,
     )
+
+
+async def _add_to_skipped_stash(
+    session: AsyncSession,
+    sched: VisitSchedule,
+) -> None:
+    """Добавляет пропущенный визит в стеш для ручного перераспределения."""
+    entry = SkippedVisitStash(
+        visit_schedule_id=sched.id,
+        location_id=sched.location_id,
+        rep_id=sched.rep_id,
+        original_date=sched.planned_date,
+    )
+    session.add(entry)
+
+
+# ── Стеш пропущенных визитов ──────────────────────────────────────────────────
+
+def _stash_to_item(entry: SkippedVisitStash) -> SkippedStashItem:
+    loc_name = entry.location.name if entry.location else entry.location_id
+    loc_cat = entry.location.category if entry.location else None
+    rep_name = entry.rep.name if entry.rep else entry.rep_id
+    return SkippedStashItem(
+        id=entry.id,
+        visit_schedule_id=entry.visit_schedule_id,
+        location_id=entry.location_id,
+        location_name=loc_name,
+        location_category=loc_cat,
+        rep_id=entry.rep_id,
+        rep_name=rep_name,
+        original_date=entry.original_date,
+        resolution=entry.resolution,
+        resolved_at=entry.resolved_at,
+        created_at=entry.created_at,
+    )
+
+
+@router.get("/stash", response_model=List[SkippedStashItem])
+async def list_stash(
+    session: AsyncSession = Depends(get_session),
+):
+    """Список пропущенных визитов, ожидающих перераспределения."""
+    from sqlalchemy.orm import selectinload as sil
+    stmt = (
+        select(SkippedVisitStash)
+        .where(SkippedVisitStash.resolution.is_(None))
+        .options(sil(SkippedVisitStash.location), sil(SkippedVisitStash.rep))
+        .order_by(SkippedVisitStash.original_date, SkippedVisitStash.created_at)
+    )
+    result = await session.execute(stmt)
+    return [_stash_to_item(e) for e in result.scalars().all()]
+
+
+@router.post("/stash/{stash_id}/resolve/manual", response_model=SkippedStashItem)
+async def resolve_stash_manual(
+    stash_id: str,
+    payload: ResolveManualRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Ручное назначение: создаёт rescheduled-визит на указанную дату/сотрудника."""
+    import uuid as uuid_mod
+    from sqlalchemy.orm import selectinload as sil
+    from datetime import timezone as tz
+
+    entry = await session.get(
+        SkippedVisitStash,
+        stash_id,
+        options=[sil(SkippedVisitStash.location), sil(SkippedVisitStash.rep)],
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Запись стеша не найдена")
+    if entry.resolution is not None:
+        raise HTTPException(status_code=409, detail="Запись уже решена")
+
+    new_sched = VisitSchedule(
+        id=str(uuid_mod.uuid4()),
+        location_id=entry.location_id,
+        rep_id=payload.rep_id,
+        planned_date=payload.target_date,
+        status="rescheduled",
+    )
+    session.add(new_sched)
+    await session.flush()
+
+    entry.resolution = "manual"
+    entry.resolved_at = datetime.now(tz.utc)
+    entry.resolved_schedule_id = new_sched.id
+
+    await session.commit()
+    await session.refresh(entry)
+    return _stash_to_item(entry)
+
+
+@router.post("/stash/{stash_id}/resolve/carry_over", response_model=SkippedStashItem)
+async def resolve_stash_carry_over(
+    stash_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Авто-перенос: использует существующую логику _reschedule_skipped_visit."""
+    from sqlalchemy.orm import selectinload as sil
+    from datetime import timezone as tz
+
+    entry = await session.get(
+        SkippedVisitStash,
+        stash_id,
+        options=[sil(SkippedVisitStash.location), sil(SkippedVisitStash.rep)],
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Запись стеша не найдена")
+    if entry.resolution is not None:
+        raise HTTPException(status_code=409, detail="Запись уже решена")
+
+    # Создаём фиктивный VisitSchedule для переиспользования логики
+    fake_sched = VisitSchedule(
+        id=entry.visit_schedule_id or "",
+        location_id=entry.location_id,
+        rep_id=entry.rep_id,
+        planned_date=entry.original_date,
+        status="skipped",
+    )
+    await _reschedule_skipped_visit(session, fake_sched)
+    await session.flush()
+
+    entry.resolution = "carry_over"
+    entry.resolved_at = datetime.now(tz.utc)
+
+    await session.commit()
+    await session.refresh(entry)
+    return _stash_to_item(entry)
+
+
+@router.post("/stash/resolve/ai", response_model=List[SkippedStashItem])
+async def resolve_stash_ai(
+    payload: ResolveAIRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Перераспределение через ИИ (round-robin по активным сотрудникам)."""
+    from sqlalchemy.orm import selectinload as sil
+    from datetime import timezone as tz
+    from src.services.force_majeure_service import ForceMajeureService, _chunked_round_robin
+
+    if not payload.stash_ids:
+        return []
+
+    stmt = (
+        select(SkippedVisitStash)
+        .where(
+            SkippedVisitStash.id.in_(payload.stash_ids),
+            SkippedVisitStash.resolution.is_(None),
+        )
+        .options(sil(SkippedVisitStash.location), sil(SkippedVisitStash.rep))
+    )
+    result = await session.execute(stmt)
+    entries = result.scalars().all()
+
+    if not entries:
+        return []
+
+    # Загружаем активных сотрудников
+    reps_q = select(SalesRep).where(SalesRep.status == "active")
+    active_reps = (await session.execute(reps_q)).scalars().all()
+    if not active_reps:
+        raise HTTPException(status_code=422, detail="Нет активных сотрудников для перераспределения")
+
+    service = ForceMajeureService(session)
+    loc_ids = [e.location_id for e in entries]
+    chunks = _chunked_round_robin(loc_ids, len(active_reps))
+
+    loc_to_entry = {e.location_id: e for e in entries}
+    import uuid as uuid_mod
+
+    for target_rep, chunk in zip(active_reps, chunks):
+        for loc_id in chunk:
+            entry = loc_to_entry.get(loc_id)
+            if not entry:
+                continue
+            target_date = await service._find_available_day(
+                target_rep.id, entry.original_date, chunk_size=1
+            )
+            new_sched = VisitSchedule(
+                id=str(uuid_mod.uuid4()),
+                location_id=loc_id,
+                rep_id=target_rep.id,
+                planned_date=target_date,
+                status="rescheduled",
+            )
+            session.add(new_sched)
+            await session.flush()
+            entry.resolution = "ai"
+            entry.resolved_at = datetime.now(tz.utc)
+            entry.resolved_schedule_id = new_sched.id
+
+    await session.commit()
+    for e in entries:
+        await session.refresh(e)
+    return [_stash_to_item(e) for e in entries]
+
+
+@router.delete("/stash/{stash_id}", status_code=204)
+async def discard_stash_entry(
+    stash_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Отменить запись стеша без переноса визита."""
+    from datetime import timezone as tz
+
+    entry = await session.get(SkippedVisitStash, stash_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Запись стеша не найдена")
+    entry.resolution = "discarded"
+    entry.resolved_at = datetime.now(tz.utc)
+    await session.commit()
 
 
 @router.get("/daily", response_model=List[DailyRoute])

@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -65,3 +65,30 @@ class MonthlyPlan(BaseModel):
     total_tt_planned: int
     coverage_pct: float
     routes: List[DailyRoute]
+
+
+# ── Стеш пропущенных визитов ─────────────────────────────────────────────────
+
+class SkippedStashItem(BaseModel):
+    id: str
+    visit_schedule_id: Optional[str] = None
+    location_id: str
+    location_name: str
+    location_category: Optional[Literal["A", "B", "C", "D"]] = None
+    rep_id: str
+    rep_name: str
+    original_date: date
+    resolution: Optional[str] = None   # manual | ai | carry_over | None = pending
+    resolved_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ResolveManualRequest(BaseModel):
+    rep_id: str
+    target_date: date
+
+
+class ResolveAIRequest(BaseModel):
+    stash_ids: List[str]

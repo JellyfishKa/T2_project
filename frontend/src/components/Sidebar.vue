@@ -8,7 +8,7 @@
         <div
           class="h-9 w-9 rounded-xl bg-slate-950 flex items-center justify-center shadow-sm"
         >
-          <span class="text-white font-bold text-sm">T2</span>
+          <span class="text-white font-bold text-sm">Т2</span>
         </div>
         <div class="ml-3">
           <span class="text-lg font-semibold text-slate-950">Навигация</span>

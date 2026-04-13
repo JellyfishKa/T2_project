@@ -2,16 +2,32 @@
 import logging
 import math
 from collections import defaultdict
-from datetime import date, timedelta
-from typing import Any, Dict, List, Tuple
+from datetime import date, time, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import ForceMajeureEvent, SalesRep, VisitSchedule
-from src.services.schedule_planner import MAX_TT_PER_DAY  # единственный источник правды
+from src.database.models import DailyRouteOverride, ForceMajeureEvent, SalesRep, VisitSchedule
+from src.services.schedule_planner import (
+    AVG_TRAVEL_MIN_PER_TT,
+    MAX_TT_PER_DAY,
+    VISIT_DURATION_MIN,
+)
 
 logger = logging.getLogger("force_majeure")
+
+WORK_START_HOUR = 9  # 09:00
+SLOT_MINUTES = VISIT_DURATION_MIN + AVG_TRAVEL_MIN_PER_TT  # 35
+
+
+def _estimated_visit_time(visit_index: int) -> time:
+    """Оценочное время начала визита по его порядковому номеру (0-based).
+    Визит 0 → 09:00, визит 1 → 09:35, визит N → 09:00 + N*35 мин.
+    """
+    total_minutes = WORK_START_HOUR * 60 + visit_index * SLOT_MINUTES
+    h, m = divmod(total_minutes, 60)
+    return time(hour=h % 24, minute=m)
 
 
 def _next_working_day(d: date) -> date:
@@ -41,6 +57,7 @@ class ForceMajeureService:
         event_date: date,
         fm_type: str,
         description: str | None,
+        return_time: Optional[time] = None,
     ) -> Dict[str, Any]:
         # --- 1. Загружаем сотрудника ---
         rep = await self.db.get(SalesRep, rep_id)
@@ -52,9 +69,39 @@ class ForceMajeureService:
             VisitSchedule.rep_id == rep_id,
             VisitSchedule.planned_date == event_date,
             VisitSchedule.status == "planned",
-        )
+        ).order_by(VisitSchedule.created_at, VisitSchedule.id)
         result = await self.db.execute(stmt)
-        affected_schedules = result.scalars().all()
+        all_planned = list(result.scalars().all())
+
+        # Если есть переопределение маршрута — сортируем по нему
+        override_stmt = select(DailyRouteOverride).where(
+            DailyRouteOverride.rep_id == rep_id,
+            DailyRouteOverride.route_date == event_date,
+        )
+        override_result = await self.db.execute(override_stmt)
+        override = override_result.scalars().first()
+        if override and override.current_location_order:
+            loc_order = {
+                loc_id: idx
+                for idx, loc_id in enumerate(override.current_location_order)
+            }
+            all_planned = sorted(
+                all_planned, key=lambda s: loc_order.get(s.location_id, 999)
+            )
+
+        # Частичный ФМ: переносим только визиты ПОСЛЕ return_time
+        if return_time is not None:
+            affected_schedules = [
+                s for i, s in enumerate(all_planned)
+                if _estimated_visit_time(i) >= return_time
+            ]
+            logger.info(
+                "Частичный ФМ: return_time=%s, всего=%d, затронуто=%d",
+                return_time, len(all_planned), len(affected_schedules),
+            )
+        else:
+            affected_schedules = all_planned
+
         affected_tt_ids = [s.location_id for s in affected_schedules]
 
         redistributed_to: List[Dict] = []
@@ -109,6 +156,7 @@ class ForceMajeureService:
             description=description,
             affected_tt_ids=affected_tt_ids,
             redistributed_to=redistributed_to,
+            return_time=return_time,
         )
         self.db.add(event)
         await self.db.commit()
@@ -123,6 +171,7 @@ class ForceMajeureService:
             "description": description,
             "affected_tt_count": len(affected_tt_ids),
             "redistributed_to": redistributed_to,
+            "return_time": return_time.isoformat() if return_time else None,
             "created_at": event.created_at.isoformat() if event.created_at else None,
         }
 

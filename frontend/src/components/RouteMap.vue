@@ -19,6 +19,7 @@ export interface RoutePoint {
   lat: number
   lon: number
   order: number
+  color?: string
 }
 
 export interface RouteSet {
@@ -91,7 +92,7 @@ function tooltipHtml(p: RoutePoint): string {
 function buildMarkers(points: RoutePoint[], color: string): L.Layer[] {
   const layers: L.Layer[] = []
   for (const p of points) {
-    const marker = L.marker([p.lat, p.lon], { icon: makeNumberedIcon(p.order, color) })
+    const marker = L.marker([p.lat, p.lon], { icon: makeNumberedIcon(p.order, p.color ?? color) })
     marker.bindTooltip(tooltipHtml(p), { direction: 'top', offset: [0, -10] })
     layers.push(marker)
   }

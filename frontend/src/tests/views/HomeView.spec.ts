@@ -24,7 +24,7 @@ describe('HomeView.vue', () => {
     })
 
     // Check if the main heading is rendered
-    expect(wrapper.find('h1').text()).toBe('T2 Розничная сеть')
+    expect(wrapper.find('h1').text()).toBe('Т2.Логист')
 
     // Check if the description is rendered
     expect(wrapper.text()).toContain(
