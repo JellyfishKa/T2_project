@@ -73,10 +73,11 @@ def _working_days(year: int, month: int, non_working: FrozenSet[date] = frozense
 
 
 def _week_groups(days: List[date]) -> List[List[date]]:
-    """Разбивает рабочие дни на рабочие недели (по номеру ISO-недели)."""
-    groups: Dict[int, List[date]] = defaultdict(list)
+    """Разбивает рабочие дни на рабочие недели (по ISO год+неделя)."""
+    groups: Dict[Tuple[int, int], List[date]] = defaultdict(list)
     for d in days:
-        groups[d.isocalendar()[1]].append(d)
+        iso = d.isocalendar()
+        groups[(iso[0], iso[1])].append(d)
     return [v for v in groups.values()]
 
 

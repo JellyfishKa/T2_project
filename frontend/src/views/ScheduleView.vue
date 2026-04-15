@@ -1169,7 +1169,7 @@ function buildRoutePoints(locationIds: string[]): RoutePoint[] {
     const visit = visitLookup.get(locationId)
     const location = locationsById.value.get(locationId)
     if (!visit || !location) {
-      console.warn('RouteMap: location not found for visit', locationId)
+      if (import.meta.env.DEV) console.warn('RouteMap: location not found for visit', locationId)
       return
     }
     points.push({
@@ -1320,6 +1320,9 @@ async function toggleHoliday(h: Holiday) {
     } else {
       holidayToggleMsg.value = `День ${h.date} теперь ${newIsWorking ? 'рабочий' : 'нерабочий'}.`
       holidayToggleMsgError.value = false
+    }
+    if (showDayModal.value && selectedDayRoute.value?.date === h.date) {
+      void refreshDayRouteMetrics()
     }
   } catch (e: any) {
     holidayToggleMsg.value = `Ошибка: ${e?.message ?? e}`
@@ -1641,7 +1644,7 @@ watch(showHolidays, async (val) => {
   if (val && allHolidays.value.length === 0) {
     allHolidaysLoading.value = true
     holidayToggleMsg.value = null
-    allHolidays.value = await fetchHolidays({ year: 2026 }).catch(() => [])
+    allHolidays.value = await fetchHolidays({ year: parseInt(currentMonth.value.split('-')[0]) }).catch(() => [])
     allHolidaysLoading.value = false
   }
   if (!val) holidayToggleMsg.value = null

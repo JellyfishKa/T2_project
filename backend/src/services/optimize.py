@@ -48,7 +48,7 @@ class Optimizer:
         db_loc: DBLocation,
     ) -> PydanticLocation:
         # Используем реальную категорию ТТ; при её отсутствии — "C" (средний приоритет)
-        priority = db_loc.category if db_loc.category in ("A", "B", "C", "D") else "C"
+        priority = db_loc.category if db_loc.category in ("A", "B", "C", "D") else "D"
         return PydanticLocation(
             ID=db_loc.id,
             name=db_loc.name,

@@ -89,5 +89,5 @@ async def delete_rep(
     rep = await session.get(SalesRep, rep_id)
     if not rep:
         raise HTTPException(status_code=404, detail="Сотрудник не найден")
-    await session.delete(rep)
+    session.delete(rep)
     await session.commit()

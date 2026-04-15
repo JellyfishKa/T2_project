@@ -43,7 +43,7 @@
             <option value="unavailable">Недоступен</option>
           </select>
         </div>
-        <button class="btn-primary" @click="createRep">Сохранить</button>
+        <button class="btn-primary" :disabled="saving" @click="createRep">{{ saving ? 'Сохранение...' : 'Сохранить' }}</button>
         <button class="btn-secondary" @click="showForm = false">Отмена</button>
       </div>
     </div>
@@ -101,6 +101,7 @@ import InfoStatCard from '@/components/common/InfoStatCard.vue'
 
 const reps = ref<SalesRep[]>([])
 const loading = ref(false)
+const saving = ref(false)
 const error = ref<string | null>(null)
 const showForm = ref(false)
 const newName = ref('')
@@ -127,22 +128,40 @@ async function loadReps() {
 }
 
 async function createRep() {
-  if (!newName.value.trim()) return
-  await apiCreateRep(newName.value.trim(), newStatus.value)
-  newName.value = ''
-  showForm.value = false
-  await loadReps()
+  if (!newName.value.trim() || saving.value) return
+  saving.value = true
+  error.value = null
+  try {
+    await apiCreateRep(newName.value.trim(), newStatus.value)
+    newName.value = ''
+    showForm.value = false
+    await loadReps()
+  } catch {
+    error.value = 'Ошибка создания сотрудника'
+  } finally {
+    saving.value = false
+  }
 }
 
 async function updateStatus(id: string, status: string) {
-  await updateRep(id, { status: status as SalesRep['status'] })
-  await loadReps()
+  error.value = null
+  try {
+    await updateRep(id, { status: status as SalesRep['status'] })
+    await loadReps()
+  } catch {
+    error.value = 'Ошибка обновления статуса'
+  }
 }
 
 async function deleteRep(id: string) {
   if (!confirm('Удалить сотрудника?')) return
-  await apiDeleteRep(id)
-  await loadReps()
+  error.value = null
+  try {
+    await apiDeleteRep(id)
+    await loadReps()
+  } catch {
+    error.value = 'Ошибка удаления сотрудника'
+  }
 }
 
 function statusLabel(s: string) {
