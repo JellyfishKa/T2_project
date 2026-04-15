@@ -27,6 +27,21 @@ from src.routes.routes import router as routes_router
 from src.routes.schedule import router as schedule_router
 from src.routes.holidays import router as holidays_router
 from src.routes.visits import router as visits_router
+from src.routes.cruddata import (
+    location_router_crud,
+    sales_rep_router_crud,
+    visit_schedule_router_crud,
+    daily_route_router_crud,
+    visit_log_router_crud,
+    force_majeure_router_crud,
+    skipped_visit_router_crud,
+    route_router_crud,
+    metric_router_crud,
+    optimization_router_crud,
+    holiday_router_crud,
+    audit_log_router_crud,
+    vehicle_router_crud,
+)
 
 import uvicorn
 
@@ -128,6 +143,20 @@ api_v1_router.include_router(visits_router)
 api_v1_router.include_router(export_router)
 api_v1_router.include_router(import_router)
 api_v1_router.include_router(holidays_router)
+# crud
+api_v1_router.include_router(location_router_crud)
+api_v1_router.include_router(sales_rep_router_crud)
+api_v1_router.include_router(visit_schedule_router_crud)
+api_v1_router.include_router(daily_route_router_crud)
+api_v1_router.include_router(visit_log_router_crud)
+api_v1_router.include_router(force_majeure_router_crud)
+api_v1_router.include_router(skipped_visit_router_crud)
+api_v1_router.include_router(route_router_crud)
+api_v1_router.include_router(metric_router_crud)
+api_v1_router.include_router(optimization_router_crud)
+api_v1_router.include_router(holiday_router_crud)
+api_v1_router.include_router(audit_log_router_crud)
+api_v1_router.include_router(vehicle_router_crud)
 
 app.include_router(api_v1_router)
 
