@@ -1,9 +1,10 @@
 from datetime import date
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.database.models import SalesRep, VisitSchedule, get_session
 from src.schemas.reps import SalesRepCreate, SalesRepResponse, SalesRepUpdate
@@ -11,11 +12,26 @@ from src.schemas.reps import SalesRepCreate, SalesRepResponse, SalesRepUpdate
 router = APIRouter(prefix="/reps", tags=["Sales Reps"])
 
 
+def _to_response(rep: SalesRep, warning: Optional[str] = None, pending_count: int = 0) -> SalesRepResponse:
+    return SalesRepResponse(
+        id=rep.id,
+        name=rep.name,
+        status=rep.status,
+        vehicle_id=rep.vehicle_id,
+        vehicle_name=rep.vehicle.name if rep.vehicle else None,
+        created_at=rep.created_at,
+        warning=warning,
+        pending_visits_count=pending_count,
+    )
+
+
 @router.get("/", response_model=List[SalesRepResponse])
 async def get_reps(session: AsyncSession = Depends(get_session)):
     """Список всех сотрудников."""
-    result = await session.execute(select(SalesRep).order_by(SalesRep.name))
-    return result.scalars().all()
+    result = await session.execute(
+        select(SalesRep).options(selectinload(SalesRep.vehicle)).order_by(SalesRep.name)
+    )
+    return [_to_response(r) for r in result.scalars().all()]
 
 
 @router.post("/", response_model=SalesRepResponse, status_code=status.HTTP_201_CREATED)
@@ -24,11 +40,19 @@ async def create_rep(
     session: AsyncSession = Depends(get_session),
 ):
     """Создать нового торгового представителя."""
-    rep = SalesRep(name=data.name, status=data.status)
+    rep = SalesRep(name=data.name, status=data.status, vehicle_id=getattr(data, "vehicle_id", None))
     session.add(rep)
     await session.commit()
+    await session.execute(
+        select(SalesRep).options(selectinload(SalesRep.vehicle)).where(SalesRep.id == rep.id)
+    )
     await session.refresh(rep)
-    return rep
+    # Re-fetch with vehicle loaded
+    result = await session.execute(
+        select(SalesRep).options(selectinload(SalesRep.vehicle)).where(SalesRep.id == rep.id)
+    )
+    rep = result.scalar_one()
+    return _to_response(rep)
 
 
 @router.patch("/{rep_id}", response_model=SalesRepResponse)
@@ -37,16 +61,28 @@ async def update_rep(
     data: SalesRepUpdate,
     session: AsyncSession = Depends(get_session),
 ):
-    """Обновить имя или статус сотрудника."""
-    rep = await session.get(SalesRep, rep_id)
+    """Обновить имя, статус или привязанный автомобиль сотрудника."""
+    result = await session.execute(
+        select(SalesRep).options(selectinload(SalesRep.vehicle)).where(SalesRep.id == rep_id)
+    )
+    rep = result.scalar_one_or_none()
     if not rep:
         raise HTTPException(status_code=404, detail="Сотрудник не найден")
+
     if data.name is not None:
         rep.name = data.name
     if data.status is not None:
         rep.status = data.status
+    if "vehicle_id" in data.model_fields_set:
+        rep.vehicle_id = data.vehicle_id
+
     await session.commit()
-    await session.refresh(rep)
+
+    # Re-fetch with vehicle loaded after commit
+    result = await session.execute(
+        select(SalesRep).options(selectinload(SalesRep.vehicle)).where(SalesRep.id == rep_id)
+    )
+    rep = result.scalar_one()
 
     # Warning: если новый статус sick/vacation — считаем будущие planned-визиты
     warning: str | None = None
@@ -69,15 +105,7 @@ async def update_rep(
                 f"рекомендуется создать форс-мажор для перераспределения."
             )
 
-    result = SalesRepResponse(
-        id=rep.id,
-        name=rep.name,
-        status=rep.status,
-        created_at=rep.created_at,
-        warning=warning,
-        pending_visits_count=pending_count,
-    )
-    return result
+    return _to_response(rep, warning, pending_count)
 
 
 @router.delete("/{rep_id}", status_code=status.HTTP_204_NO_CONTENT)

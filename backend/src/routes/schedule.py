@@ -104,11 +104,11 @@ async def generate_schedule(
         )
 
     if existing_count > 0 and force:
-        # Удаляем существующие planned-визиты за этот месяц
+        # Удаляем planned/rescheduled/skipped визиты за этот месяц (completed/cancelled не трогаем)
         planned_q = await session.execute(
             select(VisitSchedule).where(
                 VisitSchedule.planned_date.between(month_start, month_end),
-                VisitSchedule.status == "planned",
+                VisitSchedule.status.in_(["planned", "rescheduled", "skipped"]),
             )
         )
         for vs in planned_q.scalars().all():

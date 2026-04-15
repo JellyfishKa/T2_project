@@ -95,7 +95,7 @@ import { useRoute } from 'vue-router'
 
 defineEmits(['close'])
 
-type IconKey = 'home' | 'grid' | 'bolt' | 'chart-line' | 'calendar' | 'users'
+type IconKey = 'home' | 'grid' | 'bolt' | 'chart-line' | 'calendar' | 'users' | 'truck'
 
 interface NavigationItem {
   name: string
@@ -110,6 +110,7 @@ const navigation: NavigationItem[] = [
   { name: 'Аналитика',   to: '/analytics', icon: 'chart-line' },
   { name: 'Расписание',  to: '/schedule',  icon: 'calendar' },
   { name: 'Сотрудники',  to: '/reps',      icon: 'users' },
+  { name: 'Автопарк',    to: '/cars',      icon: 'truck' },
 ]
 
 // Heroicons-outline path data (MIT license).
@@ -120,6 +121,7 @@ const iconPaths: Record<IconKey, string> = {
   'chart-line': 'M3 3v18h18M7 15l4-4 4 4 5-6',
   calendar: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
   users: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5.13a4 4 0 11-8 0 4 4 0 018 0zm6 0a4 4 0 11-8 0 4 4 0 018 0z',
+  truck: 'M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM1 1h4l2.68 13.39a2 2 0 001.98 1.61H17a2 2 0 001.95-1.55L21 7H6',
 }
 
 const route = useRoute()

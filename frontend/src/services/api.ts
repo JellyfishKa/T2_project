@@ -26,6 +26,8 @@ import type {
   Holiday,
   HolidayPatchResponse,
   SkippedStashItem,
+  Vehicle,
+  TransportMode,
 } from './types'
 
 // Конфигурация API
@@ -334,10 +336,15 @@ export const fetchAllLocations = async (): Promise<Location[]> => {
 }
 
 export const fetchRoutePreview = async (
-  points: RoutePreviewPoint[]
+  points: RoutePreviewPoint[],
+  options?: { vehicle_id?: string | null; transport_mode?: TransportMode }
 ): Promise<RoutePreviewResponse> => {
   const response = await withRetry(() =>
-    api.post('/routing/preview', { points })
+    api.post('/routing/preview', {
+      points,
+      vehicle_id: options?.vehicle_id ?? null,
+      transport_mode: options?.transport_mode ?? 'car',
+    })
   )
   return response.data
 }
@@ -351,17 +358,18 @@ export const fetchReps = async (): Promise<SalesRep[]> => {
 
 export const createRep = async (
   name: string,
-  status: SalesRep['status'] = 'active'
+  status: SalesRep['status'] = 'active',
+  vehicle_id?: string | null,
 ): Promise<SalesRep> => {
   const response = await withRetry(() =>
-    api.post('/reps/', { name, status })
+    api.post('/reps/', { name, status, vehicle_id: vehicle_id ?? null })
   )
   return response.data
 }
 
 export const updateRep = async (
   repId: string,
-  data: Partial<Pick<SalesRep, 'name' | 'status'>>
+  data: Partial<Pick<SalesRep, 'name' | 'status' | 'vehicle_id'>>
 ): Promise<SalesRep> => {
   const response = await withRetry(() => api.patch(`/reps/${repId}`, data))
   return response.data
@@ -369,6 +377,22 @@ export const updateRep = async (
 
 export const deleteRep = async (repId: string): Promise<void> => {
   await withRetry(() => api.delete(`/reps/${repId}`))
+}
+
+// ========== АВТОПАРК ==========
+
+export const fetchVehicles = async (): Promise<Vehicle[]> => {
+  const response = await withRetry(() => api.get('/routing/'))
+  return response.data
+}
+
+export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<Vehicle> => {
+  const response = await withRetry(() => api.post('/routing/', data))
+  return response.data
+}
+
+export const deleteVehicle = async (vehicleId: string): Promise<void> => {
+  await withRetry(() => api.delete(`/routing/${vehicleId}`))
 }
 
 // ========== РАСПИСАНИЕ ==========

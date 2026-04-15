@@ -61,9 +61,11 @@ class SalesRep(Base):
     name = Column(String, nullable=False)
     status = Column(String, nullable=False, default="active")
     # active | sick | vacation | unavailable
+    vehicle_id = Column(String, ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True),
                         default=lambda: datetime.now(timezone.utc))
 
+    vehicle = relationship("Vehicle", foreign_keys=[vehicle_id])
     schedules = relationship("VisitSchedule", back_populates="rep",
                              cascade="all, delete-orphan")
     visits = relationship("VisitLog", back_populates="rep",

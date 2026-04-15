@@ -1,3 +1,5 @@
+from typing import Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -8,6 +10,8 @@ class RoutingPoint(BaseModel):
 
 class RoutePreviewRequest(BaseModel):
     points: list[RoutingPoint]
+    vehicle_id: Optional[str] = None
+    transport_mode: Literal["car", "taxi", "bus"] = "car"
 
 
 class RoutePreviewResponse(BaseModel):
@@ -17,3 +21,4 @@ class RoutePreviewResponse(BaseModel):
     cost_rub: float
     traffic_lights_count: int
     source: str
+    transport_mode: str = "car"

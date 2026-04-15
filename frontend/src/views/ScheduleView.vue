@@ -210,8 +210,13 @@
         </div>
         <div v-if="genResult" class="mt-3 text-sm" :class="genResult.startsWith('Ошибка') ? 'text-red-600' : 'text-green-600'">
           {{ genResult }}
-          <button v-if="genCanForce" class="ml-2 underline text-yellow-600 hover:text-yellow-700" @click="generatePlan(true)">
-            Пересоздать
+        </div>
+        <div v-if="genCanForce" class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-xs text-red-700 mb-2">
+            План за этот месяц уже существует. Перегенерация удалит все запланированные, перенесённые и пропущенные визиты.
+          </p>
+          <button class="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded font-medium" :disabled="generating" @click="generatePlan(true)">
+            {{ generating ? 'Генерация…' : 'Перегенерировать план' }}
           </button>
         </div>
       </div>
@@ -318,6 +323,18 @@
             <p class="text-xs text-gray-500 mt-1">
               {{ activePlannerHint }}
             </p>
+            <!-- Транспорт ТП -->
+            <div class="flex items-center gap-2 mt-2 flex-wrap">
+              <select v-model="dayTransportMode" class="input-sm" @change="void refreshDayRouteMetrics()">
+                <option value="car">🚗 Автомобиль</option>
+                <option value="taxi">🚕 Такси</option>
+                <option value="bus">🚌 Автобус</option>
+              </select>
+              <select v-if="dayTransportMode === 'car'" v-model="dayVehicleId" class="input-sm" @change="void refreshDayRouteMetrics()">
+                <option :value="null">— авто по умолч. —</option>
+                <option v-for="v in vehicles" :key="v.id" :value="v.id">{{ v.name }}</option>
+              </select>
+            </div>
           </div>
           <div class="flex items-center gap-2">
             <button
@@ -759,6 +776,8 @@ import type {
   SkippedStashItem,
   VisitScheduleItem,
   RouteVariant,
+  Vehicle,
+  TransportMode,
 } from '@/services/types'
 import {
   optimizeVariants,
@@ -781,6 +800,7 @@ import {
   resolveStashCarryOver,
   resolveStashAI,
   discardStashEntry,
+  fetchVehicles,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -847,6 +867,9 @@ const previewLoading = ref(false)
 const originalRouteMetrics = ref<RouteMetrics | null>(null)
 const currentRouteMetrics = ref<RouteMetrics | null>(null)
 const draftRouteMetrics = ref<RouteMetrics | null>(null)
+const vehicles = ref<Vehicle[]>([])
+const dayTransportMode = ref<TransportMode>('car')
+const dayVehicleId = ref<string | null>(null)
 const plannerPanel = ref<'draft' | 'ai'>('draft')
 const comparisonExpanded = ref(false)
 const draftDragFromIndex = ref<number | null>(null)
@@ -1202,7 +1225,10 @@ async function getRouteMetricsForLocationIds(locationIds: string[]): Promise<Rou
     }
   }
 
-  const preview = await fetchRoutePreview(points)
+  const preview = await fetchRoutePreview(points, {
+    vehicle_id: dayVehicleId.value,
+    transport_mode: dayTransportMode.value,
+  })
   return {
     distance_km: preview.distance_km,
     time_hours: preview.time_minutes / 60,
@@ -1442,6 +1468,10 @@ async function handleExport() {
 // ─── Day modal ────────────────────────────────────────────────────────────────
 function openDayModal(route: DailyRoute) {
   selectedDayRoute.value = route
+  // Pre-fill transport mode from rep's assigned car
+  const repData = reps.value.find(r => r.id === route.rep_id)
+  dayVehicleId.value = repData?.vehicle_id ?? null
+  dayTransportMode.value = dayVehicleId.value ? 'car' : 'car'
   dayOptResult.value = null
   dayOptError.value = null
   selectedVariantId.value = null
@@ -1676,6 +1706,7 @@ onMounted(() => {
   loadReps()
   loadLocations()
   loadSkippedStash()
+  fetchVehicles().then(v => { vehicles.value = v }).catch(() => {})
 })
 </script>
 
