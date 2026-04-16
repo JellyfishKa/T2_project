@@ -141,8 +141,24 @@ async function loadReps() {
   loading.value = true
   error.value = null
   try {
-    [reps.value, vehicles.value] = await Promise.all([fetchReps(), fetchVehicles()])
-  } catch (e) {
+    const [repsResult, vehiclesResult] = await Promise.allSettled([
+      fetchReps(),
+      fetchVehicles(),
+    ])
+
+    if (repsResult.status === 'rejected') {
+      error.value = 'Ошибка загрузки данных'
+      reps.value = []
+    } else {
+      reps.value = repsResult.value
+    }
+
+    if (vehiclesResult.status === 'rejected') {
+      vehicles.value = []
+    } else {
+      vehicles.value = vehiclesResult.value
+    }
+  } catch {
     error.value = 'Ошибка загрузки данных'
   } finally {
     loading.value = false
@@ -193,8 +209,8 @@ async function deleteRep(id: string) {
   try {
     await apiDeleteRep(id)
     await loadReps()
-  } catch {
-    error.value = 'Ошибка удаления сотрудника'
+  } catch (e: any) {
+    error.value = e?.detail ?? e?.message ?? 'Ошибка удаления сотрудника'
   }
 }
 

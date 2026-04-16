@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).parent.parent
@@ -27,6 +28,19 @@ class Settings(BaseSettings):
     database_name: str = "t2"
 
     debug: bool = False
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _parse_debug(cls, value):
+        if isinstance(value, bool) or value is None:
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "debug", "dev"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release", "prod", "production"}:
+                return False
+        return value
 
     def get_model_path(self, model_id: str) -> str:
         """

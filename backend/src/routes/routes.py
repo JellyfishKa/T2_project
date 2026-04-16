@@ -3,7 +3,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import Route, get_session
+from src.database.models import Location, Route, get_session
+from src.schemas.locations import LocationResponse
 from src.schemas.routes import (
     PaginatedRoutes,
     RouteDetailResponse,
@@ -80,19 +81,34 @@ async def get_route_detail(
     metrics_data = [
         {
             "id": m.id,
-            "model_name": m.model_name,
+            "model": m.model_name,
+            "route_id": m.route_id,
             "response_time_ms": m.response_time_ms,
             "quality_score": m.quality_score,
-            "cost": m.cost,
+            "cost_rub": m.cost,
             "timestamp": m.timestamp.isoformat() if m.timestamp else None,
         }
         for m in route.metrics
+    ]
+
+    locations_result = await session.execute(
+        select(Location).where(Location.id.in_(route.locations_order or []))
+    )
+    locations_by_id = {
+        location.id: location for location in locations_result.scalars().all()
+    }
+    ordered_locations = [
+        LocationResponse.model_validate(locations_by_id[location_id])
+        for location_id in (route.locations_order or [])
+        if location_id in locations_by_id
     ]
 
     return RouteDetailResponse(
         id=route.id,
         name=route.name,
         locations=route.locations_order or [],
+        locations_sequence=route.locations_order or [],
+        locations_data=ordered_locations,
         total_distance_km=route.total_distance or 0.0,
         total_time_hours=route.total_time or 0.0,
         total_cost_rub=route.total_cost or 0.0,

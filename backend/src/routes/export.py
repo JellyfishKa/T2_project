@@ -21,7 +21,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import AuditLog, Location, SalesRep, VisitLog, VisitSchedule, get_session
+from src.database.models import (
+    AuditLog,
+    DailyRouteOverride,
+    Location,
+    SalesRep,
+    VisitLog,
+    VisitSchedule,
+    get_session,
+)
 
 try:
     import openpyxl
@@ -69,6 +77,19 @@ def _autofit(ws) -> None:
         ws.column_dimensions[get_column_letter(col)].width = min(w + 2, 50)
 
 
+def _sort_schedules_by_location_order(
+    schedules: list[VisitSchedule],
+    location_order: list[str],
+) -> list[VisitSchedule]:
+    order_index = {
+        location_id: index for index, location_id in enumerate(location_order)
+    }
+    return sorted(
+        schedules,
+        key=lambda schedule: order_index.get(schedule.location_id, len(order_index)),
+    )
+
+
 # ─── Главный эндпоинт ────────────────────────────────────────────────────────
 
 @router.get("/schedule")
@@ -110,6 +131,17 @@ async def export_schedule(
         )
     )
     schedules = (await session.execute(sched_q)).scalars().all()
+    overrides = (
+        await session.execute(
+            select(DailyRouteOverride).where(
+                DailyRouteOverride.route_date >= month_start,
+                DailyRouteOverride.route_date <= month_end,
+            )
+        )
+    ).scalars().all()
+    override_map = {
+        (override.rep_id, override.route_date): override for override in overrides
+    }
 
     log_q = (
         select(VisitLog)
@@ -134,7 +166,7 @@ async def export_schedule(
     # ════════════════════════════════════════════════════════════════════════
     ws1 = wb.active
     ws1.title = "Расписание"
-    ws1.merge_cells("A1:J1")
+    ws1.merge_cells("A1:M1")
     ws1["A1"] = f"ПЛАН ПОСЕЩЕНИЙ — {month}"
     ws1["A1"].font = Font(bold=True, size=13)
     ws1["A1"].alignment = Alignment(horizontal="center")
@@ -142,12 +174,32 @@ async def export_schedule(
     SCHED_COLS = [
         "Дата", "Сотрудник", "ТТ", "Адрес",
         "Категория", "Статус", "Время прихода", "Время ухода",
-        "Широта", "Долгота",
+        "Широта", "Долгота", "ID визита", "ID сотрудника", "ID ТТ",
     ]
     _apply_header(ws1, 2, SCHED_COLS)
 
+    ordered_schedules: list[VisitSchedule] = []
+    grouped_schedules: dict[tuple[date, str], list[VisitSchedule]] = defaultdict(list)
+    for schedule in schedules:
+        grouped_schedules[(schedule.planned_date, schedule.rep_id)].append(schedule)
+
+    for key in sorted(grouped_schedules.keys(), key=lambda item: (item[0], item[1])):
+        rep_day_schedules = grouped_schedules[key]
+        override = override_map.get((key[1], key[0]))
+        if override and override.current_location_order:
+            rep_day_schedules = _sort_schedules_by_location_order(
+                rep_day_schedules,
+                override.current_location_order,
+            )
+        else:
+            rep_day_schedules = sorted(
+                rep_day_schedules,
+                key=lambda item: (item.created_at, item.id),
+            )
+        ordered_schedules.extend(rep_day_schedules)
+
     for i, s in enumerate(
-        sorted(schedules, key=lambda x: (x.planned_date, x.rep_id)), start=3
+        ordered_schedules, start=3
     ):
         lg = logs_by_sched.get(s.id)
         loc = s.location
@@ -167,6 +219,9 @@ async def export_schedule(
             lg.time_out.strftime("%H:%M") if lg and lg.time_out else "",
             getattr(loc, "lat", "") if loc else "",
             getattr(loc, "lon", "") if loc else "",
+            s.id,
+            s.rep_id,
+            s.location_id,
         ]
         for c, val in enumerate(row_data, start=1):
             cell = ws1.cell(row=i, column=c, value=val)
@@ -379,24 +434,37 @@ async def export_schedule(
 
     # Группируем плановые визиты по (дата, сотрудник)
     from collections import defaultdict as _dd
-    day_rep_locs: dict[tuple, list] = _dd(list)
-    for s in schedules:
+    day_rep_schedules: dict[tuple, list[VisitSchedule]] = _dd(list)
+    for s in ordered_schedules:
         if s.status in ("planned", "completed", "rescheduled"):
-            loc = s.location or loc_map.get(s.location_id)
-            if loc and getattr(loc, "lat", None) and getattr(loc, "lon", None):
-                day_rep_locs[(s.planned_date, s.rep_id, rep_map.get(s.rep_id, s.rep_id))].append(loc)
+            day_rep_schedules[(s.planned_date, s.rep_id, rep_map.get(s.rep_id, s.rep_id))].append(s)
 
     nav_row = 3
-    for (dt, rep_id, rep_name), locs in sorted(day_rep_locs.items(), key=lambda x: (x[0][0], x[0][2])):
+    for (dt, rep_id, rep_name), rep_schedules in sorted(day_rep_schedules.items(), key=lambda x: (x[0][0], x[0][2])):
+        override = override_map.get((rep_id, dt))
+        if override and override.current_location_order:
+            rep_schedules = _sort_schedules_by_location_order(
+                rep_schedules,
+                override.current_location_order,
+            )
+
+        locs = [
+            schedule.location or loc_map.get(schedule.location_id)
+            for schedule in rep_schedules
+        ]
+        locs = [
+            loc for loc in locs
+            if loc and getattr(loc, "lat", None) and getattr(loc, "lon", None)
+        ]
         if len(locs) < 2:
             continue
         yandex_parts = "~".join(f"{loc.lat},{loc.lon}" for loc in locs)
         google_parts = "/".join(f"{loc.lat},{loc.lon}" for loc in locs)
-        dgis_first, dgis_last = locs[0], locs[-1]
+        dgis_parts = "/".join(f"{loc.lon},{loc.lat}" for loc in locs)
 
         yandex_url = f"https://yandex.ru/maps/?rtext={yandex_parts}&rtt=auto"
         google_url = f"https://www.google.com/maps/dir/{google_parts}/"
-        dgis_url = f"https://2gis.ru/directions/points/{dgis_first.lon},{dgis_first.lat}/{dgis_last.lon},{dgis_last.lat}"
+        dgis_url = f"https://2gis.ru/directions/points/{dgis_parts}"
 
         ws6.cell(row=nav_row, column=1, value=dt.strftime("%d.%m.%Y") if dt else "")
         ws6.cell(row=nav_row, column=2, value=rep_name)

@@ -398,20 +398,9 @@ describe('API Service', () => {
 
       const mockResponse = {
         data: {
-          total_duration_seconds: 45.2,
-          results: [
-            {
-              model: 'llama',
-              num_tests: 5,
-              avg_response_time_ms: 1250,
-              min_response_time_ms: 850,
-              max_response_time_ms: 2100,
-              avg_quality_score: 0.87,
-              total_cost_rub: 250,
-              success_rate: 1.0,
-              timestamp: '2026-02-13T11:00:00Z'
-            }
-          ]
+          status: 'started',
+          task_id: 'bench_123',
+          mode: 'mock'
         }
       }
 
@@ -419,9 +408,15 @@ describe('API Service', () => {
 
       const result = await runBenchmark(mockRequest)
 
-      expect(result.total_duration_seconds).toBe(45.2)
-      expect(result.results).toHaveLength(1)
-      expect(mockedAxios.post).toHaveBeenCalledWith('/benchmark', mockRequest)
+      expect(result.status).toBe('started')
+      expect(result.task_id).toBe('bench_123')
+      expect(mockedAxios.post).toHaveBeenCalledWith('/benchmark/run', null, {
+        params: {
+          iterations: 5,
+          use_mock: true,
+          use_backend: false
+        }
+      })
     })
   })
 

@@ -6,7 +6,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import SalesRep, VisitSchedule, get_session
+from src.database.models import (
+    DailyRouteOverride,
+    ForceMajeureEvent,
+    SalesRep,
+    SkippedVisitStash,
+    VisitLog,
+    VisitSchedule,
+    get_session,
+)
 from src.schemas.reps import SalesRepCreate, SalesRepResponse, SalesRepUpdate
 
 router = APIRouter(prefix="/reps", tags=["Sales Reps"])
@@ -117,5 +125,45 @@ async def delete_rep(
     rep = await session.get(SalesRep, rep_id)
     if not rep:
         raise HTTPException(status_code=404, detail="Сотрудник не найден")
+
+    schedules_count = (
+        await session.execute(
+            select(func.count()).where(VisitSchedule.rep_id == rep_id)
+        )
+    ).scalar() or 0
+    visits_count = (
+        await session.execute(
+            select(func.count()).where(VisitLog.rep_id == rep_id)
+        )
+    ).scalar() or 0
+    fm_count = (
+        await session.execute(
+            select(func.count()).where(ForceMajeureEvent.rep_id == rep_id)
+        )
+    ).scalar() or 0
+    overrides_count = (
+        await session.execute(
+            select(func.count()).where(DailyRouteOverride.rep_id == rep_id)
+        )
+    ).scalar() or 0
+    stash_count = (
+        await session.execute(
+            select(func.count()).where(SkippedVisitStash.rep_id == rep_id)
+        )
+    ).scalar() or 0
+
+    protected_records = (
+        schedules_count + visits_count + fm_count + overrides_count + stash_count
+    )
+    if protected_records > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Сотрудника нельзя удалить: у него есть связанные расписания, "
+                "визиты или история форс-мажоров. Сначала переведите его в "
+                "неактивный статус."
+            ),
+        )
+
     await session.delete(rep)
     await session.commit()

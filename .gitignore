@@ -72,3 +72,5 @@ coverage.xml
 /e2e/.omc
 /frontend/.omc
 /frontend/coverage
+backend/coverage.xml
+backend/.coverage

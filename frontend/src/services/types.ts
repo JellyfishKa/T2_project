@@ -27,8 +27,9 @@ export interface Route {
 }
 
 export interface RouteDetails extends Route {
-  locations_sequence: string[]
-  locations_data: Location[]
+  locations_sequence?: string[]
+  locations_data?: Location[]
+  metrics?: Metric[]
 }
 
 // ─── Vehicles ────────────────────────────────────────────────────────────────
@@ -272,6 +273,12 @@ export interface BenchmarkRequest {
     lon: number
   }>
   num_iterations: number
+}
+
+export interface BenchmarkRunResponse {
+  status: string
+  task_id: string
+  mode: string
 }
 
 export interface OptimizeRequest {
