@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class Vehicle(BaseModel):
     id: str
@@ -6,6 +6,7 @@ class Vehicle(BaseModel):
     fuel_price_rub: float                 # Стоимость 1 литра топлива
     consumption_city_l_100km: float       # Расход в городе (л/100 км)
     consumption_highway_l_100km: float    # Расход на трассе (л/100 км)
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VehicleCreate(BaseModel):
@@ -17,6 +18,4 @@ class VehicleCreate(BaseModel):
 
 class VehicleResponse(VehicleCreate):
     id: str
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

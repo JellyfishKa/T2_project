@@ -484,11 +484,13 @@ export const updateVisitStatus = async (
  * GET /api/v1/export/schedule?month=YYYY-MM
  */
 export const downloadScheduleExcel = async (month: string): Promise<void> => {
-  const response = await api.get('/export/schedule', {
-    params: { month },
-    responseType: 'blob',
-    timeout: 30_000,
-  })
+  const response = await withRetry(() =>
+    api.get('/export/schedule', {
+      params: { month },
+      responseType: 'blob',
+      timeout: 30_000,
+    })
+  )
   const url = URL.createObjectURL(new Blob([response.data]))
   const link = document.createElement('a')
   link.href = url

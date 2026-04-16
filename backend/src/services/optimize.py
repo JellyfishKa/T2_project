@@ -2,7 +2,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from src.services.model_selector import (
 )
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService
+from src.services.schedule_planner import VISIT_DURATION_MIN
 
 logger = logging.getLogger("optimizer")
 
@@ -63,7 +64,7 @@ class Optimizer:
     async def _calculate_real_metrics(
         self,
         locations: List[PydanticLocation],
-        vehicle: Vehicle = None,
+        vehicle: Optional[Vehicle] = None,
     ) -> Dict[str, Any]:
         if not locations:
             return {
@@ -74,7 +75,7 @@ class Optimizer:
 
         preview = await self.routing_service.build_route_preview(locations,
                                                                  vehicle=vehicle)
-        service_time_minutes = len(locations) * 12
+        service_time_minutes = len(locations) * VISIT_DURATION_MIN
 
         return {
             "distance_km": round(preview["distance_km"], 2),
@@ -88,7 +89,7 @@ class Optimizer:
     async def optimize(
         self,
         db_locations: List[DBLocation],
-        vehicle: Vehicle,
+        vehicle: Optional[Vehicle] = None,
         model: str = "auto",
     ) -> PydanticRoute:
         start_time_ms = int(time.time() * 1000)
@@ -110,7 +111,7 @@ class Optimizer:
 
         optimized_route = await self._generate_with_fallback(
             pydantic_locations[: self.max_locations_per_prompt],
-            vehicle.model_dump(), 
+            vehicle.model_dump() if vehicle else {},
             target_model,
         )
 
@@ -327,7 +328,7 @@ class Optimizer:
     async def generate_variants(
         self,
         db_locations: List[DBLocation],
-        vehicle: Vehicle,
+        vehicle: Optional[Vehicle] = None,
         model: str = "qwen",
     ):
         """
@@ -451,7 +452,7 @@ class Optimizer:
         quality_score: float,
         model_used: str,
         original_location_ids: List[str],
-        vehicle: Vehicle,
+        vehicle: Optional[Vehicle] = None,
     ):
         """
         Сохраняет выбранный пользователем вариант маршрута в БД.
@@ -513,7 +514,6 @@ class Optimizer:
             "response_time_ms": int(time.time() * 1000) - start_time_ms,
             "fallback_reason": None,
             "created_at": datetime.now().isoformat(),
-            "vehicle": vehicle,
         }
 
     # ─── Оригинальный greedy (алгоритм 1, также используется как fallback) ───────

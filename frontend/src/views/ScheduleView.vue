@@ -339,14 +339,15 @@
             <div v-if="mapLinks" class="flex items-center gap-2 mt-2 flex-wrap">
               <span class="text-xs text-gray-400">Открыть маршрут:</span>
               <a :href="mapLinks.yandex" target="_blank" rel="noopener" class="map-link-btn">
-                <img src="https://yastatic.net/s3/front-maps-static/maps-front-maps/src/assets/favicon/favicon-32.png" class="w-4 h-4" alt="" />
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-[10px] font-semibold text-red-700">Я</span>
                 Яндекс
               </a>
               <a :href="mapLinks.google" target="_blank" rel="noopener" class="map-link-btn">
-                <img src="https://www.gstatic.com/images/icons/material/apps/fonts/1x/catalog/v5/favicon.svg" class="w-4 h-4" alt="" />
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">G</span>
                 Google
               </a>
               <a :href="mapLinks.dgis" target="_blank" rel="noopener" class="map-link-btn">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-semibold text-emerald-700">2</span>
                 2ГИС
               </a>
             </div>

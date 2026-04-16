@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Location, SalesRep, VisitSchedule
+from src.models.geo_utils import compute_distance_matrix, compute_route_metrics, infer_category
 
 logger = logging.getLogger("schedule_planner")
 
@@ -26,6 +27,7 @@ WORK_MINUTES = (WORK_END_HOUR - WORK_START_HOUR) * 60   # 540 мин
 MAX_TT_PER_DAY = math.floor(
     (WORK_MINUTES - LUNCH_BREAK_MIN) / (VISIT_DURATION_MIN + AVG_TRAVEL_MIN_PER_TT)
 )   # floor(510/35) = 14 ТТ/день
+MAX_ROUTE_HOURS_PER_DAY = (WORK_MINUTES - LUNCH_BREAK_MIN) / 60 - 0.5  # 0.5h buffer for road variability
 
 CATEGORY_PRIORITY = {"A": 1, "B": 2, "C": 3, "D": 4}
 
@@ -130,6 +132,48 @@ def _next_working_day(d: date, non_working: FrozenSet[date] = frozenset()) -> da
     return nxt
 
 
+def _estimate_route_hours(locations: List[Location]) -> float:
+    """Оценка длительности дневного маршрута с учётом переездов между ТТ."""
+    if not locations:
+        return 0.0
+    if len(locations) == 1:
+        return round(VISIT_DURATION_MIN / 60, 2)
+
+    points = [
+        {
+            "ID": location.id,
+            "name": location.name,
+            "lat": location.lat,
+            "lon": location.lon,
+            "priority": infer_category(location.category or "C"),
+        }
+        for location in locations
+    ]
+    matrix = compute_distance_matrix(points)
+    priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+    start_idx = min(
+        range(len(points)),
+        key=lambda idx: priority_rank.get(points[idx]["priority"], 3),
+    )
+
+    visited = [False] * len(points)
+    order = [start_idx]
+    visited[start_idx] = True
+
+    for _ in range(len(points) - 1):
+        current_idx = order[-1]
+        next_idx = min(
+            (idx for idx in range(len(points)) if not visited[idx]),
+            key=lambda idx: matrix[current_idx][idx],
+        )
+        order.append(next_idx)
+        visited[next_idx] = True
+
+    ordered_ids = [points[idx]["ID"] for idx in order]
+    _, total_time_hours, _ = compute_route_metrics(points, ordered_ids)
+    return total_time_hours
+
+
 # ---------------------------------------------------------------------------
 # Основной планировщик
 # ---------------------------------------------------------------------------
@@ -201,34 +245,48 @@ class SchedulePlanner:
             key=lambda t: (t[1], CATEGORY_PRIORITY.get(t[2], 4))
         )
 
-        # Для каждой (дата, сотрудник) храним оставшиеся слоты
-        rep_day_slots: Dict[Tuple[str, date], int] = defaultdict(lambda: MAX_TT_PER_DAY)
+        locations_by_id = {location.id: location for location in locations}
+        rep_day_locations: Dict[Tuple[str, date], List[Location]] = defaultdict(list)
         schedule_rows: List[VisitSchedule] = []
 
         for (loc_id, target_d, cat) in sorted_tasks:
             check_date = target_d
             assigned = False
+            location = locations_by_id.get(loc_id)
+            if location is None:
+                continue
 
             # Ограниченный lookahead: не дальше ~2 месяца
-            for _ in range(len(all_days) + 31):
+            for _ in range(60):  # hard limit ~2 months lookahead
                 # Пропускаем выходные и праздники
                 if not _is_working_day(check_date, self.non_working):
                     check_date = _next_working_day(check_date, self.non_working)
                     continue
 
-                # Выбираем сотрудника с наибольшим остатком слотов (fairness)
-                best_rep = max(
-                    reps,
-                    key=lambda r: rep_day_slots[(r.id, check_date)],
-                )
-                if rep_day_slots[(best_rep.id, check_date)] > 0:
+                candidates = []
+                for rep in reps:
+                    day_key = (rep.id, check_date)
+                    current_locations = rep_day_locations[day_key]
+                    projected_locations = current_locations + [location]
+                    if len(projected_locations) > MAX_TT_PER_DAY:
+                        continue
+
+                    projected_hours = _estimate_route_hours(projected_locations)
+                    if projected_hours <= MAX_ROUTE_HOURS_PER_DAY:
+                        candidates.append((projected_hours, len(current_locations), rep))
+
+                if candidates:
+                    projected_hours, _, best_rep = min(
+                        candidates,
+                        key=lambda item: (item[0], item[1], item[2].id),
+                    )
                     schedule_rows.append(VisitSchedule(
                         location_id=loc_id,
                         rep_id=best_rep.id,
                         planned_date=check_date,
                         status="planned",
                     ))
-                    rep_day_slots[(best_rep.id, check_date)] -= 1
+                    rep_day_locations[(best_rep.id, check_date)].append(location)
                     assigned = True
                     break
 
