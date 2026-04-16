@@ -29,10 +29,17 @@
           <p class="mt-1 text-sm text-slate-500">Показываем только имя и статус, остальное лучше не перегружать на старте.</p>
         </div>
       </div>
-      <div class="grid gap-3 md:grid-cols-[1fr_220px_auto_auto] md:items-end">
+      <div class="grid gap-3 md:grid-cols-[1fr_200px_220px_auto_auto] md:items-end">
         <div class="flex-1">
           <label class="label">ФИО</label>
           <input v-model="newName" class="input" placeholder="Иванов Иван Иванович" />
+        </div>
+        <div>
+          <label class="label">Автомобиль</label>
+          <select v-model="newVehicleId" class="input">
+            <option :value="null">Такси / Автобус</option>
+            <option v-for="v in vehicles" :key="v.id" :value="v.id">{{ v.name }}</option>
+          </select>
         </div>
         <div>
           <label class="label">Статус</label>
@@ -43,7 +50,7 @@
             <option value="unavailable">Недоступен</option>
           </select>
         </div>
-        <button class="btn-primary" @click="createRep">Сохранить</button>
+        <button class="btn-primary" :disabled="saving" @click="createRep">{{ saving ? 'Сохранение...' : 'Сохранить' }}</button>
         <button class="btn-secondary" @click="showForm = false">Отмена</button>
       </div>
     </div>
@@ -59,7 +66,11 @@
       >
         <div>
           <div class="font-medium text-slate-950">{{ rep.name }}</div>
-          <div class="mt-1 text-sm text-slate-500">ID: {{ rep.id.slice(0, 8) }}…</div>
+          <div class="mt-1 flex items-center gap-2 flex-wrap">
+            <span class="text-sm text-slate-500">ID: {{ rep.id.slice(0, 8) }}…</span>
+            <span v-if="rep.vehicle_name" class="badge badge-blue">🚗 {{ rep.vehicle_name }}</span>
+            <span v-else class="badge badge-gray">🚕 Такси / Автобус</span>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <span :class="statusClass(rep.status)" class="badge">
@@ -75,6 +86,14 @@
             <option value="vacation">В отпуске</option>
             <option value="unavailable">Недоступен</option>
           </select>
+          <select
+            :value="rep.vehicle_id ?? ''"
+            class="input-sm"
+            @change="assignVehicle(rep.id, ($event.target as HTMLSelectElement).value || null)"
+          >
+            <option value="">Такси / Автобус</option>
+            <option v-for="v in vehicles" :key="v.id" :value="v.id">{{ v.name }}</option>
+          </select>
           <button
             class="btn-danger-sm"
             @click="deleteRep(rep.id)"
@@ -89,22 +108,26 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import type { SalesRep } from '@/services/types'
+import type { SalesRep, Vehicle } from '@/services/types'
 import {
   fetchReps,
   createRep as apiCreateRep,
   updateRep,
   deleteRep as apiDeleteRep,
+  fetchVehicles,
 } from '@/services/api'
 import PageHero from '@/components/common/PageHero.vue'
 import InfoStatCard from '@/components/common/InfoStatCard.vue'
 
 const reps = ref<SalesRep[]>([])
+const vehicles = ref<Vehicle[]>([])
 const loading = ref(false)
+const saving = ref(false)
 const error = ref<string | null>(null)
 const showForm = ref(false)
 const newName = ref('')
 const newStatus = ref<SalesRep['status']>('active')
+const newVehicleId = ref<string | null>(null)
 
 const activeCount = computed(() =>
   reps.value.filter((rep) => rep.status === 'active').length
@@ -118,31 +141,61 @@ async function loadReps() {
   loading.value = true
   error.value = null
   try {
-    reps.value = await fetchReps()
+    [reps.value, vehicles.value] = await Promise.all([fetchReps(), fetchVehicles()])
   } catch (e) {
-    error.value = 'Ошибка загрузки сотрудников'
+    error.value = 'Ошибка загрузки данных'
   } finally {
     loading.value = false
   }
 }
 
 async function createRep() {
-  if (!newName.value.trim()) return
-  await apiCreateRep(newName.value.trim(), newStatus.value)
-  newName.value = ''
-  showForm.value = false
-  await loadReps()
+  if (!newName.value.trim() || saving.value) return
+  saving.value = true
+  error.value = null
+  try {
+    await apiCreateRep(newName.value.trim(), newStatus.value, newVehicleId.value)
+    newName.value = ''
+    newVehicleId.value = null
+    showForm.value = false
+    await loadReps()
+  } catch {
+    error.value = 'Ошибка создания сотрудника'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function assignVehicle(id: string, vehicleId: string | null) {
+  error.value = null
+  try {
+    const updated = await updateRep(id, { vehicle_id: vehicleId })
+    const idx = reps.value.findIndex(r => r.id === id)
+    if (idx !== -1) reps.value[idx] = updated
+  } catch {
+    error.value = 'Ошибка привязки автомобиля'
+  }
 }
 
 async function updateStatus(id: string, status: string) {
-  await updateRep(id, { status: status as SalesRep['status'] })
-  await loadReps()
+  error.value = null
+  try {
+    await updateRep(id, { status: status as SalesRep['status'] })
+    await loadReps()
+  } catch {
+    error.value = 'Ошибка обновления статуса'
+  }
 }
 
 async function deleteRep(id: string) {
   if (!confirm('Удалить сотрудника?')) return
-  await apiDeleteRep(id)
-  await loadReps()
+  error.value = null
+  try {
+    await apiDeleteRep(id)
+    await loadReps()
+  } catch {
+    error.value = 'Ошибка удаления сотрудника'
+  }
 }
 
 function statusLabel(s: string) {
@@ -174,4 +227,5 @@ onMounted(loadReps)
 .badge-red { @apply bg-red-100 text-red-800; }
 .badge-yellow { @apply bg-yellow-100 text-yellow-800; }
 .badge-gray { @apply bg-gray-100 text-gray-700; }
+.badge-blue { @apply bg-blue-100 text-blue-800; }
 </style>

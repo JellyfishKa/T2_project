@@ -3,12 +3,12 @@ import logging
 import math
 from collections import defaultdict
 from datetime import date, time, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import DailyRouteOverride, ForceMajeureEvent, SalesRep, VisitSchedule
+from src.database.models import DailyRouteOverride, ForceMajeureEvent, Holiday, SalesRep, VisitSchedule
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
     MAX_TT_PER_DAY,
@@ -30,9 +30,9 @@ def _estimated_visit_time(visit_index: int) -> time:
     return time(hour=h % 24, minute=m)
 
 
-def _next_working_day(d: date) -> date:
+def _next_working_day(d: date, non_working: FrozenSet[date] = frozenset()) -> date:
     nxt = d + timedelta(days=1)
-    while nxt.weekday() >= 5:
+    while nxt.weekday() >= 5 or nxt in non_working:
         nxt += timedelta(days=1)
     return nxt
 
@@ -63,6 +63,16 @@ class ForceMajeureService:
         rep = await self.db.get(SalesRep, rep_id)
         if not rep:
             raise ValueError(f"Сотрудник {rep_id} не найден")
+
+        # --- 1b. Загружаем нерабочие праздники на 60 дней вперёд ---
+        lookahead_end = event_date + timedelta(days=60)
+        holidays_q = await self.db.execute(
+            select(Holiday.date).where(
+                Holiday.date.between(event_date, lookahead_end),
+                Holiday.is_working.is_(False),
+            )
+        )
+        non_working: FrozenSet[date] = frozenset(holidays_q.scalars().all())
 
         # --- 2. Плановые визиты на день события ---
         stmt = select(VisitSchedule).where(
@@ -123,7 +133,7 @@ class ForceMajeureService:
                         continue
                     # Ищем ближайший рабочий день с запасом для всего чанка
                     target_date = await self._find_available_day(
-                        target_rep.id, event_date, chunk_size=len(loc_ids)
+                        target_rep.id, event_date, chunk_size=len(loc_ids), non_working=non_working
                     )
                     # Создаём новые плановые записи
                     for loc_id in loc_ids:
@@ -176,10 +186,11 @@ class ForceMajeureService:
         }
 
     async def _find_available_day(
-        self, rep_id: str, after_date: date, chunk_size: int = 1
+        self, rep_id: str, after_date: date, chunk_size: int = 1,
+        non_working: FrozenSet[date] = frozenset(),
     ) -> date:
         """Ищет ближайший рабочий день после after_date, где влезает chunk_size ТТ."""
-        candidate = _next_working_day(after_date)
+        candidate = _next_working_day(after_date, non_working)
         for _ in range(30):  # не дальше месяца вперёд
             count_stmt = select(VisitSchedule).where(
                 VisitSchedule.rep_id == rep_id,
@@ -190,5 +201,5 @@ class ForceMajeureService:
             existing = len(count_result.scalars().all())
             if existing + chunk_size <= MAX_TT_PER_DAY:
                 return candidate
-            candidate = _next_working_day(candidate)
+            candidate = _next_working_day(candidate, non_working)
         return candidate

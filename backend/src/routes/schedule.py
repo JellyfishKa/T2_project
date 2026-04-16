@@ -104,21 +104,22 @@ async def generate_schedule(
         )
 
     if existing_count > 0 and force:
-        # Удаляем существующие planned-визиты за этот месяц
+        # Удаляем planned/rescheduled/skipped визиты за этот месяц (completed/cancelled не трогаем)
         planned_q = await session.execute(
             select(VisitSchedule).where(
                 VisitSchedule.planned_date.between(month_start, month_end),
-                VisitSchedule.status == "planned",
+                VisitSchedule.status.in_(["planned", "rescheduled", "skipped"]),
             )
         )
         for vs in planned_q.scalars().all():
-            await session.delete(vs)
+            session.delete(vs)
         await session.flush()
 
-    # Загружаем нерабочие праздники из БД за этот месяц
+    # Загружаем нерабочие праздники из БД за месяц + 31 день lookahead
+    from datetime import timedelta as _td
     holidays_q = await session.execute(
         select(Holiday.date).where(
-            Holiday.date.between(month_start, month_end),
+            Holiday.date.between(month_start, month_end + _td(days=31)),
             Holiday.is_working.is_(False),
         )
     )
@@ -788,7 +789,7 @@ async def revert_day_route_override(
         )
     )
 
-    await session.delete(override)
+    session.delete(override)
     await session.commit()
     return await _build_daily_route_response(session, rep_id, target_date)
 
@@ -805,8 +806,8 @@ def _schedule_to_item(s: VisitSchedule, log: Optional[VisitLog] = None) -> Visit
         rep_name=rep.name if rep else s.rep_id,
         planned_date=s.planned_date,
         status=s.status,
-        time_in=str(log.time_in)[:5] if log and log.time_in else None,
-        time_out=str(log.time_out)[:5] if log and log.time_out else None,
+        time_in=log.time_in.strftime("%H:%M") if log and log.time_in else None,
+        time_out=log.time_out.strftime("%H:%M") if log and log.time_out else None,
     )
 
 

@@ -210,8 +210,13 @@
         </div>
         <div v-if="genResult" class="mt-3 text-sm" :class="genResult.startsWith('Ошибка') ? 'text-red-600' : 'text-green-600'">
           {{ genResult }}
-          <button v-if="genCanForce" class="ml-2 underline text-yellow-600 hover:text-yellow-700" @click="generatePlan(true)">
-            Пересоздать
+        </div>
+        <div v-if="genCanForce" class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-xs text-red-700 mb-2">
+            План за этот месяц уже существует. Перегенерация удалит все запланированные, перенесённые и пропущенные визиты.
+          </p>
+          <button class="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded font-medium" :disabled="generating" @click="generatePlan(true)">
+            {{ generating ? 'Генерация…' : 'Перегенерировать план' }}
           </button>
         </div>
       </div>
@@ -318,6 +323,33 @@
             <p class="text-xs text-gray-500 mt-1">
               {{ activePlannerHint }}
             </p>
+            <!-- Транспорт ТП -->
+            <div class="flex items-center gap-2 mt-2 flex-wrap">
+              <select v-model="dayTransportMode" class="input-sm" @change="void refreshDayRouteMetrics()">
+                <option value="car">🚗 Автомобиль</option>
+                <option value="taxi">🚕 Такси</option>
+                <option value="bus">🚌 Автобус</option>
+              </select>
+              <select v-if="dayTransportMode === 'car'" v-model="dayVehicleId" class="input-sm" @change="void refreshDayRouteMetrics()">
+                <option :value="null">— авто по умолч. —</option>
+                <option v-for="v in vehicles" :key="v.id" :value="v.id">{{ v.name }}</option>
+              </select>
+            </div>
+            <!-- Map export links -->
+            <div v-if="mapLinks" class="flex items-center gap-2 mt-2 flex-wrap">
+              <span class="text-xs text-gray-400">Открыть маршрут:</span>
+              <a :href="mapLinks.yandex" target="_blank" rel="noopener" class="map-link-btn">
+                <img src="https://yastatic.net/s3/front-maps-static/maps-front-maps/src/assets/favicon/favicon-32.png" class="w-4 h-4" alt="" />
+                Яндекс
+              </a>
+              <a :href="mapLinks.google" target="_blank" rel="noopener" class="map-link-btn">
+                <img src="https://www.gstatic.com/images/icons/material/apps/fonts/1x/catalog/v5/favicon.svg" class="w-4 h-4" alt="" />
+                Google
+              </a>
+              <a :href="mapLinks.dgis" target="_blank" rel="noopener" class="map-link-btn">
+                2ГИС
+              </a>
+            </div>
           </div>
           <div class="flex items-center gap-2">
             <button
@@ -759,6 +791,8 @@ import type {
   SkippedStashItem,
   VisitScheduleItem,
   RouteVariant,
+  Vehicle,
+  TransportMode,
 } from '@/services/types'
 import {
   optimizeVariants,
@@ -781,6 +815,7 @@ import {
   resolveStashCarryOver,
   resolveStashAI,
   discardStashEntry,
+  fetchVehicles,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -847,6 +882,9 @@ const previewLoading = ref(false)
 const originalRouteMetrics = ref<RouteMetrics | null>(null)
 const currentRouteMetrics = ref<RouteMetrics | null>(null)
 const draftRouteMetrics = ref<RouteMetrics | null>(null)
+const vehicles = ref<Vehicle[]>([])
+const dayTransportMode = ref<TransportMode>('car')
+const dayVehicleId = ref<string | null>(null)
 const plannerPanel = ref<'draft' | 'ai'>('draft')
 const comparisonExpanded = ref(false)
 const draftDragFromIndex = ref<number | null>(null)
@@ -909,6 +947,23 @@ const selectedVariant = computed<RouteVariant | null>(() => {
 
 const currentDayVisits = computed(() => getVisitsByLocationOrder(currentLocationIds.value))
 const originalDayVisits = computed(() => getVisitsByLocationOrder(originalLocationIds.value))
+
+// ─── Map links for current day route ──────────────────────────────────────────
+const mapLinks = computed(() => {
+  const points = currentLocationIds.value
+    .map(id => locationsById.value.get(id))
+    .filter((loc): loc is Location => !!loc && typeof loc.lat === 'number' && typeof loc.lon === 'number')
+  if (points.length < 2) return null
+  const yandexParts = points.map(p => `${p.lat},${p.lon}`).join('~')
+  const googleParts = points.map(p => `${p.lat},${p.lon}`).join('/')
+  const dgisFirst = points[0]
+  const dgisLast = points[points.length - 1]
+  return {
+    yandex: `https://yandex.ru/maps/?rtext=${yandexParts}&rtt=auto`,
+    google: `https://www.google.com/maps/dir/${googleParts}/`,
+    dgis: `https://2gis.ru/directions/points/${dgisFirst.lon},${dgisFirst.lat}/${dgisLast.lon},${dgisLast.lat}`,
+  }
+})
 const draftDayVisits = computed(() =>
   getVisitsByLocationOrder(isDraftDirty.value ? draftLocationIds.value : currentLocationIds.value)
 )
@@ -1169,7 +1224,7 @@ function buildRoutePoints(locationIds: string[]): RoutePoint[] {
     const visit = visitLookup.get(locationId)
     const location = locationsById.value.get(locationId)
     if (!visit || !location) {
-      console.warn('RouteMap: location not found for visit', locationId)
+      if (import.meta.env.DEV) console.warn('RouteMap: location not found for visit', locationId)
       return
     }
     points.push({
@@ -1202,7 +1257,10 @@ async function getRouteMetricsForLocationIds(locationIds: string[]): Promise<Rou
     }
   }
 
-  const preview = await fetchRoutePreview(points)
+  const preview = await fetchRoutePreview(points, {
+    vehicle_id: dayVehicleId.value,
+    transport_mode: dayTransportMode.value,
+  })
   return {
     distance_km: preview.distance_km,
     time_hours: preview.time_minutes / 60,
@@ -1320,6 +1378,9 @@ async function toggleHoliday(h: Holiday) {
     } else {
       holidayToggleMsg.value = `День ${h.date} теперь ${newIsWorking ? 'рабочий' : 'нерабочий'}.`
       holidayToggleMsgError.value = false
+    }
+    if (showDayModal.value && selectedDayRoute.value?.date === h.date) {
+      void refreshDayRouteMetrics()
     }
   } catch (e: any) {
     holidayToggleMsg.value = `Ошибка: ${e?.message ?? e}`
@@ -1439,6 +1500,10 @@ async function handleExport() {
 // ─── Day modal ────────────────────────────────────────────────────────────────
 function openDayModal(route: DailyRoute) {
   selectedDayRoute.value = route
+  // Pre-fill transport mode from rep's assigned car
+  const repData = reps.value.find(r => r.id === route.rep_id)
+  dayVehicleId.value = repData?.vehicle_id ?? null
+  dayTransportMode.value = dayVehicleId.value ? 'car' : 'taxi'
   dayOptResult.value = null
   dayOptError.value = null
   selectedVariantId.value = null
@@ -1641,7 +1706,7 @@ watch(showHolidays, async (val) => {
   if (val && allHolidays.value.length === 0) {
     allHolidaysLoading.value = true
     holidayToggleMsg.value = null
-    allHolidays.value = await fetchHolidays({ year: 2026 }).catch(() => [])
+    allHolidays.value = await fetchHolidays({ year: parseInt(currentMonth.value.split('-')[0]) }).catch(() => [])
     allHolidaysLoading.value = false
   }
   if (!val) holidayToggleMsg.value = null
@@ -1673,6 +1738,7 @@ onMounted(() => {
   loadReps()
   loadLocations()
   loadSkippedStash()
+  fetchVehicles().then(v => { vehicles.value = v }).catch(() => {})
 })
 </script>
 
@@ -1695,6 +1761,7 @@ onMounted(() => {
 .planner-tab { @apply rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors; }
 .planner-tab--active { @apply border-blue-600 bg-blue-600 text-white; }
 .planner-route-row { @apply flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 bg-white transition-colors; }
+.map-link-btn { @apply inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 no-underline; }
 .planner-route-row--drag { @apply border-blue-300 bg-blue-50; }
 .planner-drag-handle { @apply text-gray-400 text-sm select-none cursor-grab; }
 .planner-action-bar { @apply flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100; }

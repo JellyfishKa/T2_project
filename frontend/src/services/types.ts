@@ -31,11 +31,24 @@ export interface RouteDetails extends Route {
   locations_data: Location[]
 }
 
+// ─── Vehicles ────────────────────────────────────────────────────────────────
+export interface Vehicle {
+  id: string
+  name: string
+  fuel_price_rub: number
+  consumption_city_l_100km: number
+  consumption_highway_l_100km: number
+}
+
+export type TransportMode = 'car' | 'taxi' | 'bus'
+
 // ─── Sales Reps ─────────────────────────────────────────────────────────────
 export interface SalesRep {
   id: string
   name: string
   status: 'active' | 'sick' | 'vacation' | 'unavailable'
+  vehicle_id: string | null
+  vehicle_name: string | null
   created_at: string
 }
 
@@ -205,6 +218,7 @@ export interface RoutePreviewResponse {
   cost_rub: number
   traffic_lights_count: number
   source: string
+  transport_mode: TransportMode
 }
 
 // ─── Holiday ──────────────────────────────────────────────────────────────────

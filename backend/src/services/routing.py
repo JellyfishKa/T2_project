@@ -13,6 +13,10 @@ from src.schemas.vehicle import Vehicle
 
 logger = logging.getLogger("routing")
 
+# Тарифы для общественного транспорта
+TAXI_RATE_RUB_PER_KM: float = 20.0   # ₽/км (приблизительно Саранск)
+BUS_FARE_RUB_PER_LEG: float = 33.0   # ₽ за одну поездку/пересадку
+
 
 class RoutingService:
     def __init__(self) -> None:
@@ -22,25 +26,35 @@ class RoutingService:
         ).rstrip("/")
         self.timeout = float(os.getenv("ROAD_ROUTER_TIMEOUT_SEC", "8"))
 
-    # ─── Новый метод для расчета топлива ──────────────────────────────────────
     def _calculate_dynamic_cost(
-        self, 
-        distance_km: float, 
-        region_classification: str, 
-        vehicle: Optional[Vehicle]
+        self,
+        distance_km: float,
+        region_classification: str,
+        vehicle: Optional[Vehicle],
+        transport_mode: str = "car",
+        num_legs: int = 0,
     ) -> float:
-        """Считает стоимость топлива на основе типа местности и параметров авто."""
+        """Расчёт транспортных расходов ТП за проход маршрута.
+
+        car  → расход топлива авто (л/100км × цена топлива)
+        taxi → километровый тариф (TAXI_RATE_RUB_PER_KM)
+        bus  → плоский тариф за каждую пересадку (BUS_FARE_RUB_PER_LEG × legs)
+        """
+        if transport_mode == "taxi":
+            return round(distance_km * TAXI_RATE_RUB_PER_KM, 2)
+
+        if transport_mode == "bus":
+            legs = num_legs if num_legs > 0 else 1
+            return round(legs * BUS_FARE_RUB_PER_LEG, 2)
+
+        # car (default)
         if not vehicle:
-            # Если машину не передали, используем старую логику по умолчанию
             return estimate_fuel_cost(distance_km)
-
-        # Выбираем расход в зависимости от классификации региона
-        if region_classification == "urban":
-            consumption = vehicle.consumption_city_l_100km
-        else:
-            # Для трассы / пригорода
-            consumption = vehicle.consumption_highway_l_100km
-
+        consumption = (
+            vehicle.consumption_city_l_100km
+            if region_classification == "urban"
+            else vehicle.consumption_highway_l_100km
+        )
         liters_used = (distance_km / 100) * consumption
         return round(liters_used * vehicle.fuel_price_rub, 2)
 
@@ -48,6 +62,7 @@ class RoutingService:
         self,
         points: Sequence[Any],
         vehicle: Optional[Vehicle] = None,
+        transport_mode: str = "car",
     ) -> dict[str, Any]:
         valid_points = [
             {"lat": float(point.lat), "lon": float(point.lon)}
@@ -63,6 +78,7 @@ class RoutingService:
                 "cost_rub": 0.0,
                 "traffic_lights_count": 0,
                 "source": "empty",
+                "transport_mode": transport_mode,
             }
 
         if len(valid_points) == 1:
@@ -75,22 +91,26 @@ class RoutingService:
                 "cost_rub": 0.0,
                 "traffic_lights_count": 0,
                 "source": "single_point",
+                "transport_mode": transport_mode,
             }
 
+        num_legs = len(valid_points) - 1
         # Определяем регион один раз для всего маршрута
         region_info = detect_region_info(valid_points)
 
-        road_preview = await self._fetch_osrm_preview(valid_points, region_info, vehicle)
+        road_preview = await self._fetch_osrm_preview(valid_points, region_info, vehicle, transport_mode, num_legs)
         if road_preview is not None:
             return road_preview
 
-        return self._build_fallback_preview(valid_points, region_info, vehicle)
+        return self._build_fallback_preview(valid_points, region_info, vehicle, transport_mode, num_legs)
 
     async def _fetch_osrm_preview(
         self,
         points: list[dict[str, float]],
         region_info: dict[str, Any],
         vehicle: Optional[Vehicle],
+        transport_mode: str = "car",
+        num_legs: int = 0,
     ) -> dict[str, Any] | None:
         coordinates = ";".join(
             f"{point['lon']:.6f},{point['lat']:.6f}" for point in points
@@ -132,11 +152,12 @@ class RoutingService:
                 2,
             )
             
-            # Динамический расчет стоимости
             cost_rub = self._calculate_dynamic_cost(
-                distance_km, 
-                region_info.get("classification", "urban"), 
-                vehicle
+                distance_km,
+                region_info.get("classification", "urban"),
+                vehicle,
+                transport_mode,
+                num_legs,
             )
 
             return {
@@ -146,6 +167,7 @@ class RoutingService:
                 "cost_rub": cost_rub,
                 "traffic_lights_count": traffic_lights_count,
                 "source": "road_network",
+                "transport_mode": transport_mode,
             }
         except Exception as exc:
             logger.warning("Road routing response parse failed: %s", exc)
@@ -156,6 +178,8 @@ class RoutingService:
         points: list[dict[str, float]],
         region_info: dict[str, Any],
         vehicle: Optional[Vehicle],
+        transport_mode: str = "car",
+        num_legs: int = 0,
     ) -> dict[str, Any]:
         total_distance = 0.0
         for start, end in zip(points, points[1:]):
@@ -166,13 +190,14 @@ class RoutingService:
             total_distance,
             region_info,
         )
-        
+
         classification = region_info.get("classification", "urban")
         speed_kmh = 60.0 if classification == "urban" else 90.0
         drive_time_minutes = (total_distance / speed_kmh) * 60 if speed_kmh else 0.0
 
-        # Динамический расчет стоимости
-        cost_rub = self._calculate_dynamic_cost(total_distance, classification, vehicle)
+        cost_rub = self._calculate_dynamic_cost(
+            total_distance, classification, vehicle, transport_mode, num_legs
+        )
 
         return {
             "geometry": [(point["lat"], point["lon"]) for point in points],
@@ -181,6 +206,7 @@ class RoutingService:
             "cost_rub": cost_rub,
             "traffic_lights_count": traffic_lights_count,
             "source": "fallback",
+            "transport_mode": transport_mode,
         }
 
     def _estimate_fallback_leg_distance(
