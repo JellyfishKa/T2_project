@@ -7,6 +7,7 @@ import * as api from '@/services/api'
 vi.mock('@/services/api', () => ({
   fetchMonthlySchedule: vi.fn(),
   fetchReps: vi.fn(),
+  fetchVehicles: vi.fn(),
   generateSchedule: vi.fn(),
   createForceMajeure: vi.fn(),
   updateVisitStatus: vi.fn(),
@@ -19,6 +20,11 @@ vi.mock('@/services/api', () => ({
   fetchHolidays: vi.fn().mockResolvedValue([]),
   patchHoliday: vi.fn(),
   fetchAllLocations: vi.fn().mockResolvedValue([]),
+  fetchSkippedStash: vi.fn().mockResolvedValue([]),
+  resolveStashManual: vi.fn(),
+  resolveStashCarryOver: vi.fn(),
+  resolveStashAI: vi.fn(),
+  discardStashEntry: vi.fn(),
 }))
 
 // Stub RouteMap so ScheduleView tests don't need Leaflet
@@ -69,6 +75,10 @@ const mockReps = [
   { id: 'rep-1', name: 'Иванов', status: 'active', created_at: '2026-01-01T00:00:00Z' },
 ]
 
+const mockVehicles = [
+  { id: 'veh-1', name: 'Lada', fuel_price_rub: 60, consumption_city_l_100km: 8, consumption_highway_l_100km: 6 },
+]
+
 describe('ScheduleView.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -79,6 +89,7 @@ describe('ScheduleView.vue', () => {
     setItemSpy.mockImplementation((key: string, value: string) => { localStore[key] = value })
     ;(api.fetchMonthlySchedule as any).mockResolvedValue(mockPlan)
     ;(api.fetchReps as any).mockResolvedValue(mockReps)
+    ;(api.fetchVehicles as any).mockResolvedValue(mockVehicles)
     ;(api.generateSchedule as any).mockResolvedValue({ total_visits_planned: 100, coverage_pct: 95 })
     ;(api.createForceMajeure as any).mockResolvedValue({ affected_tt_count: 3 })
     ;(api.updateVisitStatus as any).mockResolvedValue({ ...mockPlan.routes[0].visits[0], status: 'completed' })
@@ -138,6 +149,12 @@ describe('ScheduleView.vue', () => {
     mount(ScheduleView)
     await flushPromises()
     expect(api.fetchReps).toHaveBeenCalledTimes(1)
+  })
+
+  it('загрузка автомобилей вызывает fetchVehicles', async () => {
+    mount(ScheduleView)
+    await flushPromises()
+    expect(api.fetchVehicles).toHaveBeenCalledTimes(1)
   })
 
   it('отображает ошибку при неудачной загрузке', async () => {

@@ -71,3 +71,4 @@ coverage.xml
 /.repowise
 /e2e/.omc
 /frontend/.omc
+/frontend/coverage

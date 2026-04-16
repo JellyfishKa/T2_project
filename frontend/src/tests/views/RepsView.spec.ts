@@ -6,6 +6,7 @@ import * as api from '@/services/api'
 // Мокаем API
 vi.mock('@/services/api', () => ({
   fetchReps: vi.fn(),
+  fetchVehicles: vi.fn(),
   createRep: vi.fn(),
   updateRep: vi.fn(),
   deleteRep: vi.fn(),
@@ -16,10 +17,15 @@ const mockReps = [
   { id: 'rep-2', name: 'Петров Пётр', status: 'sick', created_at: '2026-01-02T00:00:00Z' },
 ]
 
+const mockVehicles = [
+  { id: 'veh-1', name: 'Lada Vesta', fuel_price_rub: 60, consumption_city_l_100km: 8, consumption_highway_l_100km: 6 },
+]
+
 describe('RepsView.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(api.fetchReps as any).mockResolvedValue(mockReps)
+    ;(api.fetchVehicles as any).mockResolvedValue(mockVehicles)
     ;(api.createRep as any).mockResolvedValue({ id: 'rep-3', name: 'Сидоров', status: 'active', created_at: '2026-03-01T00:00:00Z' })
     ;(api.updateRep as any).mockResolvedValue({ ...mockReps[0], status: 'sick' })
     ;(api.deleteRep as any).mockResolvedValue(undefined)
@@ -63,7 +69,7 @@ describe('RepsView.vue', () => {
       if (saveBtn) {
         await saveBtn.trigger('click')
         await flushPromises()
-        expect(api.createRep).toHaveBeenCalledWith('Новый Сотрудник', 'active')
+        expect(api.createRep).toHaveBeenCalledWith('Новый Сотрудник', 'active', null)
       }
     }
   })
@@ -110,6 +116,6 @@ describe('RepsView.vue', () => {
     ;(api.fetchReps as any).mockRejectedValueOnce(new Error('Нет соединения'))
     const wrapper = mount(RepsView)
     await flushPromises()
-    expect(wrapper.text()).toContain('Ошибка загрузки сотрудников')
+    expect(wrapper.text()).toContain('Ошибка загрузки данных')
   })
 })
