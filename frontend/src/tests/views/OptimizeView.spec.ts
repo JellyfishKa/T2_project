@@ -171,6 +171,7 @@ describe('OptimizeView.vue', () => {
       cost_rub: 980,
       traffic_lights_count: 5,
       source: 'road_network',
+      transport_mode: 'car' as const,
     })
     mockedOptimizeVariants.mockResolvedValue({
       variants: [variant],
@@ -374,6 +375,7 @@ describe('OptimizeView.vue', () => {
       cost_rub: 860,
       traffic_lights_count: 4,
       source: 'road_network',
+      transport_mode: 'car' as const,
     })
     wrapper.vm.handleMoveResultLocation({ index: 0, direction: 1 })
     await flushPromises()
@@ -389,6 +391,7 @@ describe('OptimizeView.vue', () => {
       cost_rub: 740,
       traffic_lights_count: 5,
       source: 'road_network',
+      transport_mode: 'car' as const,
     })
     wrapper.vm.restoreAiRoute()
     await flushPromises()
@@ -403,6 +406,7 @@ describe('OptimizeView.vue', () => {
       cost_rub: 980,
       traffic_lights_count: 5,
       source: 'road_network',
+      transport_mode: 'car' as const,
     })
     wrapper.vm.restoreOriginalRoute()
     await flushPromises()

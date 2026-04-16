@@ -69,3 +69,5 @@ coverage.xml
 .mcp.json
 /.omc
 /.repowise
+/e2e/.omc
+/frontend/.omc
