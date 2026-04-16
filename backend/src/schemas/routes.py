@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.schemas.locations import LocationResponse
+
 
 class RouteResponse(BaseModel):
     """Schema for route list items.
@@ -45,6 +47,8 @@ class RouteDetailResponse(BaseModel):
     id: str
     name: str
     locations: List[str] = []
+    locations_sequence: List[str] = []
+    locations_data: List[LocationResponse] = []
     total_distance_km: float = 0.0
     total_time_hours: float = 0.0
     total_cost_rub: float = 0.0

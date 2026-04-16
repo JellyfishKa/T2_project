@@ -152,7 +152,6 @@ async def generate_schedule(
     existing_q = await session.execute(
         select(func.count()).where(
             VisitSchedule.planned_date.between(month_start, month_end),
-            VisitSchedule.status == "planned",
         )
     )
     existing_count = existing_q.scalar() or 0
@@ -161,22 +160,47 @@ async def generate_schedule(
         raise HTTPException(
             status_code=409,
             detail={
-                "message": f"Расписание на {req.month} уже существует ({existing_count} плановых визитов). "
+                "message": f"Расписание на {req.month} уже существует ({existing_count} записей). "
                            "Используйте ?force=true для перегенерации.",
                 "existing_count": existing_count,
             },
         )
 
     if existing_count > 0 and force:
-        # Удаляем planned/rescheduled/skipped визиты за этот месяц (completed/cancelled не трогаем)
-        planned_q = await session.execute(
+        schedules_q = await session.execute(
             select(VisitSchedule).where(
                 VisitSchedule.planned_date.between(month_start, month_end),
-                VisitSchedule.status.in_(["planned", "rescheduled", "skipped"]),
             )
         )
-        for vs in planned_q.scalars().all():
+        schedules_to_delete = schedules_q.scalars().all()
+        schedule_ids = [vs.id for vs in schedules_to_delete]
+
+        if schedule_ids:
+            logs_q = await session.execute(
+                select(VisitLog).where(VisitLog.schedule_id.in_(schedule_ids))
+            )
+            for log in logs_q.scalars().all():
+                await session.delete(log)
+
+        for vs in schedules_to_delete:
             await session.delete(vs)
+
+        overrides_q = await session.execute(
+            select(DailyRouteOverride).where(
+                DailyRouteOverride.route_date.between(month_start, month_end)
+            )
+        )
+        for override in overrides_q.scalars().all():
+            await session.delete(override)
+
+        stash_q = await session.execute(
+            select(SkippedVisitStash).where(
+                SkippedVisitStash.original_date.between(month_start, month_end)
+            )
+        )
+        for stash_entry in stash_q.scalars().all():
+            await session.delete(stash_entry)
+
         await session.flush()
 
     # Загружаем нерабочие праздники из БД за месяц + 31 день lookahead

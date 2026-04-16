@@ -6,6 +6,7 @@ import type {
   Metric,
   BenchmarkResult,
   BenchmarkRequest,
+  BenchmarkRunResponse,
   OptimizeRequest,
   OptimizeVariantsResponse,
   ConfirmVariantRequest,
@@ -301,11 +302,16 @@ export const fetchRouteMetrics = async (
  */
 export const runBenchmark = async (
   request: BenchmarkRequest
-): Promise<{
-  total_duration_seconds: number
-  results: BenchmarkResult[]
-}> => {
-  const response = await withRetry(() => api.post('/benchmark', request))
+): Promise<BenchmarkRunResponse> => {
+  const response = await withRetry(() =>
+    api.post('/benchmark/run', null, {
+      params: {
+        iterations: request.num_iterations,
+        use_mock: true,
+        use_backend: false
+      }
+    })
+  )
   return response.data
 }
 
@@ -617,6 +623,7 @@ export type {
   Metric,
   BenchmarkResult,
   BenchmarkRequest,
+  BenchmarkRunResponse,
   OptimizeRequest,
   OptimizeVariantsResponse,
   ConfirmVariantRequest,

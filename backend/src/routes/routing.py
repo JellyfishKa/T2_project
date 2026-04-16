@@ -76,7 +76,7 @@ async def preview_route(
             vehicle = result.scalar_one_or_none()
 
     from src.schemas.vehicle import Vehicle as VehicleSchema
-    vehicle_schema = VehicleSchema.model_validate(vehicle) if vehicle else None
+    vehicle_schema = VehicleSchema.model_validate(vehicle, from_attributes=True) if vehicle else None
 
     routing_service = RoutingService()
     preview = await routing_service.build_route_preview(

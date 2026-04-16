@@ -7,12 +7,22 @@ from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from src.database.models import DailyRouteOverride, ForceMajeureEvent, Holiday, SalesRep, VisitSchedule
+from src.database.models import (
+    DailyRouteOverride,
+    ForceMajeureEvent,
+    Holiday,
+    Location,
+    SalesRep,
+    VisitSchedule,
+)
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
+    MAX_ROUTE_HOURS_PER_DAY,
     MAX_TT_PER_DAY,
     VISIT_DURATION_MIN,
+    _estimate_route_hours,
 )
 
 logger = logging.getLogger("force_majeure")
@@ -126,14 +136,30 @@ class ForceMajeureService:
             active_reps = active_result.scalars().all()
 
             if active_reps:
+                locations_result = await self.db.execute(
+                    select(Location).where(Location.id.in_(affected_tt_ids))
+                )
+                location_map = {
+                    location.id: location
+                    for location in locations_result.scalars().all()
+                }
                 chunks = _chunked_round_robin(affected_tt_ids, len(active_reps))
 
                 for target_rep, loc_ids in zip(active_reps, chunks):
                     if not loc_ids:
                         continue
+                    chunk_locations = [
+                        location_map[loc_id]
+                        for loc_id in loc_ids
+                        if loc_id in location_map
+                    ]
                     # Ищем ближайший рабочий день с запасом для всего чанка
                     target_date = await self._find_available_day(
-                        target_rep.id, event_date, chunk_size=len(loc_ids), non_working=non_working
+                        target_rep.id,
+                        event_date,
+                        chunk_size=len(loc_ids),
+                        non_working=non_working,
+                        chunk_locations=chunk_locations,
                     )
                     # Создаём новые плановые записи
                     for loc_id in loc_ids:
@@ -188,18 +214,34 @@ class ForceMajeureService:
     async def _find_available_day(
         self, rep_id: str, after_date: date, chunk_size: int = 1,
         non_working: FrozenSet[date] = frozenset(),
+        chunk_locations: Optional[List[Location]] = None,
     ) -> date:
         """Ищет ближайший рабочий день после after_date, где влезает chunk_size ТТ."""
         candidate = _next_working_day(after_date, non_working)
         for _ in range(30):  # не дальше месяца вперёд
-            count_stmt = select(VisitSchedule).where(
-                VisitSchedule.rep_id == rep_id,
-                VisitSchedule.planned_date == candidate,
-                VisitSchedule.status.in_(["planned", "rescheduled"]),
+            existing_stmt = (
+                select(VisitSchedule)
+                .where(
+                    VisitSchedule.rep_id == rep_id,
+                    VisitSchedule.planned_date == candidate,
+                    VisitSchedule.status.in_(["planned", "rescheduled"]),
+                )
+                .options(selectinload(VisitSchedule.location))
             )
-            count_result = await self.db.execute(count_stmt)
-            existing = len(count_result.scalars().all())
-            if existing + chunk_size <= MAX_TT_PER_DAY:
+            existing_result = await self.db.execute(existing_stmt)
+            existing_schedules = existing_result.scalars().all()
+            existing = len(existing_schedules)
+            if existing + chunk_size > MAX_TT_PER_DAY:
+                candidate = _next_working_day(candidate, non_working)
+                continue
+
+            projected_locations = [
+                schedule.location
+                for schedule in existing_schedules
+                if schedule.location is not None
+            ] + (chunk_locations or [])
+            projected_hours = _estimate_route_hours(projected_locations)
+            if projected_hours <= MAX_ROUTE_HOURS_PER_DAY:
                 return candidate
             candidate = _next_working_day(candidate, non_working)
         return candidate
