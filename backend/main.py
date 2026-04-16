@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Base, Holiday, VisitLog, engine, get_session
 from src.middleware.main import AdvancedMiddleware
+from src.routes.benchmark import router as benchmark_router
 from src.routes.export import router as export_router
 from src.routes.import_excel import router as import_router
 from src.routes.force_majeure import router as force_majeure_router
@@ -117,6 +118,7 @@ api_v1_router.include_router(optimize_router)
 api_v1_router.include_router(qwen_router)
 api_v1_router.include_router(llama_router)
 api_v1_router.include_router(metrics_router)
+api_v1_router.include_router(benchmark_router)
 api_v1_router.include_router(insights_router)
 api_v1_router.include_router(routes_router)
 api_v1_router.include_router(routing_router)

@@ -31,6 +31,7 @@ from src.schemas.schedule import (
     VisitScheduleItem,
     VisitStatusUpdate,
 )
+from src.models.geo_utils import compute_route_metrics, infer_category
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
     MAX_TT_PER_DAY,
@@ -67,6 +68,50 @@ async def _load_logs_by_schedule(
 def _estimated_duration(visit_count: int) -> float:
     """Расчёт длительности маршрута в часах."""
     return round(visit_count * (VISIT_DURATION_MIN + AVG_TRAVEL_MIN_PER_TT) / 60, 1)
+
+
+def _estimate_duration_hours_from_route(
+    schedules: List[VisitSchedule],
+    preview_cache: Dict[tuple[str, ...], float],
+) -> float:
+    visit_count = len(schedules)
+    if visit_count == 0:
+        return 0.0
+    if visit_count == 1:
+        return round(VISIT_DURATION_MIN / 60, 1)
+
+    cache_key = tuple(schedule.location_id for schedule in schedules)
+    cached = preview_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    route_points = [
+        {
+            "ID": schedule.location_id,
+            "name": schedule.location.name,
+            "lat": schedule.location.lat,
+            "lon": schedule.location.lon,
+            "priority": infer_category(schedule.location.category or "C"),
+        }
+        for schedule in schedules
+        if schedule.location is not None
+        and schedule.location.lat is not None
+        and schedule.location.lon is not None
+    ]
+    if len(route_points) < 2:
+        fallback = _estimated_duration(visit_count)
+        preview_cache[cache_key] = fallback
+        return fallback
+
+    try:
+        ordered_ids = [point["ID"] for point in route_points]
+        _, total_time_hours, _ = compute_route_metrics(route_points, ordered_ids)
+        duration_hours = round(total_time_hours, 1)
+    except Exception:
+        duration_hours = _estimated_duration(visit_count)
+
+    preview_cache[cache_key] = duration_hours
+    return duration_hours
 
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
@@ -570,12 +615,16 @@ async def get_daily_schedule(
     )
 
     routes: List[DailyRoute] = []
+    routing_service = RoutingService()
+    preview_cache: Dict[tuple[str, ...], float] = {}
     for rep_id, rep_schedules in by_rep.items():
         routes.append(
-            _build_daily_route(
+            await _build_daily_route(
                 rep_schedules,
                 logs_by_schedule,
                 override_map.get((rep_id, target_date)),
+                routing_service,
+                preview_cache,
             )
         )
     return routes
@@ -671,13 +720,15 @@ async def _build_monthly_plan_response(
     )
 
     routes: List[DailyRoute] = []
+    preview_cache: Dict[tuple[str, ...], float] = {}
     for r_id, date_map in by_rep_date.items():
         for d, day_schedules in sorted(date_map.items()):
             routes.append(
-                _build_daily_route(
+                await _build_daily_route(
                     day_schedules,
                     logs_by_schedule,
                     override_map.get((r_id, d)),
+                    preview_cache,
                 )
             )
 
@@ -872,7 +923,12 @@ async def _build_daily_route_response(
 
     logs_by_schedule = await _load_logs_by_schedule(session, [s.id for s in schedules])
     override = await _get_route_override(session, rep_id, target_date)
-    return _build_daily_route(schedules, logs_by_schedule, override)
+    return await _build_daily_route(
+        schedules,
+        logs_by_schedule,
+        override,
+        {},
+    )
 
 
 def _sort_schedules_by_location_order(
@@ -895,10 +951,11 @@ def _sort_schedules_by_location_order(
     return with_known_order + [schedule for _, schedule in without_order]
 
 
-def _build_daily_route(
+async def _build_daily_route(
     schedules: List[VisitSchedule],
     logs_by_schedule: Dict[str, VisitLog],
     override: Optional[DailyRouteOverride],
+    preview_cache: Optional[Dict[tuple[str, ...], float]] = None,
 ) -> DailyRoute:
     if not schedules:
         raise HTTPException(status_code=404, detail="Маршрут дня не найден")
@@ -913,6 +970,10 @@ def _build_daily_route(
     )
     sorted_schedules = _sort_schedules_by_location_order(schedules, active_location_order)
     visits = [_schedule_to_item(schedule, logs_by_schedule.get(schedule.id)) for schedule in sorted_schedules]
+    route_duration_hours = _estimate_duration_hours_from_route(
+        sorted_schedules,
+        preview_cache if preview_cache is not None else {},
+    )
 
     return DailyRoute(
         rep_id=schedules[0].rep_id,
@@ -930,6 +991,6 @@ def _build_daily_route(
         route_updated_at=override.updated_at if override else None,
         has_route_override=override is not None,
         total_tt=len(visits),
-        estimated_duration_hours=_estimated_duration(len(visits)),
+        estimated_duration_hours=route_duration_hours,
         lunch_break_at=LUNCH_BREAK_TIME,
     )

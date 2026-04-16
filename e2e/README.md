@@ -117,11 +117,13 @@ The Allure report shows:
 ```
 tests/
 ├── smoke/              # Health check + all pages load without JS errors
+│   ├── api-regressions.spec.ts # benchmark/routing/optimize API smoke after backend fixes
+│   └── network.spec.ts         # no same-origin 4xx/5xx on key pages (/dashboard, /schedule)
 ├── reps/               # Sales rep CRUD (create, status change, delete)
 ├── vehicles/           # Vehicle CRUD + assignment in reps dropdown
 ├── schedule/
 │   ├── generate.spec.ts      # Generate plan, 409 on duplicate, force regenerate
-│   ├── day-modal.spec.ts     # Day modal, map links (Yandex/Google/2GIS), transport mode
+│   ├── day-modal.spec.ts     # Day modal, metrics, map links, transport mode recalculation
 │   └── visit-status.spec.ts  # State machine: planned→completed/skipped, invalid transitions
 ├── export/             # Excel download: content-type, file size, filename, UI button
 ├── force-majeure/      # FM event creation + redistribution
