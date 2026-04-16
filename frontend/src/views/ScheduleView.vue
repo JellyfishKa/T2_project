@@ -335,6 +335,21 @@
                 <option v-for="v in vehicles" :key="v.id" :value="v.id">{{ v.name }}</option>
               </select>
             </div>
+            <!-- Map export links -->
+            <div v-if="mapLinks" class="flex items-center gap-2 mt-2 flex-wrap">
+              <span class="text-xs text-gray-400">Открыть маршрут:</span>
+              <a :href="mapLinks.yandex" target="_blank" rel="noopener" class="map-link-btn">
+                <img src="https://yastatic.net/s3/front-maps-static/maps-front-maps/src/assets/favicon/favicon-32.png" class="w-4 h-4" alt="" />
+                Яндекс
+              </a>
+              <a :href="mapLinks.google" target="_blank" rel="noopener" class="map-link-btn">
+                <img src="https://www.gstatic.com/images/icons/material/apps/fonts/1x/catalog/v5/favicon.svg" class="w-4 h-4" alt="" />
+                Google
+              </a>
+              <a :href="mapLinks.dgis" target="_blank" rel="noopener" class="map-link-btn">
+                2ГИС
+              </a>
+            </div>
           </div>
           <div class="flex items-center gap-2">
             <button
@@ -932,6 +947,23 @@ const selectedVariant = computed<RouteVariant | null>(() => {
 
 const currentDayVisits = computed(() => getVisitsByLocationOrder(currentLocationIds.value))
 const originalDayVisits = computed(() => getVisitsByLocationOrder(originalLocationIds.value))
+
+// ─── Map links for current day route ──────────────────────────────────────────
+const mapLinks = computed(() => {
+  const points = currentLocationIds.value
+    .map(id => locationsById.value.get(id))
+    .filter((loc): loc is Location => !!loc && typeof loc.lat === 'number' && typeof loc.lon === 'number')
+  if (points.length < 2) return null
+  const yandexParts = points.map(p => `${p.lat},${p.lon}`).join('~')
+  const googleParts = points.map(p => `${p.lat},${p.lon}`).join('/')
+  const dgisFirst = points[0]
+  const dgisLast = points[points.length - 1]
+  return {
+    yandex: `https://yandex.ru/maps/?rtext=${yandexParts}&rtt=auto`,
+    google: `https://www.google.com/maps/dir/${googleParts}/`,
+    dgis: `https://2gis.ru/directions/points/${dgisFirst.lon},${dgisFirst.lat}/${dgisLast.lon},${dgisLast.lat}`,
+  }
+})
 const draftDayVisits = computed(() =>
   getVisitsByLocationOrder(isDraftDirty.value ? draftLocationIds.value : currentLocationIds.value)
 )
@@ -1471,7 +1503,7 @@ function openDayModal(route: DailyRoute) {
   // Pre-fill transport mode from rep's assigned car
   const repData = reps.value.find(r => r.id === route.rep_id)
   dayVehicleId.value = repData?.vehicle_id ?? null
-  dayTransportMode.value = dayVehicleId.value ? 'car' : 'car'
+  dayTransportMode.value = dayVehicleId.value ? 'car' : 'taxi'
   dayOptResult.value = null
   dayOptError.value = null
   selectedVariantId.value = null
@@ -1729,6 +1761,7 @@ onMounted(() => {
 .planner-tab { @apply rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors; }
 .planner-tab--active { @apply border-blue-600 bg-blue-600 text-white; }
 .planner-route-row { @apply flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 bg-white transition-colors; }
+.map-link-btn { @apply inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 no-underline; }
 .planner-route-row--drag { @apply border-blue-300 bg-blue-50; }
 .planner-drag-handle { @apply text-gray-400 text-sm select-none cursor-grab; }
 .planner-action-bar { @apply flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100; }

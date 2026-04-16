@@ -134,7 +134,7 @@ async def export_schedule(
     # ════════════════════════════════════════════════════════════════════════
     ws1 = wb.active
     ws1.title = "Расписание"
-    ws1.merge_cells("A1:H1")
+    ws1.merge_cells("A1:J1")
     ws1["A1"] = f"ПЛАН ПОСЕЩЕНИЙ — {month}"
     ws1["A1"].font = Font(bold=True, size=13)
     ws1["A1"].alignment = Alignment(horizontal="center")
@@ -142,6 +142,7 @@ async def export_schedule(
     SCHED_COLS = [
         "Дата", "Сотрудник", "ТТ", "Адрес",
         "Категория", "Статус", "Время прихода", "Время ухода",
+        "Широта", "Долгота",
     ]
     _apply_header(ws1, 2, SCHED_COLS)
 
@@ -162,8 +163,10 @@ async def export_schedule(
             getattr(loc, "address", "") or "",
             cat,
             _status_label(s.status),
-            str(lg.time_in)[:5] if lg and lg.time_in else "",
-            str(lg.time_out)[:5] if lg and lg.time_out else "",
+            lg.time_in.strftime("%H:%M") if lg and lg.time_in else "",
+            lg.time_out.strftime("%H:%M") if lg and lg.time_out else "",
+            getattr(loc, "lat", "") if loc else "",
+            getattr(loc, "lon", "") if loc else "",
         ]
         for c, val in enumerate(row_data, start=1):
             cell = ws1.cell(row=i, column=c, value=val)
@@ -200,8 +203,8 @@ async def export_schedule(
             rep_map.get(s.rep_id, s.rep_id),
             loc.name if loc else s.location_id,
             loc.category if loc else "?",
-            str(lg.time_in)[:5] if lg and lg.time_in else "—",
-            str(lg.time_out)[:5] if lg and lg.time_out else "—",
+            lg.time_in.strftime("%H:%M") if lg and lg.time_in else "—",
+            lg.time_out.strftime("%H:%M") if lg and lg.time_out else "—",
             duration,
         ]
         for c, val in enumerate(row_data, start=1):
@@ -253,7 +256,8 @@ async def export_schedule(
         ws3.cell(row=i, column=4, value=st["planned"])
         ws3.cell(row=i, column=5, value=st["completed"])
         ws3.cell(row=i, column=6, value=st["skipped"])
-        pct_cell = ws3.cell(row=i, column=7, value=f"{pct}%")
+        pct_cell = ws3.cell(row=i, column=7, value=pct / 100)
+        pct_cell.number_format = "0.0%"
         if pct >= 80:
             pct_cell.font = Font(color="FF16A34A", bold=True)
         elif pct < 50:
@@ -303,7 +307,8 @@ async def export_schedule(
         ws4.cell(row=i, column=3, value=rs["planned"])
         ws4.cell(row=i, column=4, value=rs["completed"])
         ws4.cell(row=i, column=5, value=rs["skipped"])
-        ws4.cell(row=i, column=6, value=f"{pct}%")
+        pct4 = ws4.cell(row=i, column=6, value=pct / 100)
+        pct4.number_format = "0.0%"
 
     _autofit(ws4)
 
@@ -359,6 +364,50 @@ async def export_schedule(
         ws5.cell(row=i, column=6, value=_fmt_json(rec.details))
 
     _autofit(ws5)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # Лист 6: Маршруты для навигаторов (Яндекс / Google / 2ГИС)
+    # ════════════════════════════════════════════════════════════════════════
+    ws6 = wb.create_sheet("Маршруты навигатор")
+    ws6.merge_cells("A1:F1")
+    ws6["A1"] = f"ССЫЛКИ НА МАРШРУТЫ — {month}"
+    ws6["A1"].font = Font(bold=True, size=13)
+    ws6["A1"].alignment = Alignment(horizontal="center")
+
+    NAV_COLS = ["Дата", "Сотрудник", "Точек", "Яндекс Карты", "Google Maps", "2ГИС"]
+    _apply_header(ws6, 2, NAV_COLS)
+
+    # Группируем плановые визиты по (дата, сотрудник)
+    from collections import defaultdict as _dd
+    day_rep_locs: dict[tuple, list] = _dd(list)
+    for s in schedules:
+        if s.status in ("planned", "completed", "rescheduled"):
+            loc = s.location or loc_map.get(s.location_id)
+            if loc and getattr(loc, "lat", None) and getattr(loc, "lon", None):
+                day_rep_locs[(s.planned_date, s.rep_id, rep_map.get(s.rep_id, s.rep_id))].append(loc)
+
+    nav_row = 3
+    for (dt, rep_id, rep_name), locs in sorted(day_rep_locs.items(), key=lambda x: (x[0][0], x[0][2])):
+        if len(locs) < 2:
+            continue
+        yandex_parts = "~".join(f"{loc.lat},{loc.lon}" for loc in locs)
+        google_parts = "/".join(f"{loc.lat},{loc.lon}" for loc in locs)
+        dgis_first, dgis_last = locs[0], locs[-1]
+
+        yandex_url = f"https://yandex.ru/maps/?rtext={yandex_parts}&rtt=auto"
+        google_url = f"https://www.google.com/maps/dir/{google_parts}/"
+        dgis_url = f"https://2gis.ru/directions/points/{dgis_first.lon},{dgis_first.lat}/{dgis_last.lon},{dgis_last.lat}"
+
+        ws6.cell(row=nav_row, column=1, value=dt.strftime("%d.%m.%Y") if dt else "")
+        ws6.cell(row=nav_row, column=2, value=rep_name)
+        ws6.cell(row=nav_row, column=3, value=len(locs))
+        for col, url, label in [(4, yandex_url, "Яндекс"), (5, google_url, "Google"), (6, dgis_url, "2ГИС")]:
+            cell = ws6.cell(row=nav_row, column=col, value=label)
+            cell.hyperlink = url
+            cell.font = Font(color="FF2563EB", underline="single")
+        nav_row += 1
+
+    _autofit(ws6)
 
     # ── Отдаём файл ──────────────────────────────────────────────────────────
     buf = io.BytesIO()
