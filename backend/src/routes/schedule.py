@@ -31,8 +31,7 @@ from src.schemas.schedule import (
     VisitScheduleItem,
     VisitStatusUpdate,
 )
-from src.models.geo_utils import compute_route_metrics, infer_category
-from src.services.routing import RoutingService
+from src.models.geo_utils import compute_distance_matrix, compute_route_metrics, infer_category
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
     MAX_TT_PER_DAY,
@@ -105,7 +104,26 @@ def _estimate_duration_hours_from_route(
         return fallback
 
     try:
-        ordered_ids = [point["ID"] for point in route_points]
+        # Apply nearest-neighbour ordering (same as schedule_planner) so
+        # displayed time matches the planner's budget estimate.
+        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+        matrix = compute_distance_matrix(route_points)
+        start_idx = min(
+            range(len(route_points)),
+            key=lambda i: priority_rank.get(route_points[i]["priority"], 3),
+        )
+        visited = [False] * len(route_points)
+        nn_order = [start_idx]
+        visited[start_idx] = True
+        for _ in range(len(route_points) - 1):
+            cur = nn_order[-1]
+            nxt = min(
+                (i for i in range(len(route_points)) if not visited[i]),
+                key=lambda i: matrix[cur][i],
+            )
+            nn_order.append(nxt)
+            visited[nxt] = True
+        ordered_ids = [route_points[i]["ID"] for i in nn_order]
         _, total_time_hours, _ = compute_route_metrics(route_points, ordered_ids)
         duration_hours = round(total_time_hours, 1)
     except Exception:
@@ -616,7 +634,6 @@ async def get_daily_schedule(
     )
 
     routes: List[DailyRoute] = []
-    routing_service = RoutingService()
     preview_cache: Dict[tuple[str, ...], float] = {}
     for rep_id, rep_schedules in by_rep.items():
         routes.append(
@@ -624,7 +641,6 @@ async def get_daily_schedule(
                 rep_schedules,
                 logs_by_schedule,
                 override_map.get((rep_id, target_date)),
-                routing_service,
                 preview_cache,
             )
         )
