@@ -95,18 +95,19 @@ def _dict_to_response(d: dict) -> ForceMajeureResponse:
         for r in d.get("redistributed_to", [])
     ]
     rt_raw = d.get("return_time")
-    return_time = time.fromisoformat(rt_raw) if rt_raw else None
+    return_time = time.fromisoformat(rt_raw) if isinstance(rt_raw, str) else rt_raw
+    created_raw = d.get("created_at")
     return ForceMajeureResponse(
         id=d["id"],
         type=d["type"],
         rep_id=d["rep_id"],
         rep_name=d["rep_name"],
-        event_date=date.fromisoformat(d["event_date"]),
+        event_date=date.fromisoformat(d["event_date"]) if isinstance(d.get("event_date"), str) else d["event_date"],
         description=d.get("description"),
         affected_tt_count=d["affected_tt_count"],
         redistributed_to=redist,
         return_time=return_time,
-        created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else datetime.now(),
+        created_at=datetime.fromisoformat(created_raw) if isinstance(created_raw, str) else (created_raw or datetime.now()),
     )
 
 

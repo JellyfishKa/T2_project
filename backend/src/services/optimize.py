@@ -31,6 +31,7 @@ from src.services.model_selector import (
 )
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService
+from src.services.schedule_planner import VISIT_DURATION_MIN
 
 logger = logging.getLogger("optimizer")
 
@@ -74,7 +75,7 @@ class Optimizer:
 
         preview = await self.routing_service.build_route_preview(locations,
                                                                  vehicle=vehicle)
-        service_time_minutes = len(locations) * 12
+        service_time_minutes = len(locations) * VISIT_DURATION_MIN
 
         return {
             "distance_km": round(preview["distance_km"], 2),

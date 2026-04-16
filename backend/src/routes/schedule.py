@@ -32,6 +32,7 @@ from src.schemas.schedule import (
     VisitStatusUpdate,
 )
 from src.models.geo_utils import compute_route_metrics, infer_category
+from src.services.routing import RoutingService
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
     MAX_TT_PER_DAY,

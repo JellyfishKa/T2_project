@@ -257,7 +257,7 @@ class SchedulePlanner:
                 continue
 
             # Ограниченный lookahead: не дальше ~2 месяца
-            for _ in range(len(all_days) + 31):
+            for _ in range(60):  # hard limit ~2 months lookahead
                 # Пропускаем выходные и праздники
                 if not _is_working_day(check_date, self.non_working):
                     check_date = _next_working_day(check_date, self.non_working)
