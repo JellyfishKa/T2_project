@@ -112,7 +112,7 @@ async def generate_schedule(
             )
         )
         for vs in planned_q.scalars().all():
-            session.delete(vs)
+            await session.delete(vs)
         await session.flush()
 
     # Загружаем нерабочие праздники из БД за месяц + 31 день lookahead
@@ -789,7 +789,7 @@ async def revert_day_route_override(
         )
     )
 
-    session.delete(override)
+    await session.delete(override)
     await session.commit()
     return await _build_daily_route_response(session, rep_id, target_date)
 

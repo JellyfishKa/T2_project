@@ -47,7 +47,7 @@ async def delete_vehicle(
     vehicle = await session.get(DBVehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Автомобиль не найден")
-    session.delete(vehicle)
+    await session.delete(vehicle)
     await session.commit()
 
 
