@@ -497,7 +497,28 @@ describe('API Service', () => {
       const result = await fetchAllLocations()
 
       expect(result).toHaveLength(2)
-      expect(mockedAxios.get).toHaveBeenCalledWith('/locations')
+      expect(mockedAxios.get).toHaveBeenCalledWith('/locations/')
+    })
+
+    it('should normalize legacy CRUD locations response', async () => {
+      const mockLocations = [
+        {
+          id: 'loc-1',
+          name: 'Store 1',
+          latitude: 55.7558,
+          longitude: 37.6173,
+          address: 'Address 1',
+          time_window_start: '09:00',
+          time_window_end: '18:00',
+          priority: 1
+        }
+      ]
+
+      mockedAxios.get.mockResolvedValue({ data: { locations: mockLocations } })
+
+      const result = await fetchAllLocations()
+
+      expect(result).toEqual(mockLocations)
     })
   })
 

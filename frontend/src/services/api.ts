@@ -423,8 +423,18 @@ export const checkHealth = async (): Promise<HealthStatus> => {
  * GET /api/v1/locations
  */
 export const fetchAllLocations = async (): Promise<Location[]> => {
-  const response = await withRetry(() => api.get('/locations'))
-  return response.data
+  const response = await withRetry(() => api.get('/locations/'))
+  const payload = response.data
+
+  if (Array.isArray(payload)) {
+    return payload
+  }
+
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { locations?: unknown }).locations)) {
+    return (payload as { locations: Location[] }).locations
+  }
+
+  return []
 }
 
 export const fetchRoutePreview = async (
