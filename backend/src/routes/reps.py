@@ -1,8 +1,8 @@
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -119,6 +119,7 @@ async def update_rep(
 @router.delete("/{rep_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_rep(
     rep_id: str,
+    force: bool = Query(False, description="Если true — удалить сотрудника вместе со связанными тестовыми данными"),
     session: AsyncSession = Depends(get_session),
 ):
     """Удалить сотрудника."""
@@ -155,6 +156,16 @@ async def delete_rep(
     protected_records = (
         schedules_count + visits_count + fm_count + overrides_count + stash_count
     )
+    if force:
+        await session.execute(delete(VisitLog).where(VisitLog.rep_id == rep_id))
+        await session.execute(delete(DailyRouteOverride).where(DailyRouteOverride.rep_id == rep_id))
+        await session.execute(delete(ForceMajeureEvent).where(ForceMajeureEvent.rep_id == rep_id))
+        await session.execute(delete(SkippedVisitStash).where(SkippedVisitStash.rep_id == rep_id))
+        await session.execute(delete(VisitSchedule).where(VisitSchedule.rep_id == rep_id))
+        await session.delete(rep)
+        await session.commit()
+        return
+
     if protected_records > 0:
         raise HTTPException(
             status_code=409,

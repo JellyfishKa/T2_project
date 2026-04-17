@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import L from 'leaflet'
 import iconUrl from 'leaflet/dist/images/marker-icon.png'
 import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png'
@@ -49,6 +49,11 @@ let map: L.Map | null = null
 let routeLayer: L.FeatureGroup | null = null
 let renderToken = 0
 const routePreviewCache = new Map<string, Promise<RoutePreviewData | null>>()
+const DIRECT_ROAD_ROUTER_URL = (
+  import.meta.env.VITE_DIRECT_ROAD_ROUTER_URL ??
+  'https://router.project-osrm.org/route/v1/driving'
+).replace(/\/+$/, '')
+const DIRECT_ROAD_ROUTER_TIMEOUT_MS = 8_000
 
 // Saransk, Mordovia — fallback center
 const DEFAULT_CENTER: L.LatLngTuple = [54.187, 45.183]
@@ -58,6 +63,7 @@ interface RoutePreviewData {
   geometry: L.LatLngTuple[]
   distanceKm: number
   timeMinutes: number
+  source: 'road_network' | 'fallback'
 }
 
 function escapeHtml(s: string): string {
@@ -103,6 +109,102 @@ function buildCacheKey(points: RoutePoint[]): string {
   return points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join(";")
 }
 
+function buildPointsSignature(points?: RoutePoint[]): string {
+  if (!points?.length) return ''
+  return points
+    .map((point, index) =>
+      [
+        point.id,
+        point.order ?? index + 1,
+        Number.isFinite(point.lat) ? point.lat.toFixed(6) : 'nan',
+        Number.isFinite(point.lon) ? point.lon.toFixed(6) : 'nan',
+        point.color ?? '',
+      ].join(':'),
+    )
+    .join('|')
+}
+
+function buildRoutesSignature(routes?: RouteSet[]): string {
+  if (!routes?.length) return ''
+  return routes
+    .map((route) =>
+      [
+        route.id,
+        route.selected ? 'selected' : 'idle',
+        route.color,
+        buildPointsSignature(route.points),
+      ].join('::'),
+    )
+    .join('||')
+}
+
+const renderSignature = computed(() => [
+  buildPointsSignature(props.points),
+  buildRoutesSignature(props.routes),
+])
+
+function normalizePreview(
+  preview: {
+    geometry?: Array<[number, number]>
+    distance_km: number
+    time_minutes: number
+    source?: string
+  },
+  fallbackSource: 'road_network' | 'fallback' = 'road_network',
+): RoutePreviewData | null {
+  if (!preview.geometry?.length) return null
+  return {
+    geometry: preview.geometry.map(([lat, lon]) => [lat, lon] as L.LatLngTuple),
+    distanceKm: preview.distance_km,
+    timeMinutes: preview.time_minutes,
+    source: preview.source === 'fallback' ? 'fallback' : fallbackSource,
+  }
+}
+
+async function fetchDirectRoadPreview(points: RoutePoint[]): Promise<RoutePreviewData | null> {
+  const routeCoordinates = points
+    .map((point) => `${point.lon.toFixed(6)},${point.lat.toFixed(6)}`)
+    .join(';')
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(), DIRECT_ROAD_ROUTER_TIMEOUT_MS)
+    : null
+
+  try {
+    const response = await fetch(
+      `${DIRECT_ROAD_ROUTER_URL}/${routeCoordinates}?overview=full&geometries=geojson&steps=false&alternatives=false`,
+      controller ? { signal: controller.signal } : undefined,
+    )
+    if (!response.ok) return null
+    const payload: {
+      routes?: Array<{
+        distance?: number
+        duration?: number
+        geometry?: {
+          coordinates?: Array<[number, number]>
+        }
+      }>
+    } = await response.json()
+    const route = Array.isArray(payload.routes) ? payload.routes[0] : null
+    if (!route) return null
+    const geometryCoordinates = Array.isArray(route?.geometry?.coordinates) ? route.geometry.coordinates : []
+    if (!geometryCoordinates.length) return null
+
+    return {
+      geometry: geometryCoordinates.map(([lon, lat]) => [lat, lon] as L.LatLngTuple),
+      distanceKm: Number(route.distance ?? 0) / 1000,
+      timeMinutes: Number(route.duration ?? 0) / 60,
+      source: 'road_network',
+    }
+  } catch {
+    return null
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId)
+    }
+  }
+}
+
 async function getRoutePreview(points: RoutePoint[]): Promise<RoutePreviewData | null> {
   if (points.length < 2) return null
 
@@ -112,22 +214,34 @@ async function getRoutePreview(points: RoutePoint[]): Promise<RoutePreviewData |
     return cached
   }
 
-  const request = fetchRoutePreview(
-    points.map((point) => ({
+  const request = (async () => {
+    const requestPoints = points.map((point) => ({
       lat: point.lat,
       lon: point.lon,
     }))
-  )
-    .then((preview) => {
-      if (!preview.geometry?.length) return null
 
-      return {
-        geometry: preview.geometry.map(([lat, lon]) => [lat, lon] as L.LatLngTuple),
-        distanceKm: preview.distance_km,
-        timeMinutes: preview.time_minutes,
+    try {
+      const preview = await fetchRoutePreview(requestPoints)
+      const normalizedPreview = normalizePreview(preview, 'road_network')
+      if (normalizedPreview?.source === 'road_network') {
+        return normalizedPreview
       }
-    })
-    .catch(() => null)
+
+      const directRoadPreview = await fetchDirectRoadPreview(points)
+      if (directRoadPreview) {
+        return directRoadPreview
+      }
+
+      return normalizedPreview
+    } catch {
+      return fetchDirectRoadPreview(points)
+    }
+  })().then((preview) => {
+    if (!preview || preview.source !== 'road_network') {
+      routePreviewCache.delete(cacheKey)
+    }
+    return preview
+  })
 
   routePreviewCache.set(cacheKey, request)
   return request
@@ -241,9 +355,9 @@ onMounted(() => {
   void render()
 })
 
-watch([() => props.points, () => props.routes], () => {
+watch(renderSignature, () => {
   void render()
-}, { deep: false })
+})
 
 onBeforeUnmount(() => {
   if (map) {

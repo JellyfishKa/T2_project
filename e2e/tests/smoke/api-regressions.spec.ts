@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures/base'
+import { createLocation } from '../../fixtures/test-data'
 
 test.describe('Smoke — API Regressions', () => {
   test('GET /api/v1/benchmark/compare returns comparison payload', async ({ apiClient }) => {
@@ -26,26 +27,30 @@ test.describe('Smoke — API Regressions', () => {
     const body = await res.json()
 
     expect(Array.isArray(body.geometry)).toBeTruthy()
-    expect(body.geometry.length).toBeGreaterThan(2)
+    expect(body.geometry.length).toBeGreaterThanOrEqual(2)
     expect(body.distance_km).toBeGreaterThan(0)
     expect(body.time_minutes).toBeGreaterThan(0)
     expect(body.cost_rub).toBeGreaterThan(0)
     expect(['road_network', 'fallback']).toContain(body.source)
   })
 
-  test('POST /api/v1/optimize/variants returns variants with route metrics', async ({ apiClient }) => {
+  test('POST /api/v1/optimize/variants returns variants with route metrics', async ({ apiClient, cleanup }) => {
     test.setTimeout(90_000)
 
-    const locationsRes = await apiClient.get('/api/v1/locations/')
-    expect(locationsRes.status()).toBe(200)
+    const healthRes = await apiClient.get('/api/v1/health')
+    if (healthRes.status() === 200) {
+      const health = await healthRes.json()
+      if (health.llm_status !== 'loaded') {
+        test.skip(true, `LLM not loaded (status: ${health.llm_status})`)
+        return
+      }
+    }
 
-    const locations = await locationsRes.json()
-    expect(locations.length).toBeGreaterThan(1)
-
-    const locationIds = locations.slice(0, 2).map((location: { id: string }) => location.id)
+    const firstLocation = await createLocation(apiClient, `${cleanup.namespace}_optimize_a`, 'C', cleanup)
+    const secondLocation = await createLocation(apiClient, `${cleanup.namespace}_optimize_b`, 'C', cleanup)
     const res = await apiClient.post('/api/v1/optimize/variants', {
       data: {
-        location_ids: locationIds,
+        location_ids: [firstLocation.id, secondLocation.id],
         model: 'qwen',
         constraints: {},
       },

@@ -45,7 +45,8 @@ import {
   fetchRouteMetrics,
   runBenchmark,
   checkHealth,
-  fetchAllLocations
+  fetchAllLocations,
+  getApiErrorMessage,
 } from '@/services/api'
 
 describe('API Service', () => {
@@ -496,7 +497,28 @@ describe('API Service', () => {
       const result = await fetchAllLocations()
 
       expect(result).toHaveLength(2)
-      expect(mockedAxios.get).toHaveBeenCalledWith('/locations')
+      expect(mockedAxios.get).toHaveBeenCalledWith('/locations/')
+    })
+
+    it('should normalize legacy CRUD locations response', async () => {
+      const mockLocations = [
+        {
+          id: 'loc-1',
+          name: 'Store 1',
+          latitude: 55.7558,
+          longitude: 37.6173,
+          address: 'Address 1',
+          time_window_start: '09:00',
+          time_window_end: '18:00',
+          priority: 1
+        }
+      ]
+
+      mockedAxios.get.mockResolvedValue({ data: { locations: mockLocations } })
+
+      const result = await fetchAllLocations()
+
+      expect(result).toEqual(mockLocations)
     })
   })
 
@@ -554,6 +576,49 @@ describe('API Service', () => {
       } catch (error) {
         expect(mockedAxios.get).toHaveBeenCalledTimes(1)
       }
+    })
+  })
+
+  describe('getApiErrorMessage', () => {
+    it('should extract nested detail.message from API error payload', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: {
+              message: 'Расписание уже существует',
+            },
+          },
+        },
+      })
+
+      expect(message).toBe('Расписание уже существует')
+    })
+
+    it('should extract string detail from API error payload', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: 'Сотрудника нельзя удалить: сначала переведите его в неактивный статус.',
+          },
+        },
+      })
+
+      expect(message).toBe('Сотрудника нельзя удалить: сначала переведите его в неактивный статус.')
+    })
+
+    it('should format validation errors array', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: [
+              { loc: ['body', 'month'], msg: 'Field required' },
+              { loc: ['body', 'rep_ids'], msg: 'Invalid list' },
+            ],
+          },
+        },
+      })
+
+      expect(message).toBe('body.month — Field required; body.rep_ids — Invalid list')
     })
   })
 })

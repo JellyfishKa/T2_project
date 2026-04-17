@@ -1,4 +1,4 @@
-import { APIRequestContext } from '@playwright/test'
+import { APIRequestContext, type APIResponse } from '@playwright/test'
 
 export interface RepData {
   id: string
@@ -17,10 +17,20 @@ export interface LocationData {
   category?: 'A' | 'B' | 'C' | 'D' | null
 }
 
+export interface CleanupTracker {
+  namespace: string
+  trackRep(id: string): void
+  trackVehicle(id: string): void
+  trackLocation(id: string): void
+  trackVisitSchedule(id: string): void
+  trackForceMajeure(id: string): void
+}
+
 export async function createRep(
   api: APIRequestContext,
   name: string,
   status = 'active',
+  cleanup?: CleanupTracker,
 ): Promise<RepData> {
   const res = await api.post('/api/v1/reps/', {
     data: { name, status },
@@ -28,11 +38,18 @@ export async function createRep(
   if (!res.ok()) {
     throw new Error(`createRep failed: ${res.status()} ${await res.text()}`)
   }
-  return res.json()
+  const rep = (await res.json()) as RepData
+  cleanup?.trackRep(rep.id)
+  return rep
 }
 
-export async function deleteRep(api: APIRequestContext, id: string): Promise<void> {
-  await api.delete(`/api/v1/reps/${id}`)
+export async function deleteRep(
+  api: APIRequestContext,
+  id: string,
+  options?: { force?: boolean },
+): Promise<APIResponse> {
+  const query = options?.force ? '?force=true' : ''
+  return api.delete(`/api/v1/reps/${id}${query}`)
 }
 
 export async function createVehicle(
@@ -41,6 +58,7 @@ export async function createVehicle(
   fuelPrice = 50,
   consumptionCity = 10,
   consumptionHighway = 7,
+  cleanup?: CleanupTracker,
 ): Promise<VehicleData> {
   const res = await api.post('/api/v1/routing/', {
     data: {
@@ -53,17 +71,20 @@ export async function createVehicle(
   if (!res.ok()) {
     throw new Error(`createVehicle failed: ${res.status()} ${await res.text()}`)
   }
-  return res.json()
+  const vehicle = (await res.json()) as VehicleData
+  cleanup?.trackVehicle(vehicle.id)
+  return vehicle
 }
 
-export async function deleteVehicle(api: APIRequestContext, id: string): Promise<void> {
-  await api.delete(`/api/v1/routing/${id}`)
+export async function deleteVehicle(api: APIRequestContext, id: string): Promise<APIResponse> {
+  return api.delete(`/api/v1/routing/${id}`)
 }
 
 export async function createLocation(
   api: APIRequestContext,
   name: string,
   category: 'A' | 'B' | 'C' | 'D' = 'C',
+  cleanup?: CleanupTracker,
 ): Promise<LocationData> {
   const res = await api.post('/api/v1/locations/', {
     data: {
@@ -81,14 +102,27 @@ export async function createLocation(
   if (!res.ok()) {
     throw new Error(`createLocation failed: ${res.status()} ${await res.text()}`)
   }
-  return res.json()
+  const location = (await res.json()) as LocationData
+  cleanup?.trackLocation(location.id)
+  return location
+}
+
+export async function deleteLocation(
+  api: APIRequestContext,
+  id: string,
+  options?: { force?: boolean },
+): Promise<APIResponse> {
+  const query = options?.force ? '?force=true' : ''
+  return api.delete(`/api/v1/locations/${id}${query}`)
 }
 
 export async function ensureScheduleSeedLocations(
   api: APIRequestContext,
   count = 3,
+  cleanup?: CleanupTracker,
 ): Promise<LocationData[]> {
-  const seedNames = Array.from({ length: count }, (_, index) => `E2E Schedule Seed ${index + 1}`)
+  const seedPrefix = cleanup?.namespace ?? 'E2E_Schedule'
+  const seedNames = Array.from({ length: count }, (_, index) => `${seedPrefix}_Location_${index + 1}`)
   const existingRes = await api.get('/api/v1/locations/')
   if (!existingRes.ok()) {
     throw new Error(`fetchLocations failed: ${existingRes.status()} ${await existingRes.text()}`)
@@ -101,11 +135,12 @@ export async function ensureScheduleSeedLocations(
   for (const seedName of seedNames) {
     const current = byName.get(seedName)
     if (current?.category === 'C') {
+      cleanup?.trackLocation(current.id)
       ensured.push(current)
       continue
     }
 
-    ensured.push(await createLocation(api, seedName, 'C'))
+    ensured.push(await createLocation(api, seedName, 'C', cleanup))
   }
 
   return ensured
@@ -115,14 +150,50 @@ export async function ensureGeneratedSchedule(
   api: APIRequestContext,
   month: string,
   repIds: string[],
+  cleanup?: CleanupTracker,
 ): Promise<void> {
-  await ensureScheduleSeedLocations(api)
+  await ensureScheduleSeedLocations(api, 3, cleanup)
 
   const res = await api.post('/api/v1/schedule/generate?force=true', {
     data: { month, rep_ids: repIds },
   })
   if (!res.ok()) {
     throw new Error(`generateSchedule failed: ${res.status()} ${await res.text()}`)
+  }
+
+  await trackGeneratedScheduleEntries(api, month, repIds, cleanup)
+}
+
+export async function trackGeneratedScheduleEntries(
+  api: APIRequestContext,
+  month: string,
+  repIds: string[],
+  cleanup?: CleanupTracker,
+): Promise<void> {
+  if (!cleanup) {
+    return
+  }
+
+  const scheduleRes = await api.get('/api/v1/visit-schedule?limit=20000')
+  if (!scheduleRes.ok()) {
+    throw new Error(`fetchGeneratedVisitSchedule failed: ${scheduleRes.status()} ${await scheduleRes.text()}`)
+  }
+
+  const payload = (await scheduleRes.json()) as {
+    'visit-schedule'?: Array<{
+      id?: string
+      rep_id?: string
+    }>
+  }
+
+  for (const visit of payload['visit-schedule'] ?? []) {
+    if (
+      typeof visit.id === 'string'
+      && typeof visit.rep_id === 'string'
+      && repIds.includes(visit.rep_id)
+    ) {
+      cleanup.trackVisitSchedule(visit.id)
+    }
   }
 }
 

@@ -1,51 +1,48 @@
 import { faker } from '@faker-js/faker/locale/ru'
 import { test, expect } from '../../fixtures/base'
-import { createRep, deleteRep } from '../../fixtures/test-data'
+import { createRep } from '../../fixtures/test-data'
 
 function uniqueRepName(): string {
   return `E2E_${faker.person.firstName()}_${faker.string.alphanumeric(6)}`
 }
 
 test.describe('Reps — CRUD', () => {
-  test('create rep via UI → appears in list', async ({ page, apiClient }) => {
+  test('create rep via UI → appears in list', async ({ page, apiClient, cleanup }) => {
     const name = uniqueRepName()
 
-    await page.goto('/reps')
+    await page.goto('/database?tab=employees')
     await page.click('text=+ Добавить сотрудника')
     await page.fill('input[placeholder*="Иванов"]', name)
     await page.click('button:has-text("Сохранить")')
 
     await expect(page.locator('.card').filter({ has: page.locator('.font-medium', { hasText: name }) }).first()).toBeVisible({ timeout: 10_000 })
 
-    // cleanup
     const res = await apiClient.get('/api/v1/reps/')
     const reps = await res.json()
-    const rep = Array.isArray(reps) ? reps.find((r: { name: string }) => r.name === name) : null
-    if (rep) await deleteRep(apiClient, rep.id)
+    const rep = Array.isArray(reps) ? reps.find((r: { id: string; name: string }) => r.name === name) : null
+    if (rep) cleanup.trackRep(rep.id)
   })
 
-  test('change rep status via dropdown', async ({ page, apiClient }) => {
+  test('change rep status via dropdown', async ({ page, apiClient, cleanup }) => {
     const name = uniqueRepName()
-    const rep = await createRep(apiClient, name)
+    await createRep(apiClient, name, 'active', cleanup)
 
-    await page.goto('/reps')
+    await page.goto('/database?tab=employees')
     const repCard = page.locator('.card').filter({
       has: page.locator('.font-medium', { hasText: name }),
     }).first()
     await expect(repCard).toBeVisible()
 
-    await repCard.locator('select').first().selectOption('sick')
-
-    await expect(repCard.locator('text=Больничный')).toBeVisible({ timeout: 5_000 })
-
-    await deleteRep(apiClient, rep.id)
+    const statusSelect = repCard.locator('select').first()
+    await statusSelect.selectOption('sick')
+    await expect(statusSelect).toHaveValue('sick')
   })
 
-  test('delete rep → disappears from list', async ({ page, apiClient }) => {
+  test('delete rep → disappears from list', async ({ page, apiClient, cleanup }) => {
     const name = uniqueRepName()
-    const rep = await createRep(apiClient, name)
+    await createRep(apiClient, name, 'active', cleanup)
 
-    await page.goto('/reps')
+    await page.goto('/database?tab=employees')
     const repCard = page.locator('.card').filter({
       has: page.locator('.font-medium', { hasText: name }),
     }).first()
@@ -60,18 +57,13 @@ test.describe('Reps — CRUD', () => {
     await expect(page.locator('.card').filter({
       has: page.locator('.font-medium', { hasText: name }),
     })).toHaveCount(0, { timeout: 10_000 })
-
-    // cleanup in case UI delete failed
-    await apiClient.delete(`/api/v1/reps/${rep.id}`).catch(() => {})
   })
 
-  test('create rep via API → appears on /reps page', async ({ page, apiClient }) => {
+  test('create rep via API → appears on database employees page', async ({ page, apiClient, cleanup }) => {
     const name = uniqueRepName()
-    const rep = await createRep(apiClient, name)
+    await createRep(apiClient, name, 'active', cleanup)
 
-    await page.goto('/reps')
+    await page.goto('/database?tab=employees')
     await expect(page.locator('.card').filter({ has: page.locator('.font-medium', { hasText: name }) }).first()).toBeVisible()
-
-    await deleteRep(apiClient, rep.id)
   })
 })

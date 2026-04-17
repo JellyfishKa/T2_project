@@ -332,8 +332,8 @@ class Optimizer:
         model: str = "qwen",
     ):
         """
-        Генерирует 3 детерминированных варианта маршрута,
-        затем запрашивает у LLM pros/cons для каждого.
+        Генерирует несколько детерминированных кандидатов маршрута,
+        затем выбирает один лучший вариант и возвращает только его.
         БД не используется — результат возвращается напрямую.
         """
         from src.schemas.optimize import (
@@ -418,19 +418,31 @@ class Optimizer:
         except Exception as exc:
             logger.warning("LLM evaluate_variants failed: %s", exc)
 
-        # ── Строим ответ ────────────────────────────────────────────────────────
+        best_variant = min(
+            variants_data,
+            key=lambda variant: (
+                -variant["metrics"]["quality_score"],
+                variant["metrics"]["distance_km"],
+                variant["metrics"]["time_hours"],
+                variant["metrics"]["cost_rub"],
+                variant["id"],
+            ),
+        )
+
         response_variants = [
             RouteVariant(
-                id=v["id"],
-                name=v["name"],
-                description=v["description"],
-                algorithm=v["algorithm"],
-                pros=v["pros"],
-                cons=v["cons"],
-                locations=[loc.ID for loc in v["locations_ordered"]],
-                metrics=RouteVariantMetrics(**v["metrics"]),
+                id=1,
+                name="Лучший маршрут",
+                description=(
+                    f"{best_variant['name']}. "
+                    "Выбран автоматически как лучший вариант по качеству и метрикам."
+                ),
+                algorithm=best_variant["algorithm"],
+                pros=best_variant["pros"],
+                cons=best_variant["cons"],
+                locations=[loc.ID for loc in best_variant["locations_ordered"]],
+                metrics=RouteVariantMetrics(**best_variant["metrics"]),
             )
-            for v in variants_data
         ]
 
         return OptimizeVariantsResponse(

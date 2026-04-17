@@ -74,3 +74,7 @@ coverage.xml
 /frontend/coverage
 backend/coverage.xml
 backend/.coverage
+/backend/.venv
+/backend/.omc
+/backend/pytest_cache_local/
+/backend/test_tmp_outputs/

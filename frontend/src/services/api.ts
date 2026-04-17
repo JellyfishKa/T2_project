@@ -29,6 +29,7 @@ import type {
   SkippedStashItem,
   Vehicle,
   TransportMode,
+  AuditLogItem,
 } from './types'
 
 // Конфигурация API
@@ -50,6 +51,74 @@ const RETRY_DELAY = 1000 // 1 секунда
 
 // Функция для задержки
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function flattenErrorPayload(payload: unknown): string | null {
+  if (typeof payload === 'string') {
+    const value = payload.trim()
+    return value || null
+  }
+
+  if (Array.isArray(payload)) {
+    const parts = payload
+      .map((item) => flattenErrorPayload(item))
+      .filter((item): item is string => !!item)
+    return parts.length ? parts.join('; ') : null
+  }
+
+  if (!payload || typeof payload !== 'object') return null
+
+  const record = payload as Record<string, unknown>
+
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message
+  }
+
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error
+  }
+
+  if ('detail' in record) {
+    const detailMessage = flattenErrorPayload(record.detail)
+    if (detailMessage) return detailMessage
+  }
+
+  if (typeof record.msg === 'string' && record.msg.trim()) {
+    if (Array.isArray(record.loc) && record.loc.length) {
+      return `${record.loc.join('.')} — ${record.msg}`
+    }
+    return record.msg
+  }
+
+  if (typeof record.reason === 'string' && record.reason.trim()) {
+    return record.reason
+  }
+
+  return null
+}
+
+export function getApiErrorMessage(error: unknown, fallback = 'Произошла ошибка'): string {
+  const direct = flattenErrorPayload(error)
+  if (direct) return direct
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    const responseData =
+      record.response && typeof record.response === 'object'
+        ? (record.response as Record<string, unknown>).data
+        : null
+    const nested = [
+      flattenErrorPayload(responseData),
+      flattenErrorPayload(record.response),
+      flattenErrorPayload(record.data),
+      flattenErrorPayload(record.detail),
+      typeof record.message === 'string' && record.message.trim() ? record.message : null,
+    ].find((item): item is string => !!item)
+
+    if (nested) return nested
+  }
+
+  return fallback
+}
 
 // Функция для повторных попыток
 async function withRetry<T>(
@@ -79,13 +148,17 @@ async function withRetry<T>(
 
 // ========== ТИПЫ ДЛЯ ОТВЕТОВ ==========
 export interface UploadLocationsResponse {
-  success: boolean
-  message: string
-  locations: Location[]
+  created?: Location[]
+  total_processed?: number
+  success?: boolean
+  message?: string
+  locations?: Location[]
   errors?: Array<{
     row: number
-    field: string
-    message: string
+    field?: string
+    message?: string
+    error?: string
+    data?: unknown
   }>
 }
 
@@ -147,10 +220,23 @@ api.interceptors.response.use(
         console.error('Service Unavailable:', data)
         break
       default:
-        console.error(`HTTP Error ${status}:`, data)
+        console.error(`HTTP Error ${status}:`, getApiErrorMessage(data, error.message), data)
     }
 
-    return Promise.reject(error.response?.data || error)
+    const normalizedError = error as AxiosError<ApiError> & {
+      status?: number
+      detail?: unknown
+      data?: unknown
+    }
+    normalizedError.status = status
+    normalizedError.detail =
+      data && typeof data === 'object' && 'detail' in data
+        ? (data as Record<string, unknown>).detail
+        : data
+    normalizedError.data = data
+    normalizedError.message = getApiErrorMessage(data, error.message)
+
+    return Promise.reject(normalizedError)
   }
 )
 
@@ -337,8 +423,18 @@ export const checkHealth = async (): Promise<HealthStatus> => {
  * GET /api/v1/locations
  */
 export const fetchAllLocations = async (): Promise<Location[]> => {
-  const response = await withRetry(() => api.get('/locations'))
-  return response.data
+  const response = await withRetry(() => api.get('/locations/'))
+  const payload = response.data
+
+  if (Array.isArray(payload)) {
+    return payload
+  }
+
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { locations?: unknown }).locations)) {
+    return (payload as { locations: Location[] }).locations
+  }
+
+  return []
 }
 
 export const fetchRoutePreview = async (
@@ -399,6 +495,40 @@ export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<Vehicle>
 
 export const deleteVehicle = async (vehicleId: string): Promise<void> => {
   await withRetry(() => api.delete(`/routing/${vehicleId}`))
+}
+
+export const uploadVehiclesJson = async (
+  file: File,
+): Promise<{ created: Vehicle[]; errors: { row: number; error: string; data: unknown }[] }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await withRetry(() =>
+    api.post('/routing/upload_cars', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  )
+  return response.data
+}
+
+export const previewClearLocations = async (): Promise<{
+  preview: true; locations: number; visit_schedule: number; visit_log: number; skipped_visit_stash: number
+}> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: false } }))
+  return response.data
+}
+
+export const clearAllLocations = async (): Promise<{ deleted_locations: number; message: string }> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: true } }))
+  return response.data
+}
+
+export const fetchAuditLog = async (
+  month: string,
+  limit = 50,
+  offset = 0,
+): Promise<{ items: AuditLogItem[]; total: number }> => {
+  const response = await withRetry(() =>
+    api.get('/audit-log/monthly', { params: { month, limit, offset } })
+  )
+  return response.data
 }
 
 // ========== РАСПИСАНИЕ ==========

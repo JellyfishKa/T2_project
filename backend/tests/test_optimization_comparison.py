@@ -6,7 +6,9 @@ Unit-тесты для сравнения оптимизации моделей 
 """
 
 import json
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -28,8 +30,19 @@ def sample_locations():
 
 
 @pytest.fixture
-def temp_output_dir(tmp_path):
-    return tmp_path
+def temp_output_dir():
+    base_tmp_dir = PROJECT_ROOT / "backend" / "test_tmp_outputs"
+    base_tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(
+        tempfile.mkdtemp(
+            prefix="optimization-comparison-",
+            dir=base_tmp_dir,
+        )
+    )
+    try:
+        yield tmp_dir
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 class TestCompareModelsOptimization:

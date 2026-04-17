@@ -528,6 +528,7 @@ import {
   importScheduleExcel,
   fetchVisits,
   fetchReps,
+  getApiErrorMessage,
   type Route,
   type Metric,
   type VisitLog
@@ -923,7 +924,7 @@ const loadAnalyticsData = async () => {
     visits.value = visitsData
   } catch (err: any) {
     if (currentRequestId.value !== myId) return
-    error.value = err.message || 'Не удалось загрузить данные аналитики'
+    error.value = getApiErrorMessage(err, 'Не удалось загрузить данные аналитики')
     console.error('Analytics data loading error:', err)
   } finally {
     isLoading.value = false
@@ -939,7 +940,7 @@ const handleExport = async () => {
   try {
     await downloadScheduleExcel(insightsMonth.value)
   } catch (e: any) {
-    alert('Ошибка экспорта: ' + (e?.message ?? 'неизвестная ошибка'))
+    alert('Ошибка экспорта: ' + getApiErrorMessage(e, 'неизвестная ошибка'))
   } finally {
     exportLoading.value = false
   }
@@ -955,7 +956,7 @@ const handleImport = async (event: Event) => {
     importResult.value = await importScheduleExcel(file)
     await loadAnalyticsData()
   } catch (e: any) {
-    importResult.value = { updated: 0, skipped: 0, errors: [e?.message ?? 'неизвестная ошибка'] }
+    importResult.value = { updated: 0, skipped: 0, errors: [getApiErrorMessage(e, 'неизвестная ошибка')] }
   } finally {
     importLoading.value = false
     target.value = ''

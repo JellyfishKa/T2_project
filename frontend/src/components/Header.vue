@@ -75,8 +75,8 @@ const navigation = [
   { name: 'Дашборд', to: '/dashboard' },
   { name: 'Оптимизация', to: '/optimize' },
   { name: 'Расписание', to: '/schedule' },
-  { name: 'Сотрудники', to: '/reps' },
-  { name: 'Аналитика', to: '/analytics' }
+  { name: 'Аналитика', to: '/analytics' },
+  { name: 'База данных', to: '/database' },
 ]
 
 const route = useRoute()

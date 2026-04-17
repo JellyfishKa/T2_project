@@ -5,11 +5,11 @@ from typing import List
 
 from openpyxl import load_workbook
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import Location, get_session
+from src.database.models import Location, SkippedVisitStash, VisitLog, VisitSchedule, get_session
 from src.schemas.locations import (
     LocationCreate,
     LocationResponse,
@@ -70,6 +70,62 @@ async def create_location(
     return new_location
 
 
+@router.delete(
+    "/{location_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        404: {"description": "Location not found"},
+        409: {"description": "Location has related schedule or visit data"},
+    },
+)
+async def delete_location(
+    location_id: str,
+    force: bool = Query(False, description="Если true — удалить локацию вместе со связанными расписаниями и визитами"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete a location."""
+    location = await session.get(Location, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Локация не найдена")
+
+    schedules_count = (
+        await session.execute(
+            select(func.count()).where(VisitSchedule.location_id == location_id)
+        )
+    ).scalar() or 0
+    visits_count = (
+        await session.execute(
+            select(func.count()).where(VisitLog.location_id == location_id)
+        )
+    ).scalar() or 0
+    stash_count = (
+        await session.execute(
+            select(func.count()).where(SkippedVisitStash.location_id == location_id)
+        )
+    ).scalar() or 0
+
+    if force:
+        await session.execute(delete(VisitLog).where(VisitLog.location_id == location_id))
+        await session.execute(delete(SkippedVisitStash).where(SkippedVisitStash.location_id == location_id))
+        await session.execute(delete(VisitSchedule).where(VisitSchedule.location_id == location_id))
+        await session.delete(location)
+        await session.commit()
+        return
+
+    protected_records = schedules_count + visits_count + stash_count
+    if protected_records > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Локацию нельзя удалить: с ней связаны расписания или визиты. "
+                "Используйте force=true для принудительного удаления."
+            ),
+        )
+
+    await session.delete(location)
+    await session.commit()
+
+
 @router.post(
     "/upload",
     response_model=UploadLocationsResponse,
@@ -128,6 +184,55 @@ async def upload_locations(
         errors=errors,
         total_processed=len(rows),
     )
+
+
+@router.delete(
+    "/all",
+    status_code=status.HTTP_200_OK,
+    responses={400: {"description": "Bad Request"}},
+)
+async def clear_all_locations(
+    confirm: str = Query("false", description="Передай 'true' для фактического удаления"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Очистить все локации (с каскадным удалением расписания и визитов).
+
+    Без ?confirm=true возвращает предпросмотр количества записей.
+    С ?confirm=true — удаляет всё.
+    """
+    loc_count = (await session.execute(select(func.count()).select_from(Location))).scalar() or 0
+
+    if confirm.lower() != "true":
+        vs_count = (
+            await session.execute(text("SELECT COUNT(*) FROM visit_schedule"))
+        ).scalar() or 0
+        vl_count = (
+            await session.execute(text("SELECT COUNT(*) FROM visit_log"))
+        ).scalar() or 0
+        stash_count = (
+            await session.execute(text("SELECT COUNT(*) FROM skipped_visit_stash"))
+        ).scalar() or 0
+        return {
+            "preview": True,
+            "locations": loc_count,
+            "visit_schedule": vs_count,
+            "visit_log": vl_count,
+            "skipped_visit_stash": stash_count,
+            "message": "Передай ?confirm=true для выполнения удаления",
+        }
+
+    # Каскадное удаление в правильном порядке зависимостей
+    await session.execute(text("DELETE FROM visit_log WHERE location_id IN (SELECT id FROM locations)"))
+    await session.execute(text("DELETE FROM skipped_visit_stash WHERE location_id IN (SELECT id FROM locations)"))
+    await session.execute(text("DELETE FROM visit_schedule WHERE location_id IN (SELECT id FROM locations)"))
+    await session.execute(text("DELETE FROM locations"))
+    await session.commit()
+
+    return {
+        "preview": False,
+        "deleted_locations": loc_count,
+        "message": f"Удалено {loc_count} локаций и связанных записей",
+    }
 
 
 def _parse_json(content: bytes) -> list[dict]:

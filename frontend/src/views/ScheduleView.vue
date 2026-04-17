@@ -447,7 +447,11 @@
                     Оптимизировать оставшиеся ({{ remainingVisitsCount }})
                   </button>
                 </div>
-                <RouteMap :points="watchdogRoutePoints" height="20rem" />
+                <RouteMap
+                  :key="watchdogRouteMapKey"
+                  :points="watchdogRoutePoints"
+                  height="20rem"
+                />
                 <!-- Легенда -->
                 <div class="flex gap-4 text-xs text-gray-500 mt-2 flex-wrap">
                   <span class="flex items-center gap-1">
@@ -497,7 +501,12 @@
                       <span class="truncate text-gray-800">{{ visit.location_name }}</span>
                     </div>
                   </div>
-                  <RouteMap v-if="comparisonLeftPoints.length >= 2" :points="comparisonLeftPoints" height="14rem" />
+                  <RouteMap
+                    v-if="comparisonLeftPoints.length >= 2"
+                    :key="comparisonLeftMapKey"
+                    :points="comparisonLeftPoints"
+                    height="14rem"
+                  />
                 </div>
 
                 <div class="bg-white border border-gray-200 rounded-xl p-3">
@@ -516,7 +525,12 @@
                       <span class="truncate text-gray-800">{{ visit.location_name }}</span>
                     </div>
                   </div>
-                  <RouteMap v-if="comparisonRightPoints.length >= 2" :points="comparisonRightPoints" height="14rem" />
+                  <RouteMap
+                    v-if="comparisonRightPoints.length >= 2"
+                    :key="comparisonRightMapKey"
+                    :points="comparisonRightPoints"
+                    height="14rem"
+                  />
                 </div>
               </div>
             </div>
@@ -610,7 +624,7 @@
                 <div class="mb-4">
                   <h3 class="text-sm font-semibold text-gray-900">Варианты от ИИ</h3>
                   <p class="text-xs text-gray-500 mt-1">
-                    Получите 3 варианта и нажмите по карточке, чтобы открыть его в черновике.
+                    Получите лучший вариант от ИИ и при необходимости скорректируйте его вручную.
                   </p>
                 </div>
 
@@ -642,7 +656,7 @@
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                <span>{{ dayOptLoading ? 'Строю варианты…' : 'Получить 3 варианта' }}</span>
+                <span>{{ dayOptLoading ? 'Строю маршрут…' : 'Получить лучший маршрут' }}</span>
               </button>
 
               <!-- Прогресс-бар -->
@@ -658,10 +672,10 @@
 
             <div v-if="dayOptError" class="mb-3 text-sm text-red-600">{{ dayOptError }}</div>
 
-            <!-- 3 варианта маршрута -->
+            <!-- Лучший маршрут от ИИ -->
             <div v-if="dayOptResult" class="space-y-2">
               <div class="flex items-center justify-between gap-2 text-xs text-gray-500 mb-2">
-                <span>{{ dayOptResult.variants.length }} варианта готовы</span>
+                <span>Лучший вариант готов</span>
                 <span>
                   Модель: <strong class="text-blue-700">{{ dayOptResult.model_used }}</strong>
                   <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-600 ml-1">· ИИ-оценка недоступна</span>
@@ -707,7 +721,7 @@
             </div>
 
             <div v-else class="planner-empty-state">
-              Вариантов пока нет. Сначала нажмите «Получить 3 варианта».
+              Маршрут пока не построен. Сначала нажмите «Получить лучший маршрут».
             </div>
               </div>
             </div>
@@ -817,6 +831,7 @@ import {
   resolveStashAI,
   discardStashEntry,
   fetchVehicles,
+  getApiErrorMessage,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -1028,8 +1043,12 @@ async function optimizeRemainingVisits() {
   selectedVariantId.value = null
   try {
     dayOptResult.value = await optimizeVariants(ids, selectedModel.value, {})
+    const bestVariant = dayOptResult.value.variants[0]
+    if (bestVariant) {
+      previewVariant(bestVariant)
+    }
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка оптимизации'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка оптимизации')
   } finally {
     dayOptLoading.value = false
   }
@@ -1062,7 +1081,7 @@ async function resolveCarryOver(id: string) {
     await loadSkippedStash()
     await loadSchedule()
   } catch (e: any) {
-    alert(`Ошибка переноса: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка переноса: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1077,7 +1096,7 @@ async function submitStashManual() {
     await loadSkippedStash()
     await loadSchedule()
   } catch (e: any) {
-    alert(`Ошибка назначения: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка назначения: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1092,7 +1111,7 @@ async function resolveAllAI() {
     await loadSkippedStash()
     await loadSchedule()
   } catch (e: any) {
-    alert(`Ошибка ИИ-перераспределения: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка ИИ-перераспределения: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1104,7 +1123,7 @@ async function discardStash(id: string) {
     await discardStashEntry(id)
     await loadSkippedStash()
   } catch (e: any) {
-    alert(`Ошибка: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1142,6 +1161,32 @@ const comparisonLeftPoints = computed(() =>
 
 const comparisonRightPoints = computed(() =>
   isDraftDirty.value ? draftRoutePoints.value : currentRoutePoints.value
+)
+
+function buildRoutePointsSignature(points: RoutePoint[]): string {
+  if (!points.length) return 'empty'
+  return points
+    .map((point, index) =>
+      [
+        point.id,
+        point.order ?? index + 1,
+        Number.isFinite(point.lat) ? point.lat.toFixed(6) : 'nan',
+        Number.isFinite(point.lon) ? point.lon.toFixed(6) : 'nan',
+      ].join(':'),
+    )
+    .join('|')
+}
+
+const watchdogRouteMapKey = computed(() =>
+  `watchdog:${buildRoutePointsSignature(watchdogRoutePoints.value)}`
+)
+
+const comparisonLeftMapKey = computed(() =>
+  `comparison-left:${buildRoutePointsSignature(comparisonLeftPoints.value)}`
+)
+
+const comparisonRightMapKey = computed(() =>
+  `comparison-right:${buildRoutePointsSignature(comparisonRightPoints.value)}`
 )
 
 const comparisonLeftMetrics = computed(() =>
@@ -1280,7 +1325,7 @@ async function refreshDayRouteMetrics() {
       ? await getRouteMetricsForLocationIds(draftLocationIds.value)
       : null
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Не удалось пересчитать метрики маршрута'
+    dayOptError.value = getApiErrorMessage(e, 'Не удалось пересчитать метрики маршрута')
   } finally {
     previewLoading.value = false
   }
@@ -1345,7 +1390,7 @@ async function loadSchedule() {
     const plan = await fetchMonthlySchedule(currentMonth.value)
     routes.value = plan.routes ?? []
   } catch (e: any) {
-    error.value = e.message
+    error.value = getApiErrorMessage(e, 'Ошибка загрузки расписания')
   } finally {
     loading.value = false
   }
@@ -1384,7 +1429,7 @@ async function toggleHoliday(h: Holiday) {
       void refreshDayRouteMetrics()
     }
   } catch (e: any) {
-    holidayToggleMsg.value = `Ошибка: ${e?.message ?? e}`
+    holidayToggleMsg.value = `Ошибка: ${getApiErrorMessage(e, 'не удалось обновить праздник')}`
     holidayToggleMsgError.value = true
   }
 }
@@ -1398,11 +1443,8 @@ async function generatePlan(force = false) {
     genResult.value = `Готово: ${data.total_visits_planned} визитов, охват ${data.coverage_pct}%`
     await loadSchedule()
   } catch (e: any) {
-    const status = e?.response?.status
-    const detail = e?.response?.data?.detail
-    const msg = typeof detail === 'string'
-      ? detail
-      : detail?.message ?? e?.message ?? String(e)
+    const status = e?.response?.status ?? e?.status
+    const msg = getApiErrorMessage(e, 'Не удалось сгенерировать план')
     genResult.value = `Ошибка: ${msg}`
     if (status === 409) genCanForce.value = true
   } finally {
@@ -1424,7 +1466,7 @@ async function submitFM() {
     fmResult.value = `Зафиксировано. Перераспределено ${data.affected_tt_count} ТТ.`
     await loadSchedule()
   } catch (e: any) {
-    fmResult.value = `Ошибка: ${e.message}`
+    fmResult.value = `Ошибка: ${getApiErrorMessage(e, 'не удалось зафиксировать форс-мажор')}`
   } finally {
     submittingFM.value = false
   }
@@ -1471,7 +1513,7 @@ async function submitVisitUpdate() {
     void loadSkippedStash()
     void refreshDayProgress()
   } catch (e: any) {
-    visitError.value = e?.message ?? 'Ошибка сохранения'
+    visitError.value = getApiErrorMessage(e, 'Ошибка сохранения')
   } finally {
     savingVisit.value = false
   }
@@ -1492,7 +1534,7 @@ async function handleExport() {
   try {
     await downloadScheduleExcel(currentMonth.value)
   } catch (e: any) {
-    alert('Ошибка экспорта: ' + (e?.message ?? 'неизвестная ошибка'))
+    alert('Ошибка экспорта: ' + getApiErrorMessage(e, 'неизвестная ошибка'))
   } finally {
     exportLoading.value = false
   }
@@ -1532,8 +1574,12 @@ async function optimizeDayRoute() {
   try {
     const locationIds = currentLocationIds.value
     dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {})
+    const bestVariant = dayOptResult.value.variants[0]
+    if (bestVariant) {
+      previewVariant(bestVariant)
+    }
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка оптимизации'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка оптимизации')
   } finally {
     dayOptLoading.value = false
   }
@@ -1647,7 +1693,7 @@ async function applyDraftRoute() {
     )
     await refreshDayRouteMetrics()
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка сохранения маршрута'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка сохранения маршрута')
   } finally {
     confirmingVariant.value = false
   }
@@ -1671,7 +1717,7 @@ async function revertAppliedRoute() {
     setDayRouteMessage('Маршрут откатан к исходному порядку.', 'warning')
     await refreshDayRouteMetrics()
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка отката маршрута'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка отката маршрута')
   } finally {
     revertingDayRoute.value = false
   }

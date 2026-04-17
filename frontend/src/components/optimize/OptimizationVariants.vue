@@ -9,11 +9,11 @@
               d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
         </div>
-        <h2 class="text-xl font-bold text-gray-900">Выберите вариант маршрута</h2>
+        <h2 class="text-xl font-bold text-gray-900">Лучший маршрут от ИИ</h2>
       </div>
       <div class="flex items-center justify-between">
         <p class="text-sm text-gray-500">
-          Сгенерировано {{ variants.length }} варианта.
+          Построен лучший вариант маршрута.
           <span v-if="llmEvaluationSuccess" class="text-green-600 font-medium">
             Модель {{ modelLabel }} оценила каждый вариант.
           </span>
@@ -28,7 +28,7 @@
     <!-- Карта всех вариантов -->
     <div v-if="hasMapData" class="mb-6 bg-white rounded-xl border border-gray-200 p-4">
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h3 class="text-sm font-medium text-gray-900">Карта вариантов маршрута</h3>
+        <h3 class="text-sm font-medium text-gray-900">Карта маршрута</h3>
         <div class="flex items-center gap-3 text-xs">
           <span
             v-for="v in variants"
@@ -41,14 +41,14 @@
               :style="{ backgroundColor: VARIANT_COLORS[v.id] ?? '#6b7280' }"
             />
             <span :class="selectedId === v.id ? 'font-semibold text-gray-900' : 'text-gray-500'">
-              Вариант {{ v.id }}
+              Маршрут
             </span>
           </span>
         </div>
       </div>
       <RouteMap :routes="routeSets" height="20rem" @select-route="onMapSelect" />
       <p class="text-xs text-gray-400 mt-2">
-        Маркеры показаны для выбранного варианта. Кликните на пунктирную линию или карточку, чтобы переключиться.
+        Маркеры показаны для текущего маршрута.
       </p>
     </div>
 
@@ -223,9 +223,9 @@
         "
       >
         <span v-if="selectedId !== null">
-          Применить вариант {{ selectedId }}
+          Применить маршрут
         </span>
-        <span v-else>Выберите вариант</span>
+        <span v-else>Маршрут не выбран</span>
       </button>
     </div>
   </div>

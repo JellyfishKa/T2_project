@@ -106,7 +106,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { Vehicle } from '@/services/types'
-import { fetchVehicles, createVehicle, deleteVehicle } from '@/services/api'
+import { fetchVehicles, createVehicle, deleteVehicle, uploadVehiclesJson, getApiErrorMessage } from '@/services/api'
 import PageHero from '@/components/common/PageHero.vue'
 import InfoStatCard from '@/components/common/InfoStatCard.vue'
 
@@ -152,8 +152,8 @@ async function loadVehicles() {
   error.value = null
   try {
     vehicles.value = await fetchVehicles()
-  } catch {
-    error.value = 'Ошибка загрузки автомобилей'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка загрузки автомобилей')
   } finally {
     loading.value = false
   }
@@ -172,8 +172,8 @@ async function addVehicle() {
     })
     vehicles.value.push(v)
     form.value = { name: '', fuel_price_rub: null, consumption_city_l_100km: null, consumption_highway_l_100km: null }
-  } catch {
-    error.value = 'Ошибка добавления автомобиля'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка добавления автомобиля')
   } finally {
     saving.value = false
   }
@@ -185,8 +185,8 @@ async function removeVehicle(id: string) {
   try {
     await deleteVehicle(id)
     vehicles.value = vehicles.value.filter(v => v.id !== id)
-  } catch {
-    error.value = 'Ошибка удаления автомобиля'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка удаления автомобиля')
   }
 }
 
@@ -196,14 +196,13 @@ async function handleUpload(event: Event) {
   if (!file) return
   error.value = null
   try {
-    const { default: axios } = await import('axios')
-    const formData = new FormData()
-    formData.append('file', file)
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
-    const response = await axios.post(`${base}/routing/upload_cars`, formData)
-    vehicles.value.push(...response.data)
+    const result = await uploadVehiclesJson(file)
+    vehicles.value.push(...result.created)
+    if (result.errors.length) {
+      error.value = `Загружено: ${result.created.length}, ошибок: ${result.errors.length}`
+    }
   } catch (e: any) {
-    error.value = `Ошибка загрузки: ${e?.response?.data?.detail ?? e?.message ?? e}`
+    error.value = `Ошибка загрузки: ${getApiErrorMessage(e, 'не удалось загрузить JSON')}`
   } finally {
     target.value = ''
   }

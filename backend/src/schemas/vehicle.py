@@ -1,11 +1,12 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
 
 class Vehicle(BaseModel):
     id: str
     name: str
-    fuel_price_rub: float                 # Стоимость 1 литра топлива
-    consumption_city_l_100km: float       # Расход в городе (л/100 км)
-    consumption_highway_l_100km: float    # Расход на трассе (л/100 км)
+    fuel_price_rub: float
+    consumption_city_l_100km: float
+    consumption_highway_l_100km: float
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -14,6 +15,13 @@ class VehicleCreate(BaseModel):
     fuel_price_rub: float
     consumption_city_l_100km: float
     consumption_highway_l_100km: float
+
+    @field_validator('fuel_price_rub', 'consumption_city_l_100km', 'consumption_highway_l_100km')
+    @classmethod
+    def must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('must be > 0')
+        return v
 
 
 class VehicleResponse(VehicleCreate):

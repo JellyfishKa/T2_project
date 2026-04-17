@@ -343,7 +343,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { uploadLocations } from '@/services/api'
+import { uploadLocations, getApiErrorMessage } from '@/services/api'
 import type { Location } from './types'
 import {
   normalizeLocationCategory,
@@ -565,7 +565,7 @@ const uploadToServer = async () => {
       }
     }
   } catch (err: any) {
-    error.value = err?.message ?? err?.detail ?? 'Ошибка при загрузке файла на сервер'
+    error.value = getApiErrorMessage(err, 'Ошибка при загрузке файла на сервер')
     console.error('Upload error:', err)
   } finally {
     isUploading.value = false
