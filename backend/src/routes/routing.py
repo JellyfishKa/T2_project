@@ -11,7 +11,7 @@ from src.schemas.routing import (
 )
 from src.database.models import get_session
 from src.database.models import Vehicle as DBVehicle
-from src.schemas.vehicle import Vehicle as VehicleSchema, VehicleCreate, VehicleResponse
+from src.schemas.vehicle import Vehicle as VehicleSchema, VehicleCreate, VehicleResponse, VehicleUpdate
 from src.services.routing import RoutingService
 
 
@@ -33,6 +33,23 @@ async def create_vehicle(
     """Добавить автомобиль вручную."""
     vehicle = DBVehicle(**data.model_dump())
     session.add(vehicle)
+    await session.commit()
+    await session.refresh(vehicle)
+    return VehicleResponse.model_validate(vehicle)
+
+
+@router.patch("/{vehicle_id}", response_model=VehicleResponse)
+async def update_vehicle(
+    vehicle_id: str,
+    data: VehicleUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    """Обновить данные автомобиля."""
+    vehicle = await session.get(DBVehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Автомобиль не найден")
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(vehicle, field, value)
     await session.commit()
     await session.refresh(vehicle)
     return VehicleResponse.model_validate(vehicle)
