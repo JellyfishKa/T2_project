@@ -324,6 +324,18 @@ export interface ApiError {
   details?: Record<string, any>
 }
 
+export interface AuditLogItem {
+  id: string
+  action: string
+  action_label: string
+  table_name: string
+  record_id: string | null
+  old_value: string | null
+  new_value: string | null
+  details: string | null
+  created_at: string | null
+}
+
 export interface ModelComparison {
   models: Array<{
     name: string

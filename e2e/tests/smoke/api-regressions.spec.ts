@@ -36,6 +36,15 @@ test.describe('Smoke — API Regressions', () => {
   test('POST /api/v1/optimize/variants returns variants with route metrics', async ({ apiClient }) => {
     test.setTimeout(90_000)
 
+    const healthRes = await apiClient.get('/api/v1/health')
+    if (healthRes.status() === 200) {
+      const health = await healthRes.json()
+      if (health.llm_status !== 'loaded') {
+        test.skip(true, `LLM not loaded (status: ${health.llm_status})`)
+        return
+      }
+    }
+
     const locationsRes = await apiClient.get('/api/v1/locations/')
     expect(locationsRes.status()).toBe(200)
 

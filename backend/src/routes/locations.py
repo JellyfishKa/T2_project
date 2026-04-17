@@ -5,8 +5,8 @@ from typing import List
 
 from openpyxl import load_workbook
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Location, get_session
@@ -128,6 +128,55 @@ async def upload_locations(
         errors=errors,
         total_processed=len(rows),
     )
+
+
+@router.delete(
+    "/all",
+    status_code=status.HTTP_200_OK,
+    responses={400: {"description": "Bad Request"}},
+)
+async def clear_all_locations(
+    confirm: str = Query("false", description="Передай 'true' для фактического удаления"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Очистить все локации (с каскадным удалением расписания и визитов).
+
+    Без ?confirm=true возвращает предпросмотр количества записей.
+    С ?confirm=true — удаляет всё.
+    """
+    loc_count = (await session.execute(select(func.count()).select_from(Location))).scalar() or 0
+
+    if confirm.lower() != "true":
+        vs_count = (
+            await session.execute(text("SELECT COUNT(*) FROM visit_schedule"))
+        ).scalar() or 0
+        vl_count = (
+            await session.execute(text("SELECT COUNT(*) FROM visit_log"))
+        ).scalar() or 0
+        stash_count = (
+            await session.execute(text("SELECT COUNT(*) FROM skipped_visit_stash"))
+        ).scalar() or 0
+        return {
+            "preview": True,
+            "locations": loc_count,
+            "visit_schedule": vs_count,
+            "visit_log": vl_count,
+            "skipped_visit_stash": stash_count,
+            "message": "Передай ?confirm=true для выполнения удаления",
+        }
+
+    # Каскадное удаление в правильном порядке зависимостей
+    await session.execute(text("DELETE FROM visit_log WHERE location_id IN (SELECT id FROM locations)"))
+    await session.execute(text("DELETE FROM skipped_visit_stash WHERE location_id IN (SELECT id FROM locations)"))
+    await session.execute(text("DELETE FROM visit_schedule WHERE location_id IN (SELECT id FROM locations)"))
+    await session.execute(text("DELETE FROM locations"))
+    await session.commit()
+
+    return {
+        "preview": False,
+        "deleted_locations": loc_count,
+        "message": f"Удалено {loc_count} локаций и связанных записей",
+    }
 
 
 def _parse_json(content: bytes) -> list[dict]:

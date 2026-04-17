@@ -145,6 +145,46 @@ describe('ScheduleView.vue', () => {
     }
   })
 
+  it('показывает перегенерацию после 409 и повторяет запрос с force=true', async () => {
+    ;(api.generateSchedule as any)
+      .mockRejectedValueOnce({
+        status: 409,
+        detail: {
+          message: 'Расписание на 2026-03 уже существует (10 записей). Используйте ?force=true для перегенерации.',
+        },
+      })
+      .mockResolvedValueOnce({ total_visits_planned: 120, coverage_pct: 97 })
+
+    const wrapper = mount(ScheduleView)
+    await flushPromises()
+
+    const openBtn = wrapper.findAll('button').find((b) => b.text().includes('Сгенерировать план'))
+    expect(openBtn).toBeTruthy()
+    if (openBtn) {
+      await openBtn.trigger('click')
+      await flushPromises()
+    }
+
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text() === 'Сгенерировать')
+    expect(confirmBtn).toBeTruthy()
+    if (confirmBtn) {
+      await confirmBtn.trigger('click')
+      await flushPromises()
+    }
+
+    expect(wrapper.text()).toContain('Перегенерировать план')
+
+    const forceBtn = wrapper.findAll('button').find((b) => b.text() === 'Перегенерировать план')
+    expect(forceBtn).toBeTruthy()
+    if (forceBtn) {
+      await forceBtn.trigger('click')
+      await flushPromises()
+    }
+
+    expect(api.generateSchedule).toHaveBeenCalledTimes(2)
+    expect(api.generateSchedule).toHaveBeenLastCalledWith(expect.any(String), undefined, true)
+  })
+
   it('загрузка сотрудников вызывает fetchReps', async () => {
     mount(ScheduleView)
     await flushPromises()

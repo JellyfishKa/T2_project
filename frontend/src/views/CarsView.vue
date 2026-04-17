@@ -106,7 +106,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { Vehicle } from '@/services/types'
-import { fetchVehicles, createVehicle, deleteVehicle } from '@/services/api'
+import { fetchVehicles, createVehicle, deleteVehicle, uploadVehiclesJson } from '@/services/api'
 import PageHero from '@/components/common/PageHero.vue'
 import InfoStatCard from '@/components/common/InfoStatCard.vue'
 
@@ -196,14 +196,13 @@ async function handleUpload(event: Event) {
   if (!file) return
   error.value = null
   try {
-    const { default: axios } = await import('axios')
-    const formData = new FormData()
-    formData.append('file', file)
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
-    const response = await axios.post(`${base}/routing/upload_cars`, formData)
-    vehicles.value.push(...response.data)
+    const result = await uploadVehiclesJson(file)
+    vehicles.value.push(...result.created)
+    if (result.errors.length) {
+      error.value = `Загружено: ${result.created.length}, ошибок: ${result.errors.length}`
+    }
   } catch (e: any) {
-    error.value = `Ошибка загрузки: ${e?.response?.data?.detail ?? e?.message ?? e}`
+    error.value = `Ошибка загрузки: ${e?.response?.data?.detail?.message ?? e?.response?.data?.detail ?? e?.message ?? e}`
   } finally {
     target.value = ''
   }

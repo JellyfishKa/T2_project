@@ -11,7 +11,7 @@ from src.schemas.routing import (
 )
 from src.database.models import get_session
 from src.database.models import Vehicle as DBVehicle
-from src.schemas.vehicle import VehicleCreate, VehicleResponse
+from src.schemas.vehicle import Vehicle as VehicleSchema, VehicleCreate, VehicleResponse
 from src.services.routing import RoutingService
 
 
@@ -75,7 +75,6 @@ async def preview_route(
             result = await session.execute(select(DBVehicle).limit(1))
             vehicle = result.scalar_one_or_none()
 
-    from src.schemas.vehicle import Vehicle as VehicleSchema
     vehicle_schema = VehicleSchema.model_validate(vehicle, from_attributes=True) if vehicle else None
 
     routing_service = RoutingService()
@@ -89,19 +88,17 @@ async def preview_route(
 
 @router.post(
     "/upload_cars",
-    response_model=List[VehicleResponse],
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
     responses={
-        400: {"description": "Unsupported file format"},
+        400: {"description": "Unsupported file format or all rows invalid"},
         422: {"description": "Validation Error"},
-        500: {"description": "Internal Server Error"},
     },
 )
 async def upload_cars(
     file: UploadFile,
     session: AsyncSession = Depends(get_session),
-):
-    """Загрузить автомобили из JSON-файла."""
+) -> dict:
+    """Загрузить автомобили из JSON-файла. Возвращает {created: [...], errors: [...]}."""
     filename = (file.filename or "").lower()
     content = await file.read()
 
@@ -136,8 +133,16 @@ async def upload_cars(
         await session.commit()
         for v in created:
             await session.refresh(v)
+    elif errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "All rows failed validation", "errors": errors},
+        )
 
-    return [VehicleResponse.model_validate(v) for v in created]
+    return {
+        "created": [VehicleResponse.model_validate(v) for v in created],
+        "errors": errors,
+    }
 
 
 def _parse_json(content: bytes) -> list[dict]:

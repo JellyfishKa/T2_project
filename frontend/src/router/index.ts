@@ -46,6 +46,12 @@ const router = createRouter({
       component: () => import('../views/CarsView.vue'),
       meta: { title: 'Автопарк - T2 Platform' }
     },
+    {
+      path: '/database',
+      name: 'database',
+      component: () => import('../views/DatabaseView.vue'),
+      meta: { title: 'База данных - T2 Platform' }
+    },
     // Redirect to home if route not found
     {
       path: '/:pathMatch(.*)*',

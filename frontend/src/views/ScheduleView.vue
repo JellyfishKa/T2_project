@@ -1398,8 +1398,8 @@ async function generatePlan(force = false) {
     genResult.value = `Готово: ${data.total_visits_planned} визитов, охват ${data.coverage_pct}%`
     await loadSchedule()
   } catch (e: any) {
-    const status = e?.response?.status
-    const detail = e?.response?.data?.detail
+    const status = e?.response?.status ?? e?.status
+    const detail = e?.response?.data?.detail ?? e?.detail
     const msg = typeof detail === 'string'
       ? detail
       : detail?.message ?? e?.message ?? String(e)

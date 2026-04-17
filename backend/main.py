@@ -26,6 +26,7 @@ from src.routes.reps import router as reps_router
 from src.routes.routing import router as routing_router
 from src.routes.routes import router as routes_router
 from src.routes.schedule import router as schedule_router
+from src.routes.audit_log import router as audit_log_router
 from src.routes.holidays import router as holidays_router
 from src.routes.visits import router as visits_router
 from src.routes.cruddata import (
@@ -116,7 +117,6 @@ else:
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost",
-        "http://100.120.184.98",
     ]
 
 app.add_middleware(
@@ -145,6 +145,7 @@ api_v1_router.include_router(visits_router)
 api_v1_router.include_router(export_router)
 api_v1_router.include_router(import_router)
 api_v1_router.include_router(holidays_router)
+api_v1_router.include_router(audit_log_router)
 # crud
 api_v1_router.include_router(location_router_crud)
 api_v1_router.include_router(sales_rep_router_crud)

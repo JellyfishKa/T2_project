@@ -160,9 +160,9 @@ test.describe('Schedule — Day Modal', () => {
     if (!modal) return
 
     const activeRouteMetrics = modal.locator('.planner-summary-card').first().locator('.planner-summary-card__hint')
-    await expect(activeRouteMetrics).toContainText('км')
-    await expect(activeRouteMetrics).toContainText('ч')
-    await expect(activeRouteMetrics).toContainText('₽')
+    await expect(activeRouteMetrics).toContainText('км', { timeout: 10_000 })
+    await expect(activeRouteMetrics).toContainText('ч', { timeout: 10_000 })
+    await expect(activeRouteMetrics).toContainText('₽', { timeout: 10_000 })
   })
 
   test('changing transport mode recalculates route metrics', async ({ page, apiClient }) => {

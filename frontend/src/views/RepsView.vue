@@ -36,7 +36,7 @@
         </div>
         <div>
           <label class="label">Автомобиль</label>
-          <select v-model="newVehicleId" class="input">
+          <select v-model="newVehicleId" class="input" data-testid="new-rep-vehicle-select">
             <option :value="null">Такси / Автобус</option>
             <option v-for="v in vehicles" :key="v.id" :value="v.id">{{ v.name }}</option>
           </select>

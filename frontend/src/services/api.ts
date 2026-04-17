@@ -29,6 +29,7 @@ import type {
   SkippedStashItem,
   Vehicle,
   TransportMode,
+  AuditLogItem,
 } from './types'
 
 // Конфигурация API
@@ -50,6 +51,33 @@ const RETRY_DELAY = 1000 // 1 секунда
 
 // Функция для задержки
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function extractApiErrorMessage(data: unknown, fallback: string): string {
+  if (typeof data === 'string' && data.trim()) return data
+
+  if (data && typeof data === 'object') {
+    const payload = data as Record<string, unknown>
+    const detail = payload.detail
+
+    if (typeof payload.message === 'string' && payload.message.trim()) {
+      return payload.message
+    }
+
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail
+    }
+
+    if (
+      detail &&
+      typeof detail === 'object' &&
+      typeof (detail as Record<string, unknown>).message === 'string'
+    ) {
+      return (detail as Record<string, string>).message
+    }
+  }
+
+  return fallback
+}
 
 // Функция для повторных попыток
 async function withRetry<T>(
@@ -150,7 +178,20 @@ api.interceptors.response.use(
         console.error(`HTTP Error ${status}:`, data)
     }
 
-    return Promise.reject(error.response?.data || error)
+    const normalizedError = error as AxiosError<ApiError> & {
+      status?: number
+      detail?: unknown
+      data?: unknown
+    }
+    normalizedError.status = status
+    normalizedError.detail =
+      data && typeof data === 'object' && 'detail' in data
+        ? (data as Record<string, unknown>).detail
+        : data
+    normalizedError.data = data
+    normalizedError.message = extractApiErrorMessage(data, error.message)
+
+    return Promise.reject(normalizedError)
   }
 )
 
@@ -399,6 +440,40 @@ export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<Vehicle>
 
 export const deleteVehicle = async (vehicleId: string): Promise<void> => {
   await withRetry(() => api.delete(`/routing/${vehicleId}`))
+}
+
+export const uploadVehiclesJson = async (
+  file: File,
+): Promise<{ created: Vehicle[]; errors: { row: number; error: string; data: unknown }[] }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await withRetry(() =>
+    api.post('/routing/upload_cars', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  )
+  return response.data
+}
+
+export const previewClearLocations = async (): Promise<{
+  preview: true; locations: number; visit_schedule: number; visit_log: number; skipped_visit_stash: number
+}> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: false } }))
+  return response.data
+}
+
+export const clearAllLocations = async (): Promise<{ deleted_locations: number; message: string }> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: true } }))
+  return response.data
+}
+
+export const fetchAuditLog = async (
+  month: string,
+  limit = 50,
+  offset = 0,
+): Promise<{ items: AuditLogItem[]; total: number }> => {
+  const response = await withRetry(() =>
+    api.get('/audit-log/monthly', { params: { month, limit, offset } })
+  )
+  return response.data
 }
 
 // ========== РАСПИСАНИЕ ==========

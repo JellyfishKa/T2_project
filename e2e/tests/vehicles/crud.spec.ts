@@ -57,7 +57,7 @@ test.describe('Vehicles — CRUD', () => {
     await page.goto('/reps')
     await page.click('text=+ Добавить сотрудника')
 
-    const vehicleSelect = page.locator('select').filter({ hasText: /Такси|Автобус/ }).first()
+    const vehicleSelect = page.locator('[data-testid="new-rep-vehicle-select"]')
     await expect(vehicleSelect.locator(`option:has-text("${vname}")`)).toBeAttached({ timeout: 5_000 })
 
     await deleteVehicle(apiClient, vehicle.id)

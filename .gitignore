@@ -74,3 +74,5 @@ coverage.xml
 /frontend/coverage
 backend/coverage.xml
 backend/.coverage
+/backend/.venv
+/backend/.omc

@@ -149,9 +149,11 @@ async def generate_schedule(
     month_start = date(year, m, 1)
     month_end = date(year, m, last_day)
 
+    _ACTIVE_STATUSES = ("planned", "rescheduled", "skipped")
     existing_q = await session.execute(
         select(func.count()).where(
             VisitSchedule.planned_date.between(month_start, month_end),
+            VisitSchedule.status.in_(_ACTIVE_STATUSES),
         )
     )
     existing_count = existing_q.scalar() or 0
@@ -170,6 +172,7 @@ async def generate_schedule(
         schedules_q = await session.execute(
             select(VisitSchedule).where(
                 VisitSchedule.planned_date.between(month_start, month_end),
+                VisitSchedule.status.in_(_ACTIVE_STATUSES),
             )
         )
         schedules_to_delete = schedules_q.scalars().all()
