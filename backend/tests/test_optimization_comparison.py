@@ -8,7 +8,7 @@ Unit-тесты для сравнения оптимизации моделей 
 import json
 import shutil
 import sys
-import tempfile
+import uuid
 from pathlib import Path
 
 import pytest
@@ -33,12 +33,8 @@ def sample_locations():
 def temp_output_dir():
     base_tmp_dir = PROJECT_ROOT / "backend" / "test_tmp_outputs"
     base_tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir = Path(
-        tempfile.mkdtemp(
-            prefix="optimization-comparison-",
-            dir=base_tmp_dir,
-        )
-    )
+    tmp_dir = base_tmp_dir / f"optimization-comparison-{uuid.uuid4().hex}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
         yield tmp_dir
     finally:

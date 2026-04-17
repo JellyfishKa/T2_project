@@ -437,6 +437,18 @@ export const fetchAllLocations = async (): Promise<Location[]> => {
   return []
 }
 
+export const updateLocation = async (
+  id: string,
+  data: Partial<Omit<Location, 'id'>>,
+): Promise<Location> => {
+  const response = await withRetry(() => api.patch(`/locations/${id}`, data))
+  return response.data
+}
+
+export const deleteLocation = async (id: string, force = false): Promise<void> => {
+  await withRetry(() => api.delete(`/locations/${id}`, force ? { params: { force: true } } : {}))
+}
+
 export const fetchRoutePreview = async (
   points: RoutePreviewPoint[],
   options?: { vehicle_id?: string | null; transport_mode?: TransportMode }
@@ -477,8 +489,8 @@ export const updateRep = async (
   return response.data
 }
 
-export const deleteRep = async (repId: string): Promise<void> => {
-  await withRetry(() => api.delete(`/reps/${repId}`))
+export const deleteRep = async (repId: string, force = false): Promise<void> => {
+  await withRetry(() => api.delete(`/reps/${repId}`, force ? { params: { force: true } } : {}))
 }
 
 // ========== АВТОПАРК ==========
@@ -495,6 +507,14 @@ export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<Vehicle>
 
 export const deleteVehicle = async (vehicleId: string): Promise<void> => {
   await withRetry(() => api.delete(`/routing/${vehicleId}`))
+}
+
+export const updateVehicle = async (
+  vehicleId: string,
+  data: { name?: string; fuel_price_rub?: number; consumption_city_l_100km?: number; consumption_highway_l_100km?: number },
+): Promise<Vehicle> => {
+  const response = await withRetry(() => api.patch(`/routing/${vehicleId}`, data))
+  return response.data
 }
 
 export const uploadVehiclesJson = async (

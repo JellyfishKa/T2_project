@@ -75,6 +75,7 @@
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Кат</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lat</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lon</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Действия</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -89,6 +90,10 @@
               </td>
               <td class="px-4 py-2 text-right text-gray-600 font-mono text-xs">{{ loc.lat.toFixed(4) }}</td>
               <td class="px-4 py-2 text-right text-gray-600 font-mono text-xs">{{ loc.lon.toFixed(4) }}</td>
+              <td class="px-4 py-2 text-center whitespace-nowrap">
+                <button class="text-xs text-blue-600 hover:underline mr-2" @click="openEditLoc(loc)">Изменить</button>
+                <button class="btn-danger-sm" @click="doDeleteLoc(loc.id)">Удалить</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -122,6 +127,72 @@
           </div>
         </div>
       </div>
+    <!-- Edit location modal -->
+    <div v-if="editingLoc" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+        <h3 class="font-semibold text-gray-900 mb-4">Редактировать точку</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <label class="label">Название</label>
+            <input v-model="editLocForm.name" class="input" />
+          </div>
+          <div>
+            <label class="label">Город</label>
+            <input v-model="editLocForm.city" class="input" placeholder="Саранск" />
+          </div>
+          <div>
+            <label class="label">Район</label>
+            <input v-model="editLocForm.district" class="input" />
+          </div>
+          <div>
+            <label class="label">Категория</label>
+            <select v-model="editLocForm.category" class="input">
+              <option value="">—</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Адрес</label>
+            <input v-model="editLocForm.address" class="input" />
+          </div>
+          <div>
+            <label class="label">Широта (lat)</label>
+            <input v-model.number="editLocForm.lat" type="number" step="0.0001" class="input" />
+          </div>
+          <div>
+            <label class="label">Долгота (lon)</label>
+            <input v-model.number="editLocForm.lon" type="number" step="0.0001" class="input" />
+          </div>
+        </div>
+        <div class="flex gap-3 justify-end mt-5">
+          <button class="btn-secondary" @click="editingLoc = null">Отмена</button>
+          <button class="btn-primary" :disabled="savingLoc" @click="saveEditLoc">
+            {{ savingLoc ? 'Сохранение…' : 'Сохранить' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Force-delete location dialog -->
+    <div v-if="forceDeleteLocId" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <h3 class="font-semibold text-gray-900 mb-2">Точка связана с расписанием</h3>
+        <p class="text-sm text-gray-600 mb-5">
+          Удаление точки удалит все связанные записи расписания и визитов.
+          После удаления рекомендуется пересобрать месячный план.
+        </p>
+        <div class="flex gap-3 justify-end">
+          <button class="btn-secondary" @click="forceDeleteLocId = null">Отмена</button>
+          <button class="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded font-medium" @click="forceDeleteLoc">
+            Удалить принудительно
+          </button>
+        </div>
+      </div>
+    </div>
+
     </div>
 
     <!-- ─── Tab: Автомобили ─── -->
@@ -201,12 +272,44 @@
               <td class="px-4 py-3 text-right text-gray-700">
                 {{ ((v.consumption_city_l_100km / 100) * v.fuel_price_rub * 100).toFixed(0) }}
               </td>
-              <td class="px-4 py-3 text-center">
+              <td class="px-4 py-3 text-center whitespace-nowrap">
+                <button class="text-xs text-blue-600 hover:underline mr-2" @click="openEditVehicle(v)">Изменить</button>
                 <button class="btn-danger-sm" @click="removeVehicle(v.id)">Удалить</button>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Edit vehicle modal -->
+    <div v-if="editingVehicle" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <h3 class="font-semibold text-gray-900 mb-4">Редактировать автомобиль</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <label class="label">Название</label>
+            <input v-model="vEditForm.name" class="input" />
+          </div>
+          <div>
+            <label class="label">Цена топлива (₽/л)</label>
+            <input v-model.number="vEditForm.fuel_price_rub" type="number" min="0" step="0.5" class="input" />
+          </div>
+          <div>
+            <label class="label">Расход город (л/100км)</label>
+            <input v-model.number="vEditForm.consumption_city_l_100km" type="number" min="0" step="0.1" class="input" />
+          </div>
+          <div class="col-span-2">
+            <label class="label">Расход трасса (л/100км)</label>
+            <input v-model.number="vEditForm.consumption_highway_l_100km" type="number" min="0" step="0.1" class="input" />
+          </div>
+        </div>
+        <div class="flex gap-3 justify-end mt-5">
+          <button class="btn-secondary" @click="editingVehicle = null">Отмена</button>
+          <button class="btn-primary" :disabled="savingVehicle" @click="saveEditVehicle">
+            {{ savingVehicle ? 'Сохранение…' : 'Сохранить' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -225,6 +328,11 @@
           <div class="text-2xl font-bold text-amber-600">{{ reps.filter(r => r.status !== 'active').length }}</div>
           <div class="text-xs text-gray-500 mt-1">Нуждаются внимания</div>
         </div>
+      </div>
+
+      <div v-if="repDeleteWarning" class="bg-amber-50 border border-amber-300 text-amber-800 text-sm px-4 py-3 rounded flex items-center justify-between">
+        <span>⚠ {{ repDeleteWarning }}</span>
+        <button class="ml-4 text-amber-600 hover:text-amber-800 font-medium text-xs" @click="repDeleteWarning = null">✕</button>
       </div>
 
       <div class="card p-4 flex justify-end">
@@ -270,7 +378,15 @@
           class="card p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
         >
           <div>
-            <div class="font-medium text-gray-900">{{ rep.name }}</div>
+            <div v-if="editingRepId === rep.id" class="flex items-center gap-2">
+              <input v-model="editRepName" class="input-sm w-48" @keyup.enter="saveRepName" @keyup.escape="editingRepId = null" />
+              <button class="btn-primary text-xs px-2 py-1" @click="saveRepName">OK</button>
+              <button class="btn-secondary text-xs px-2 py-1" @click="editingRepId = null">✕</button>
+            </div>
+            <div v-else class="flex items-center gap-2">
+              <span class="font-medium text-gray-900">{{ rep.name }}</span>
+              <button class="text-xs text-blue-600 hover:underline" @click="startEditRepName(rep)">Изменить</button>
+            </div>
             <div class="text-xs text-gray-400 mt-0.5">{{ rep.id.slice(0, 8) }}…</div>
             <span v-if="rep.vehicle_name" class="text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full mt-1 inline-block">
               🚗 {{ rep.vehicle_name }}
@@ -357,8 +473,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Location, Vehicle, SalesRep, AuditLogItem } from '@/services/types'
 import {
-  fetchAllLocations,
-  fetchVehicles, createVehicle, deleteVehicle, uploadVehiclesJson,
+  fetchAllLocations, updateLocation, deleteLocation,
+  fetchVehicles, createVehicle, updateVehicle, deleteVehicle, uploadVehiclesJson,
   fetchReps, createRep, updateRep, deleteRep as apiDeleteRep,
   uploadLocations, previewClearLocations, clearAllLocations,
   fetchAuditLog,
@@ -518,6 +634,69 @@ async function executeClear() {
   }
 }
 
+// ─── Location edit / single delete ────────────────────────────────────────────
+const editingLoc = ref<Location | null>(null)
+const editLocForm = ref({ name: '', city: '', district: '', address: '', category: '' as '' | 'A' | 'B' | 'C' | 'D', lat: 0, lon: 0 })
+const savingLoc = ref(false)
+const forceDeleteLocId = ref<string | null>(null)
+
+function openEditLoc(loc: Location) {
+  editingLoc.value = loc
+  editLocForm.value = {
+    name: loc.name,
+    city: loc.city ?? '',
+    district: loc.district ?? '',
+    address: (loc as any).address ?? '',
+    category: (loc.category ?? '') as '' | 'A' | 'B' | 'C' | 'D',
+    lat: loc.lat,
+    lon: loc.lon,
+  }
+}
+
+async function saveEditLoc() {
+  if (!editingLoc.value || savingLoc.value) return
+  savingLoc.value = true
+  try {
+    const updated = await updateLocation(editingLoc.value.id, {
+      name: editLocForm.value.name || undefined,
+      city: editLocForm.value.city || undefined,
+      district: editLocForm.value.district || undefined,
+      address: editLocForm.value.address || undefined,
+      category: (editLocForm.value.category as 'A' | 'B' | 'C' | 'D') || undefined,
+      lat: editLocForm.value.lat,
+      lon: editLocForm.value.lon,
+    })
+    const idx = locations.value.findIndex(l => l.id === updated.id)
+    if (idx !== -1) locations.value[idx] = updated
+    editingLoc.value = null
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка сохранения') }
+  finally { savingLoc.value = false }
+}
+
+async function doDeleteLoc(id: string) {
+  try {
+    await deleteLocation(id)
+    locations.value = locations.value.filter(l => l.id !== id)
+  } catch (e: any) {
+    if (e?.response?.status === 409) {
+      forceDeleteLocId.value = id
+    } else {
+      error.value = getApiErrorMessage(e, 'Ошибка удаления точки')
+    }
+  }
+}
+
+async function forceDeleteLoc() {
+  if (!forceDeleteLocId.value) return
+  try {
+    await deleteLocation(forceDeleteLocId.value, true)
+    locations.value = locations.value.filter(l => l.id !== forceDeleteLocId.value)
+    locUploadMsg.value = 'Точка удалена. Рекомендуется пересобрать месячный план.'
+    locUploadErr.value = false
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка принудительного удаления') }
+  finally { forceDeleteLocId.value = null }
+}
+
 // ─── Vehicles ─────────────────────────────────────────────────────────────────
 const vehicles = ref<Vehicle[]>([])
 const vLoading = ref(false)
@@ -575,6 +754,27 @@ async function removeVehicle(id: string) {
   } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка удаления автомобиля') }
 }
 
+const editingVehicle = ref<Vehicle | null>(null)
+const vEditForm = ref({ name: '', fuel_price_rub: 0, consumption_city_l_100km: 0, consumption_highway_l_100km: 0 })
+const savingVehicle = ref(false)
+
+function openEditVehicle(v: Vehicle) {
+  editingVehicle.value = v
+  vEditForm.value = { name: v.name, fuel_price_rub: v.fuel_price_rub, consumption_city_l_100km: v.consumption_city_l_100km, consumption_highway_l_100km: v.consumption_highway_l_100km }
+}
+
+async function saveEditVehicle() {
+  if (!editingVehicle.value || savingVehicle.value) return
+  savingVehicle.value = true
+  try {
+    const updated = await updateVehicle(editingVehicle.value.id, vEditForm.value)
+    const idx = vehicles.value.findIndex(v => v.id === updated.id)
+    if (idx !== -1) vehicles.value[idx] = updated
+    editingVehicle.value = null
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка сохранения автомобиля') }
+  finally { savingVehicle.value = false }
+}
+
 async function handleVehicleUpload(event: Event) {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
@@ -596,6 +796,9 @@ const showRepForm = ref(false)
 const newRepName = ref('')
 const newRepStatus = ref<SalesRep['status']>('active')
 const newRepVehicleId = ref<string | null>(null)
+const repDeleteWarning = ref<string | null>(null)
+const editingRepId = ref<string | null>(null)
+const editRepName = ref('')
 
 async function loadReps() {
   rLoading.value = true
@@ -629,13 +832,40 @@ async function doAssignVehicle(id: string, vehicleId: string | null) {
   } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка привязки автомобиля') }
 }
 
+async function startEditRepName(rep: SalesRep) {
+  editingRepId.value = rep.id
+  editRepName.value = rep.name
+}
+
+async function saveRepName() {
+  if (!editingRepId.value) return
+  try {
+    const updated = await updateRep(editingRepId.value, { name: editRepName.value.trim() })
+    const idx = reps.value.findIndex(r => r.id === editingRepId.value)
+    if (idx !== -1) reps.value[idx] = updated
+    editingRepId.value = null
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка сохранения имени') }
+}
+
 async function doDeleteRep(id: string) {
-  if (!confirm('Удалить сотрудника?')) return
+  const rep = reps.value.find(r => r.id === id)
+  if (!rep || !confirm(`Удалить сотрудника ${rep.name}?`)) return
+  repDeleteWarning.value = null
   try {
     await apiDeleteRep(id)
-    await loadReps()
+    reps.value = reps.value.filter(r => r.id !== id)
   } catch (e: any) {
-    error.value = getApiErrorMessage(e, 'Ошибка удаления сотрудника')
+    if (e?.response?.status === 409) {
+      if (!confirm(`У ${rep.name} есть данные в расписании.\nСотрудник будет переведён в "Недоступен" и удалён принудительно.\nПосле этого рекомендуется пересобрать план.`)) return
+      try {
+        await updateRep(id, { status: 'unavailable' })
+        await apiDeleteRep(id, true)
+        reps.value = reps.value.filter(r => r.id !== id)
+        repDeleteWarning.value = `Сотрудник ${rep.name} удалён. Рекомендуется пересобрать месячный план.`
+      } catch (e2) { error.value = getApiErrorMessage(e2, 'Ошибка принудительного удаления') }
+    } else {
+      error.value = getApiErrorMessage(e, 'Ошибка удаления сотрудника')
+    }
   }
 }
 

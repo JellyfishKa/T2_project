@@ -13,6 +13,7 @@ from src.database.models import Location, SkippedVisitStash, VisitLog, VisitSche
 from src.schemas.locations import (
     LocationCreate,
     LocationResponse,
+    LocationUpdate,
     UploadLocationsResponse,
 )
 
@@ -68,6 +69,23 @@ async def create_location(
     await session.refresh(new_location)
 
     return new_location
+
+
+@router.patch("/{location_id}", response_model=LocationResponse)
+async def update_location(
+    location_id: str,
+    data: LocationUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    """Обновить данные локации."""
+    location = await session.get(Location, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Локация не найдена")
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(location, field, value)
+    await session.commit()
+    await session.refresh(location)
+    return LocationResponse.model_validate(location)
 
 
 @router.delete(
