@@ -6,7 +6,7 @@ Region-agnostic: all context derived from input data.
 import math
 from typing import Dict, List, Optional, Tuple
 
-DEFAULT_FUEL_COST_RUB_PER_KM = 6.0
+DEFAULT_FUEL_COST_RUB_PER_KM = 7.0
 
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
