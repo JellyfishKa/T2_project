@@ -1,8 +1,8 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import { test, expect } from '../../fixtures/base'
-import { createRep, currentMonth, deleteRep, ensureGeneratedSchedule, RepData } from '../../fixtures/test-data'
+import { createRep, currentMonth, ensureGeneratedSchedule, type RepData } from '../../fixtures/test-data'
 
-const month = currentMonth(1)
+const month = currentMonth(19)
 
 let seedRep: RepData | null = null
 
@@ -100,27 +100,9 @@ test.describe('Schedule — Day Modal', () => {
   test.describe.configure({ mode: 'serial' })
   test.setTimeout(90_000)
 
-  test.beforeEach(async ({ apiClient }) => {
-    if (!seedRep) {
-      seedRep = await createRep(apiClient, `E2E Schedule Day Modal ${Date.now()}`)
-    }
-
-    await ensureGeneratedSchedule(apiClient, month, [seedRep.id])
-  })
-
-  test.afterAll(async ({ playwright }) => {
-    if (!seedRep) return
-
-    const apiClient = await playwright.request.newContext({
-      baseURL: process.env.API_URL ?? 'http://127.0.0.1:8000',
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-    })
-    await deleteRep(apiClient, seedRep.id).catch(() => {})
-    await apiClient.dispose()
-    seedRep = null
+  test.beforeEach(async ({ apiClient, cleanup }) => {
+    seedRep = await createRep(apiClient, `${cleanup.namespace}_schedule_day_modal`, 'active', cleanup)
+    await ensureGeneratedSchedule(apiClient, month, [seedRep.id], cleanup)
   })
 
   test('clicking a day card opens day modal', async ({ page, apiClient }) => {

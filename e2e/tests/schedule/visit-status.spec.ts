@@ -1,34 +1,16 @@
 import { test, expect } from '../../fixtures/base'
-import { createRep, currentMonth, deleteRep, ensureGeneratedSchedule, RepData } from '../../fixtures/test-data'
+import { createRep, currentMonth, ensureGeneratedSchedule, type RepData } from '../../fixtures/test-data'
 
-const month = currentMonth(2)
+const month = currentMonth(20)
 
 let seedRep: RepData | null = null
 
 test.describe('Schedule — Visit Status Transitions', () => {
   test.describe.configure({ mode: 'serial' })
 
-  test.beforeEach(async ({ apiClient }) => {
-    if (!seedRep) {
-      seedRep = await createRep(apiClient, `E2E Schedule Visit Status ${Date.now()}`)
-    }
-
-    await ensureGeneratedSchedule(apiClient, month, [seedRep.id])
-  })
-
-  test.afterAll(async ({ playwright }) => {
-    if (!seedRep) return
-
-    const apiClient = await playwright.request.newContext({
-      baseURL: process.env.API_URL ?? 'http://127.0.0.1:8000',
-      extraHTTPHeaders: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-    })
-    await deleteRep(apiClient, seedRep.id).catch(() => {})
-    await apiClient.dispose()
-    seedRep = null
+  test.beforeEach(async ({ apiClient, cleanup }) => {
+    seedRep = await createRep(apiClient, `${cleanup.namespace}_visit_status`, 'active', cleanup)
+    await ensureGeneratedSchedule(apiClient, month, [seedRep.id], cleanup)
   })
 
   test('PATCH visit to completed succeeds', async ({ apiClient }) => {

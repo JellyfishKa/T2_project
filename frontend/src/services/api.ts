@@ -148,13 +148,17 @@ async function withRetry<T>(
 
 // ========== ТИПЫ ДЛЯ ОТВЕТОВ ==========
 export interface UploadLocationsResponse {
-  success: boolean
-  message: string
-  locations: Location[]
+  created?: Location[]
+  total_processed?: number
+  success?: boolean
+  message?: string
+  locations?: Location[]
   errors?: Array<{
     row: number
-    field: string
-    message: string
+    field?: string
+    message?: string
+    error?: string
+    data?: unknown
   }>
 }
 

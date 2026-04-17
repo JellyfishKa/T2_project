@@ -446,6 +446,12 @@ function catBadge(cat: string | null | undefined) {
   }[cat ?? ''] ?? 'bg-gray-100 text-gray-600'
 }
 
+function getUploadedLocations(result: Awaited<ReturnType<typeof uploadLocations>>): Location[] {
+  if (Array.isArray(result.created)) return result.created
+  if (Array.isArray(result.locations)) return result.locations
+  return []
+}
+
 async function loadLocations() {
   locLoading.value = true
   try {
@@ -466,10 +472,17 @@ async function handleLocUpload(event: Event) {
   locUploadErr.value = false
   try {
     const result = await uploadLocations(file)
-    const created = Array.isArray((result as any).created) ? (result as any).created : result
-    const errCount = Array.isArray((result as any).errors) ? (result as any).errors.length : 0
+    const created = getUploadedLocations(result)
+    const errCount = Array.isArray(result.errors) ? result.errors.length : 0
+    if (created.length) {
+      // Показываем свежезагруженные точки сразу, даже если follow-up GET вернул пусто.
+      locations.value = created
+    }
     await loadLocations()
-    locUploadMsg.value = `Загружено: ${Array.isArray(created) ? created.length : '?'}${errCount ? `, ошибок: ${errCount}` : ''}`
+    if (!locations.value.length && created.length) {
+      locations.value = created
+    }
+    locUploadMsg.value = `Загружено: ${created.length || result.total_processed || '?'}${errCount ? `, ошибок: ${errCount}` : ''}`
   } catch (e: any) {
     locUploadErr.value = true
     locUploadMsg.value = `Ошибка: ${getApiErrorMessage(e, 'не удалось загрузить файл')}`
