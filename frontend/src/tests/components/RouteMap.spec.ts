@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent, nextTick, ref } from 'vue'
+import * as api from '@/services/api'
 
 // Stub leaflet image asset imports (Vite handles these in the real build,
 // but Vitest+jsdom does not transform PNGs).
@@ -64,6 +66,7 @@ import L from 'leaflet'
 describe('RouteMap.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('fetch', vi.fn())
   })
 
   it('mounts without errors when points is empty', async () => {
@@ -123,6 +126,41 @@ describe('RouteMap.vue', () => {
     wrapper.unmount()
   })
 
+  it('re-renders when point order changes inside the same array reference', async () => {
+    const Host = defineComponent({
+      components: { RouteMap },
+      setup() {
+        const points = ref([
+          { id: '1', name: 'A', lat: 54.0, lon: 45.0, order: 1 },
+          { id: '2', name: 'B', lat: 54.1, lon: 45.1, order: 2 },
+          { id: '3', name: 'C', lat: 54.2, lon: 45.2, order: 3 },
+        ])
+
+        const swapOrder = () => {
+          const sameArray = points.value
+          ;[sameArray[0], sameArray[1]] = [sameArray[1], sameArray[0]]
+          sameArray[0].order = 1
+          sameArray[1].order = 2
+        }
+
+        return { points, swapOrder }
+      },
+      template: '<RouteMap :points="points" />',
+    })
+
+    const wrapper = mount(Host)
+    await flushPromises()
+
+    expect(L.polyline).toHaveBeenCalledTimes(1)
+
+    ;(wrapper.vm as unknown as { swapOrder: () => void }).swapOrder()
+    await nextTick()
+    await flushPromises()
+
+    expect(L.polyline).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
   it('multi-route mode draws one polyline per route and markers only for selected', async () => {
     const routes = [
       {
@@ -161,6 +199,60 @@ describe('RouteMap.vue', () => {
     // Markers only for the selected variant (variant 2 → 3 points)
     expect(L.marker).toHaveBeenCalledTimes(3)
     expect(fakeMap.fitBounds).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+  })
+
+  it('tries direct road routing in browser when backend preview falls back to straight lines', async () => {
+    ;(api.fetchRoutePreview as any).mockResolvedValueOnce({
+      geometry: [
+        [54.71, 45.11],
+        [54.93, 45.32],
+      ],
+      distance_km: 10,
+      time_minutes: 25,
+      cost_rub: 70,
+      traffic_lights_count: 3,
+      source: 'fallback',
+    })
+
+    ;(globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            distance: 15000,
+            duration: 2100,
+            geometry: {
+              coordinates: [
+                [45.11, 54.71],
+                [45.18, 54.82],
+                [45.32, 54.93],
+              ],
+            },
+          },
+        ],
+      }),
+    })
+
+    const points = [
+      { id: '1', name: 'A', lat: 54.71, lon: 45.11, order: 1 },
+      { id: '2', name: 'B', lat: 54.93, lon: 45.32, order: 2 },
+    ]
+
+    const wrapper = mount(RouteMap, { props: { points } })
+    await flushPromises()
+    await flushPromises()
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+    expect(L.polyline).toHaveBeenCalledWith(
+      [
+        [54.71, 45.11],
+        [54.82, 45.18],
+        [54.93, 45.32],
+      ],
+      expect.any(Object),
+    )
 
     wrapper.unmount()
   })

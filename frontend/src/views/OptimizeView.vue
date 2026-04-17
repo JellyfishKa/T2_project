@@ -3,11 +3,11 @@
     <PageHero
       eyebrow="Маршрут"
       title="Оптимизация маршрута"
-      description="Настройте точки, выберите модель и соберите маршрут по шагам: сначала 3 варианта от ИИ, затем ручная доводка и честное сравнение до/после."
+      description="Настройте точки, выберите модель и соберите маршрут по шагам: сначала лучший маршрут от ИИ, затем ручная доводка и честное сравнение до/после."
     >
       <template #meta>
         <div class="flex flex-wrap gap-2">
-          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">3 варианта</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">1 лучший вариант</span>
           <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Ручная доводка</span>
           <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Сравнение до/после</span>
         </div>

@@ -447,7 +447,11 @@
                     Оптимизировать оставшиеся ({{ remainingVisitsCount }})
                   </button>
                 </div>
-                <RouteMap :points="watchdogRoutePoints" height="20rem" />
+                <RouteMap
+                  :key="watchdogRouteMapKey"
+                  :points="watchdogRoutePoints"
+                  height="20rem"
+                />
                 <!-- Легенда -->
                 <div class="flex gap-4 text-xs text-gray-500 mt-2 flex-wrap">
                   <span class="flex items-center gap-1">
@@ -497,7 +501,12 @@
                       <span class="truncate text-gray-800">{{ visit.location_name }}</span>
                     </div>
                   </div>
-                  <RouteMap v-if="comparisonLeftPoints.length >= 2" :points="comparisonLeftPoints" height="14rem" />
+                  <RouteMap
+                    v-if="comparisonLeftPoints.length >= 2"
+                    :key="comparisonLeftMapKey"
+                    :points="comparisonLeftPoints"
+                    height="14rem"
+                  />
                 </div>
 
                 <div class="bg-white border border-gray-200 rounded-xl p-3">
@@ -516,7 +525,12 @@
                       <span class="truncate text-gray-800">{{ visit.location_name }}</span>
                     </div>
                   </div>
-                  <RouteMap v-if="comparisonRightPoints.length >= 2" :points="comparisonRightPoints" height="14rem" />
+                  <RouteMap
+                    v-if="comparisonRightPoints.length >= 2"
+                    :key="comparisonRightMapKey"
+                    :points="comparisonRightPoints"
+                    height="14rem"
+                  />
                 </div>
               </div>
             </div>
@@ -610,7 +624,7 @@
                 <div class="mb-4">
                   <h3 class="text-sm font-semibold text-gray-900">Варианты от ИИ</h3>
                   <p class="text-xs text-gray-500 mt-1">
-                    Получите 3 варианта и нажмите по карточке, чтобы открыть его в черновике.
+                    Получите лучший вариант от ИИ и при необходимости скорректируйте его вручную.
                   </p>
                 </div>
 
@@ -642,7 +656,7 @@
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                <span>{{ dayOptLoading ? 'Строю варианты…' : 'Получить 3 варианта' }}</span>
+                <span>{{ dayOptLoading ? 'Строю маршрут…' : 'Получить лучший маршрут' }}</span>
               </button>
 
               <!-- Прогресс-бар -->
@@ -658,10 +672,10 @@
 
             <div v-if="dayOptError" class="mb-3 text-sm text-red-600">{{ dayOptError }}</div>
 
-            <!-- 3 варианта маршрута -->
+            <!-- Лучший маршрут от ИИ -->
             <div v-if="dayOptResult" class="space-y-2">
               <div class="flex items-center justify-between gap-2 text-xs text-gray-500 mb-2">
-                <span>{{ dayOptResult.variants.length }} варианта готовы</span>
+                <span>Лучший вариант готов</span>
                 <span>
                   Модель: <strong class="text-blue-700">{{ dayOptResult.model_used }}</strong>
                   <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-600 ml-1">· ИИ-оценка недоступна</span>
@@ -707,7 +721,7 @@
             </div>
 
             <div v-else class="planner-empty-state">
-              Вариантов пока нет. Сначала нажмите «Получить 3 варианта».
+              Маршрут пока не построен. Сначала нажмите «Получить лучший маршрут».
             </div>
               </div>
             </div>
@@ -1029,6 +1043,10 @@ async function optimizeRemainingVisits() {
   selectedVariantId.value = null
   try {
     dayOptResult.value = await optimizeVariants(ids, selectedModel.value, {})
+    const bestVariant = dayOptResult.value.variants[0]
+    if (bestVariant) {
+      previewVariant(bestVariant)
+    }
   } catch (e: any) {
     dayOptError.value = getApiErrorMessage(e, 'Ошибка оптимизации')
   } finally {
@@ -1143,6 +1161,32 @@ const comparisonLeftPoints = computed(() =>
 
 const comparisonRightPoints = computed(() =>
   isDraftDirty.value ? draftRoutePoints.value : currentRoutePoints.value
+)
+
+function buildRoutePointsSignature(points: RoutePoint[]): string {
+  if (!points.length) return 'empty'
+  return points
+    .map((point, index) =>
+      [
+        point.id,
+        point.order ?? index + 1,
+        Number.isFinite(point.lat) ? point.lat.toFixed(6) : 'nan',
+        Number.isFinite(point.lon) ? point.lon.toFixed(6) : 'nan',
+      ].join(':'),
+    )
+    .join('|')
+}
+
+const watchdogRouteMapKey = computed(() =>
+  `watchdog:${buildRoutePointsSignature(watchdogRoutePoints.value)}`
+)
+
+const comparisonLeftMapKey = computed(() =>
+  `comparison-left:${buildRoutePointsSignature(comparisonLeftPoints.value)}`
+)
+
+const comparisonRightMapKey = computed(() =>
+  `comparison-right:${buildRoutePointsSignature(comparisonRightPoints.value)}`
 )
 
 const comparisonLeftMetrics = computed(() =>
@@ -1530,6 +1574,10 @@ async function optimizeDayRoute() {
   try {
     const locationIds = currentLocationIds.value
     dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {})
+    const bestVariant = dayOptResult.value.variants[0]
+    if (bestVariant) {
+      previewVariant(bestVariant)
+    }
   } catch (e: any) {
     dayOptError.value = getApiErrorMessage(e, 'Ошибка оптимизации')
   } finally {
