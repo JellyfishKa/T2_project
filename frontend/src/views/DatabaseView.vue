@@ -11,7 +11,7 @@
         <button
           v-for="tab in tabs"
           :key="tab.id"
-          @click="activeTab = tab.id"
+          @click="setActiveTab(tab.id)"
           :class="[
             'px-4 py-2 text-sm font-medium rounded-t border-b-2 transition-colors',
             activeTab === tab.id
@@ -353,7 +353,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { Location, Vehicle, SalesRep, AuditLogItem } from '@/services/types'
 import {
   fetchAllLocations,
@@ -361,17 +362,64 @@ import {
   fetchReps, createRep, updateRep, deleteRep as apiDeleteRep,
   uploadLocations, previewClearLocations, clearAllLocations,
   fetchAuditLog,
+  getApiErrorMessage,
 } from '@/services/api'
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
-const tabs = [
+const route = useRoute()
+const router = useRouter()
+
+const tabIds = ['locations', 'vehicles', 'employees', 'audit'] as const
+type DatabaseTabId = typeof tabIds[number]
+
+const tabs: Array<{ id: DatabaseTabId; label: string }> = [
   { id: 'locations' as const, label: 'Локации (ТТ)' },
   { id: 'vehicles'  as const, label: 'Автомобили' },
   { id: 'employees' as const, label: 'Сотрудники' },
   { id: 'audit'     as const, label: 'Аудит-лог' },
 ]
-const activeTab = ref<'locations' | 'vehicles' | 'employees' | 'audit'>('locations')
+
+function normalizeTab(value: unknown): DatabaseTabId {
+  const candidate = Array.isArray(value) ? value[0] : value
+  return tabIds.includes(candidate as DatabaseTabId)
+    ? (candidate as DatabaseTabId)
+    : 'locations'
+}
+
+const activeTab = ref<DatabaseTabId>(normalizeTab(route.query.tab))
 const error = ref<string | null>(null)
+
+function setActiveTab(tab: DatabaseTabId) {
+  activeTab.value = tab
+}
+
+watch(
+  () => route.query.tab,
+  (nextQueryTab) => {
+    const nextTab = normalizeTab(nextQueryTab)
+    if (nextTab !== activeTab.value) {
+      activeTab.value = nextTab
+    }
+  }
+)
+
+watch(activeTab, (nextTab) => {
+  const currentTab = normalizeTab(route.query.tab)
+  const hasExplicitTab = typeof route.query.tab === 'string'
+
+  if (nextTab === currentTab && (hasExplicitTab || nextTab === 'locations')) {
+    return
+  }
+
+  const nextQuery = { ...route.query }
+  if (nextTab === 'locations') {
+    delete nextQuery.tab
+  } else {
+    nextQuery.tab = nextTab
+  }
+
+  void router.replace({ query: nextQuery })
+})
 
 // ─── Locations ────────────────────────────────────────────────────────────────
 const locations = ref<Location[]>([])
@@ -403,8 +451,8 @@ async function loadLocations() {
   try {
     const data = await fetchAllLocations()
     locations.value = Array.isArray(data) ? data : []
-  } catch {
-    error.value = 'Ошибка загрузки локаций'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка загрузки локаций')
   } finally {
     locLoading.value = false
   }
@@ -424,7 +472,7 @@ async function handleLocUpload(event: Event) {
     locUploadMsg.value = `Загружено: ${Array.isArray(created) ? created.length : '?'}${errCount ? `, ошибок: ${errCount}` : ''}`
   } catch (e: any) {
     locUploadErr.value = true
-    locUploadMsg.value = `Ошибка: ${e?.response?.data?.detail ?? e?.message ?? e}`
+    locUploadMsg.value = `Ошибка: ${getApiErrorMessage(e, 'не удалось загрузить файл')}`
   } finally {
     target.value = ''
   }
@@ -451,7 +499,7 @@ async function executeClear() {
     await loadLocations()
     locUploadMsg.value = 'Таблица очищена'
   } catch (e: any) {
-    error.value = `Ошибка очистки: ${e?.response?.data?.detail ?? e?.message}`
+    error.value = `Ошибка очистки: ${getApiErrorMessage(e, 'не удалось очистить данные')}`
   } finally {
     clearing.value = false
   }
@@ -488,7 +536,7 @@ const avgFuelPrice = computed(() => {
 
 async function loadVehicles() {
   vLoading.value = true
-  try { vehicles.value = await fetchVehicles() } catch { /* silent */ } finally { vLoading.value = false }
+  try { vehicles.value = await fetchVehicles() } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка загрузки автомобилей') } finally { vLoading.value = false }
 }
 
 async function addVehicle() {
@@ -503,7 +551,7 @@ async function addVehicle() {
     })
     vehicles.value.push(v)
     vForm.value = { name: '', fuel_price_rub: null, consumption_city_l_100km: null, consumption_highway_l_100km: null }
-  } catch { error.value = 'Ошибка добавления автомобиля' } finally { vSaving.value = false }
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка добавления автомобиля') } finally { vSaving.value = false }
 }
 
 async function removeVehicle(id: string) {
@@ -511,7 +559,7 @@ async function removeVehicle(id: string) {
   try {
     await deleteVehicle(id)
     vehicles.value = vehicles.value.filter(v => v.id !== id)
-  } catch { error.value = 'Ошибка удаления' }
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка удаления автомобиля') }
 }
 
 async function handleVehicleUpload(event: Event) {
@@ -523,7 +571,7 @@ async function handleVehicleUpload(event: Event) {
     vehicles.value.push(...result.created)
     if (result.errors.length) error.value = `Загружено: ${result.created.length}, ошибок: ${result.errors.length}`
   } catch (e: any) {
-    error.value = `Ошибка загрузки: ${e?.response?.data?.detail ?? e?.message}`
+    error.value = `Ошибка загрузки: ${getApiErrorMessage(e, 'не удалось загрузить JSON')}`
   } finally { target.value = '' }
 }
 
@@ -538,7 +586,7 @@ const newRepVehicleId = ref<string | null>(null)
 
 async function loadReps() {
   rLoading.value = true
-  try { reps.value = await fetchReps() } catch { /* silent */ } finally { rLoading.value = false }
+  try { reps.value = await fetchReps() } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка загрузки сотрудников') } finally { rLoading.value = false }
 }
 
 async function doCreateRep() {
@@ -550,14 +598,14 @@ async function doCreateRep() {
     newRepVehicleId.value = null
     showRepForm.value = false
     await loadReps()
-  } catch { error.value = 'Ошибка создания сотрудника' } finally { repSaving.value = false }
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка создания сотрудника') } finally { repSaving.value = false }
 }
 
 async function doUpdateStatus(id: string, status: string) {
   try {
     await updateRep(id, { status: status as SalesRep['status'] })
     await loadReps()
-  } catch { error.value = 'Ошибка обновления статуса' }
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка обновления статуса') }
 }
 
 async function doAssignVehicle(id: string, vehicleId: string | null) {
@@ -565,7 +613,7 @@ async function doAssignVehicle(id: string, vehicleId: string | null) {
     const updated = await updateRep(id, { vehicle_id: vehicleId })
     const idx = reps.value.findIndex(r => r.id === id)
     if (idx !== -1) reps.value[idx] = updated
-  } catch { error.value = 'Ошибка привязки автомобиля' }
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка привязки автомобиля') }
 }
 
 async function doDeleteRep(id: string) {
@@ -574,7 +622,7 @@ async function doDeleteRep(id: string) {
     await apiDeleteRep(id)
     await loadReps()
   } catch (e: any) {
-    error.value = e?.detail ?? e?.message ?? 'Ошибка удаления сотрудника'
+    error.value = getApiErrorMessage(e, 'Ошибка удаления сотрудника')
   }
 }
 
@@ -591,7 +639,7 @@ async function loadAudit(reset: boolean) {
     const result = await fetchAuditLog(auditMonth.value, 50, auditItems.value.length)
     auditTotal.value = result.total
     auditItems.value.push(...result.items)
-  } catch { error.value = 'Ошибка загрузки аудит-лога' } finally { auditLoading.value = false }
+  } catch (e) { error.value = getApiErrorMessage(e, 'Ошибка загрузки аудит-лога') } finally { auditLoading.value = false }
 }
 
 function truncate(val: string | null | undefined, max = 80): string {

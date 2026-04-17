@@ -109,8 +109,6 @@ const navigation: NavigationItem[] = [
   { name: 'Оптимизация', to: '/optimize',  icon: 'bolt' },
   { name: 'Аналитика',   to: '/analytics', icon: 'chart-line' },
   { name: 'Расписание',  to: '/schedule',  icon: 'calendar' },
-  { name: 'Сотрудники',  to: '/reps',      icon: 'users' },
-  { name: 'Автопарк',    to: '/cars',      icon: 'truck' },
   { name: 'База данных', to: '/database',  icon: 'database' },
 ]
 

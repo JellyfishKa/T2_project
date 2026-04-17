@@ -115,6 +115,7 @@ import {
   updateRep,
   deleteRep as apiDeleteRep,
   fetchVehicles,
+  getApiErrorMessage,
 } from '@/services/api'
 import PageHero from '@/components/common/PageHero.vue'
 import InfoStatCard from '@/components/common/InfoStatCard.vue'
@@ -147,7 +148,7 @@ async function loadReps() {
     ])
 
     if (repsResult.status === 'rejected') {
-      error.value = 'Ошибка загрузки данных'
+      error.value = getApiErrorMessage(repsResult.reason, 'Ошибка загрузки данных')
       reps.value = []
     } else {
       reps.value = repsResult.value
@@ -158,8 +159,8 @@ async function loadReps() {
     } else {
       vehicles.value = vehiclesResult.value
     }
-  } catch {
-    error.value = 'Ошибка загрузки данных'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка загрузки данных')
   } finally {
     loading.value = false
   }
@@ -175,8 +176,8 @@ async function createRep() {
     newVehicleId.value = null
     showForm.value = false
     await loadReps()
-  } catch {
-    error.value = 'Ошибка создания сотрудника'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка создания сотрудника')
   } finally {
     saving.value = false
   }
@@ -188,8 +189,8 @@ async function assignVehicle(id: string, vehicleId: string | null) {
     const updated = await updateRep(id, { vehicle_id: vehicleId })
     const idx = reps.value.findIndex(r => r.id === id)
     if (idx !== -1) reps.value[idx] = updated
-  } catch {
-    error.value = 'Ошибка привязки автомобиля'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка привязки автомобиля')
   }
 }
 
@@ -198,8 +199,8 @@ async function updateStatus(id: string, status: string) {
   try {
     await updateRep(id, { status: status as SalesRep['status'] })
     await loadReps()
-  } catch {
-    error.value = 'Ошибка обновления статуса'
+  } catch (e) {
+    error.value = getApiErrorMessage(e, 'Ошибка обновления статуса')
   }
 }
 
@@ -210,7 +211,7 @@ async function deleteRep(id: string) {
     await apiDeleteRep(id)
     await loadReps()
   } catch (e: any) {
-    error.value = e?.detail ?? e?.message ?? 'Ошибка удаления сотрудника'
+    error.value = getApiErrorMessage(e, 'Ошибка удаления сотрудника')
   }
 }
 

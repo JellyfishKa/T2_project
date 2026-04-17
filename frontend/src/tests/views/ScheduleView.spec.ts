@@ -25,6 +25,15 @@ vi.mock('@/services/api', () => ({
   resolveStashCarryOver: vi.fn(),
   resolveStashAI: vi.fn(),
   discardStashEntry: vi.fn(),
+  getApiErrorMessage: vi.fn((error: any, fallback?: string) =>
+    error?.response?.data?.detail?.message ??
+    error?.response?.data?.detail ??
+    error?.detail?.message ??
+    error?.detail ??
+    error?.message ??
+    fallback ??
+    'Произошла ошибка'
+  ),
 }))
 
 // Stub RouteMap so ScheduleView tests don't need Leaflet

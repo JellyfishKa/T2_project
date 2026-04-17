@@ -225,7 +225,7 @@ import FileUpload from '@/components/optimize/FileUpload.vue'
 import PageHero from '@/components/common/PageHero.vue'
 import InfoStatCard from '@/components/common/InfoStatCard.vue'
 import { buildLocationAddress } from '@/components/optimize/address'
-import { optimizeVariants, confirmVariant, fetchRoutePreview } from '@/services/api'
+import { optimizeVariants, confirmVariant, fetchRoutePreview, getApiErrorMessage } from '@/services/api'
 import type { Constraints, Location } from '@/components/optimize/types'
 import type { Route, RouteVariant, OptimizeVariantsResponse } from '@/services/types'
 
@@ -450,10 +450,10 @@ const handleOptimize = async () => {
   } catch (error: any) {
     loadingDone.value = true
     console.error('Variants generation error:', error)
-    optimizationError.value =
-      error?.detail ||
-      error?.message ||
-      'Не удалось выполнить оптимизацию. Проверьте подключение к серверу.'
+    optimizationError.value = getApiErrorMessage(
+      error,
+      'Не удалось выполнить оптимизацию. Проверьте подключение к серверу.',
+    )
     await new Promise(resolve => setTimeout(resolve, 300))
     currentView.value = 'error'
   }
@@ -517,7 +517,7 @@ const saveRoute = async () => {
     )
   } catch (err: any) {
     console.error('Save error:', err)
-    alert('Ошибка при сохранении маршрута')
+    alert(getApiErrorMessage(err, 'Ошибка при сохранении маршрута'))
   }
 }
 

@@ -45,7 +45,8 @@ import {
   fetchRouteMetrics,
   runBenchmark,
   checkHealth,
-  fetchAllLocations
+  fetchAllLocations,
+  getApiErrorMessage,
 } from '@/services/api'
 
 describe('API Service', () => {
@@ -554,6 +555,49 @@ describe('API Service', () => {
       } catch (error) {
         expect(mockedAxios.get).toHaveBeenCalledTimes(1)
       }
+    })
+  })
+
+  describe('getApiErrorMessage', () => {
+    it('should extract nested detail.message from API error payload', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: {
+              message: 'Расписание уже существует',
+            },
+          },
+        },
+      })
+
+      expect(message).toBe('Расписание уже существует')
+    })
+
+    it('should extract string detail from API error payload', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: 'Сотрудника нельзя удалить: сначала переведите его в неактивный статус.',
+          },
+        },
+      })
+
+      expect(message).toBe('Сотрудника нельзя удалить: сначала переведите его в неактивный статус.')
+    })
+
+    it('should format validation errors array', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: [
+              { loc: ['body', 'month'], msg: 'Field required' },
+              { loc: ['body', 'rep_ids'], msg: 'Invalid list' },
+            ],
+          },
+        },
+      })
+
+      expect(message).toBe('body.month — Field required; body.rep_ids — Invalid list')
     })
   })
 })

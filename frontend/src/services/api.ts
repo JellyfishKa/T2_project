@@ -52,28 +52,69 @@ const RETRY_DELAY = 1000 // 1 секунда
 // Функция для задержки
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-function extractApiErrorMessage(data: unknown, fallback: string): string {
-  if (typeof data === 'string' && data.trim()) return data
+function flattenErrorPayload(payload: unknown): string | null {
+  if (typeof payload === 'string') {
+    const value = payload.trim()
+    return value || null
+  }
 
-  if (data && typeof data === 'object') {
-    const payload = data as Record<string, unknown>
-    const detail = payload.detail
+  if (Array.isArray(payload)) {
+    const parts = payload
+      .map((item) => flattenErrorPayload(item))
+      .filter((item): item is string => !!item)
+    return parts.length ? parts.join('; ') : null
+  }
 
-    if (typeof payload.message === 'string' && payload.message.trim()) {
-      return payload.message
+  if (!payload || typeof payload !== 'object') return null
+
+  const record = payload as Record<string, unknown>
+
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message
+  }
+
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error
+  }
+
+  if ('detail' in record) {
+    const detailMessage = flattenErrorPayload(record.detail)
+    if (detailMessage) return detailMessage
+  }
+
+  if (typeof record.msg === 'string' && record.msg.trim()) {
+    if (Array.isArray(record.loc) && record.loc.length) {
+      return `${record.loc.join('.')} — ${record.msg}`
     }
+    return record.msg
+  }
 
-    if (typeof detail === 'string' && detail.trim()) {
-      return detail
-    }
+  if (typeof record.reason === 'string' && record.reason.trim()) {
+    return record.reason
+  }
 
-    if (
-      detail &&
-      typeof detail === 'object' &&
-      typeof (detail as Record<string, unknown>).message === 'string'
-    ) {
-      return (detail as Record<string, string>).message
-    }
+  return null
+}
+
+export function getApiErrorMessage(error: unknown, fallback = 'Произошла ошибка'): string {
+  const direct = flattenErrorPayload(error)
+  if (direct) return direct
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    const responseData =
+      record.response && typeof record.response === 'object'
+        ? (record.response as Record<string, unknown>).data
+        : null
+    const nested = [
+      flattenErrorPayload(responseData),
+      flattenErrorPayload(record.response),
+      flattenErrorPayload(record.data),
+      flattenErrorPayload(record.detail),
+      typeof record.message === 'string' && record.message.trim() ? record.message : null,
+    ].find((item): item is string => !!item)
+
+    if (nested) return nested
   }
 
   return fallback
@@ -175,7 +216,7 @@ api.interceptors.response.use(
         console.error('Service Unavailable:', data)
         break
       default:
-        console.error(`HTTP Error ${status}:`, data)
+        console.error(`HTTP Error ${status}:`, getApiErrorMessage(data, error.message), data)
     }
 
     const normalizedError = error as AxiosError<ApiError> & {
@@ -189,7 +230,7 @@ api.interceptors.response.use(
         ? (data as Record<string, unknown>).detail
         : data
     normalizedError.data = data
-    normalizedError.message = extractApiErrorMessage(data, error.message)
+    normalizedError.message = getApiErrorMessage(data, error.message)
 
     return Promise.reject(normalizedError)
   }

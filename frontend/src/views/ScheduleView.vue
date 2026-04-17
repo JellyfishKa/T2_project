@@ -817,6 +817,7 @@ import {
   resolveStashAI,
   discardStashEntry,
   fetchVehicles,
+  getApiErrorMessage,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -1029,7 +1030,7 @@ async function optimizeRemainingVisits() {
   try {
     dayOptResult.value = await optimizeVariants(ids, selectedModel.value, {})
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка оптимизации'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка оптимизации')
   } finally {
     dayOptLoading.value = false
   }
@@ -1062,7 +1063,7 @@ async function resolveCarryOver(id: string) {
     await loadSkippedStash()
     await loadSchedule()
   } catch (e: any) {
-    alert(`Ошибка переноса: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка переноса: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1077,7 +1078,7 @@ async function submitStashManual() {
     await loadSkippedStash()
     await loadSchedule()
   } catch (e: any) {
-    alert(`Ошибка назначения: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка назначения: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1092,7 +1093,7 @@ async function resolveAllAI() {
     await loadSkippedStash()
     await loadSchedule()
   } catch (e: any) {
-    alert(`Ошибка ИИ-перераспределения: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка ИИ-перераспределения: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1104,7 +1105,7 @@ async function discardStash(id: string) {
     await discardStashEntry(id)
     await loadSkippedStash()
   } catch (e: any) {
-    alert(`Ошибка: ${e?.message ?? 'неизвестная'}`)
+    alert(`Ошибка: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1280,7 +1281,7 @@ async function refreshDayRouteMetrics() {
       ? await getRouteMetricsForLocationIds(draftLocationIds.value)
       : null
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Не удалось пересчитать метрики маршрута'
+    dayOptError.value = getApiErrorMessage(e, 'Не удалось пересчитать метрики маршрута')
   } finally {
     previewLoading.value = false
   }
@@ -1345,7 +1346,7 @@ async function loadSchedule() {
     const plan = await fetchMonthlySchedule(currentMonth.value)
     routes.value = plan.routes ?? []
   } catch (e: any) {
-    error.value = e.message
+    error.value = getApiErrorMessage(e, 'Ошибка загрузки расписания')
   } finally {
     loading.value = false
   }
@@ -1384,7 +1385,7 @@ async function toggleHoliday(h: Holiday) {
       void refreshDayRouteMetrics()
     }
   } catch (e: any) {
-    holidayToggleMsg.value = `Ошибка: ${e?.message ?? e}`
+    holidayToggleMsg.value = `Ошибка: ${getApiErrorMessage(e, 'не удалось обновить праздник')}`
     holidayToggleMsgError.value = true
   }
 }
@@ -1399,10 +1400,7 @@ async function generatePlan(force = false) {
     await loadSchedule()
   } catch (e: any) {
     const status = e?.response?.status ?? e?.status
-    const detail = e?.response?.data?.detail ?? e?.detail
-    const msg = typeof detail === 'string'
-      ? detail
-      : detail?.message ?? e?.message ?? String(e)
+    const msg = getApiErrorMessage(e, 'Не удалось сгенерировать план')
     genResult.value = `Ошибка: ${msg}`
     if (status === 409) genCanForce.value = true
   } finally {
@@ -1424,7 +1422,7 @@ async function submitFM() {
     fmResult.value = `Зафиксировано. Перераспределено ${data.affected_tt_count} ТТ.`
     await loadSchedule()
   } catch (e: any) {
-    fmResult.value = `Ошибка: ${e.message}`
+    fmResult.value = `Ошибка: ${getApiErrorMessage(e, 'не удалось зафиксировать форс-мажор')}`
   } finally {
     submittingFM.value = false
   }
@@ -1471,7 +1469,7 @@ async function submitVisitUpdate() {
     void loadSkippedStash()
     void refreshDayProgress()
   } catch (e: any) {
-    visitError.value = e?.message ?? 'Ошибка сохранения'
+    visitError.value = getApiErrorMessage(e, 'Ошибка сохранения')
   } finally {
     savingVisit.value = false
   }
@@ -1492,7 +1490,7 @@ async function handleExport() {
   try {
     await downloadScheduleExcel(currentMonth.value)
   } catch (e: any) {
-    alert('Ошибка экспорта: ' + (e?.message ?? 'неизвестная ошибка'))
+    alert('Ошибка экспорта: ' + getApiErrorMessage(e, 'неизвестная ошибка'))
   } finally {
     exportLoading.value = false
   }
@@ -1533,7 +1531,7 @@ async function optimizeDayRoute() {
     const locationIds = currentLocationIds.value
     dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {})
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка оптимизации'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка оптимизации')
   } finally {
     dayOptLoading.value = false
   }
@@ -1647,7 +1645,7 @@ async function applyDraftRoute() {
     )
     await refreshDayRouteMetrics()
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка сохранения маршрута'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка сохранения маршрута')
   } finally {
     confirmingVariant.value = false
   }
@@ -1671,7 +1669,7 @@ async function revertAppliedRoute() {
     setDayRouteMessage('Маршрут откатан к исходному порядку.', 'warning')
     await refreshDayRouteMetrics()
   } catch (e: any) {
-    dayOptError.value = e?.message ?? 'Ошибка отката маршрута'
+    dayOptError.value = getApiErrorMessage(e, 'Ошибка отката маршрута')
   } finally {
     revertingDayRoute.value = false
   }

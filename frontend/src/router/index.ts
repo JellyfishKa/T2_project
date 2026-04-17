@@ -36,15 +36,13 @@ const router = createRouter({
     },
     {
       path: '/reps',
-      name: 'reps',
-      component: () => import('../views/RepsView.vue'),
-      meta: { title: 'Сотрудники - T2 Platform' }
+      name: 'reps-legacy',
+      redirect: () => ({ path: '/database', query: { tab: 'employees' } })
     },
     {
       path: '/cars',
-      name: 'cars',
-      component: () => import('../views/CarsView.vue'),
-      meta: { title: 'Автопарк - T2 Platform' }
+      name: 'cars-legacy',
+      redirect: () => ({ path: '/database', query: { tab: 'vehicles' } })
     },
     {
       path: '/database',
