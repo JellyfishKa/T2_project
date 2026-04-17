@@ -14,6 +14,7 @@ vi.mock('@/services/api', () => ({
   importScheduleExcel: vi.fn(),
   fetchReps: vi.fn(),
   fetchVisits: vi.fn(),
+  getApiErrorMessage: vi.fn((err: unknown) => err instanceof Error ? err.message : String(err)),
 }))
 
 // Мокаем Chart.js компоненты

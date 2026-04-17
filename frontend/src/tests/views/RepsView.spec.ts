@@ -10,6 +10,7 @@ vi.mock('@/services/api', () => ({
   createRep: vi.fn(),
   updateRep: vi.fn(),
   deleteRep: vi.fn(),
+  getApiErrorMessage: vi.fn((_, fallback) => fallback),
 }))
 
 const mockReps = [
