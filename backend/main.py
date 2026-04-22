@@ -1,9 +1,13 @@
+import asyncio
 import logging
 import os
 import shutil
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -51,9 +55,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _run_alembic_migrations() -> None:
+    alembic_ini = Path(__file__).resolve().parent / "src" / "database" / "alembic.ini"
+    if not alembic_ini.exists():
+        raise FileNotFoundError(f"Alembic config not found: {alembic_ini}")
+
+    config = Config(str(alembic_ini))
+    config.set_main_option("script_location", "src/database/migrations")
+    command.upgrade(config, "head")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up: Creating database tables...")
+    logger.info("Starting up: applying database migrations...")
+    await asyncio.to_thread(_run_alembic_migrations)
+    logger.info("Database migrations are up to date.")
+
+    logger.info("Starting up: ensuring database tables and compatibility columns...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # Добавляем колонку model_used если её нет (для существующих БД)

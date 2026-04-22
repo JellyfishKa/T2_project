@@ -48,7 +48,7 @@ const mapEl = ref<HTMLDivElement | null>(null)
 let map: L.Map | null = null
 let routeLayer: L.FeatureGroup | null = null
 let renderToken = 0
-const routePreviewCache = new Map<string, Promise<RoutePreviewData | null>>()
+let routePreviewCache: Map<string, Promise<RoutePreviewData | null>> | null = null
 const DIRECT_ROAD_ROUTER_URL = (
   import.meta.env.VITE_DIRECT_ROAD_ROUTER_URL ??
   'https://router.project-osrm.org/route/v1/driving'
@@ -64,6 +64,11 @@ interface RoutePreviewData {
   distanceKm: number
   timeMinutes: number
   source: 'road_network' | 'fallback'
+}
+
+function getRoutePreviewCache(): Map<string, Promise<RoutePreviewData | null>> {
+  routePreviewCache ??= new Map<string, Promise<RoutePreviewData | null>>()
+  return routePreviewCache
 }
 
 function escapeHtml(s: string): string {
@@ -209,7 +214,8 @@ async function getRoutePreview(points: RoutePoint[]): Promise<RoutePreviewData |
   if (points.length < 2) return null
 
   const cacheKey = buildCacheKey(points)
-  const cached = routePreviewCache.get(cacheKey)
+  const cache = getRoutePreviewCache()
+  const cached = cache.get(cacheKey)
   if (cached) {
     return cached
   }
@@ -238,12 +244,12 @@ async function getRoutePreview(points: RoutePoint[]): Promise<RoutePreviewData |
     }
   })().then((preview) => {
     if (!preview || preview.source !== 'road_network') {
-      routePreviewCache.delete(cacheKey)
+      cache.delete(cacheKey)
     }
     return preview
   })
 
-  routePreviewCache.set(cacheKey, request)
+  cache.set(cacheKey, request)
   return request
 }
 
@@ -365,6 +371,8 @@ onBeforeUnmount(() => {
     map = null
     routeLayer = null
   }
+  routePreviewCache?.clear()
+  routePreviewCache = null
 })
 </script>
 

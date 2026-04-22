@@ -135,6 +135,7 @@
                 :sort-field="routeSortField"
                 :sort-direction="routeSortDirection"
                 @select-route="handleRouteSelect"
+                @compare-route="openRouteComparison"
                 @sort="handleRouteSort"
               />
             </div>
@@ -225,6 +226,15 @@
           />
         </div>
       </div>
+
+      <RouteCompareModal
+        :open="isRouteComparisonOpen"
+        :comparison="routeComparison"
+        :route-name="comparisonRouteName"
+        :is-loading="isLoadingRouteComparison"
+        :error="routeComparisonError"
+        @close="closeRouteComparison"
+      />
     </template>
   </div>
 </template>
@@ -232,6 +242,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import RouteList from '@/components/dashboard/RouteList.vue'
+import RouteCompareModal from '@/components/dashboard/RouteCompareModal.vue'
 import RouteMetrics from '@/components/dashboard/RouteMetrics.vue'
 import ModelComparison from '@/components/dashboard/ModelComparison.vue'
 import MetricsTable from '@/components/dashboard/MetricsTable.vue'
@@ -242,11 +253,14 @@ import InfoStatCard from '@/components/common/InfoStatCard.vue'
 import {
   fetchRoutes,
   fetchRouteDetails,
+  fetchRouteComparison,
   getMetrics,
   compareModels,
   checkHealth,
+  getApiErrorMessage,
   type Route,
   type RouteDetails,
+  type RouteComparison,
   type Metric,
   type ModelComparison as ApiModelComparison,
   type HealthStatus as HealthStatusType,
@@ -287,6 +301,11 @@ const routeMetrics = ref<Metric[]>([])
 const allMetrics = ref<Metric[]>([])
 const modelComparison = ref<ApiModelComparison | null>(null)
 const healthStatus = ref<HealthStatusType | null>(null)
+const isRouteComparisonOpen = ref(false)
+const isLoadingRouteComparison = ref(false)
+const routeComparison = ref<RouteComparison | null>(null)
+const routeComparisonError = ref<string | null>(null)
+const comparisonRouteId = ref<string | null>(null)
 
 // Sort state
 const routeSortField = ref<RouteSortField>('created_at')
@@ -311,6 +330,11 @@ const averageCost = computed(() => {
     0
   )
   return Math.round(sum / routes.value.items.length)
+})
+
+const comparisonRouteName = computed(() => {
+  if (!comparisonRouteId.value) return null
+  return routes.value.items.find((route) => route.id === comparisonRouteId.value)?.name ?? null
 })
 
 // Sort functions
@@ -387,6 +411,33 @@ const handleRouteSelect = async (routeId: string) => {
   await loadRouteDetails(routeId)
 }
 
+const openRouteComparison = async (routeId: string) => {
+  comparisonRouteId.value = routeId
+  isRouteComparisonOpen.value = true
+  isLoadingRouteComparison.value = true
+  routeComparison.value = null
+  routeComparisonError.value = null
+
+  try {
+    routeComparison.value = await fetchRouteComparison(routeId)
+  } catch (err: any) {
+    routeComparisonError.value = getApiErrorMessage(
+      err,
+      'История сравнения для этого маршрута недоступна',
+    )
+  } finally {
+    isLoadingRouteComparison.value = false
+  }
+}
+
+const closeRouteComparison = () => {
+  isRouteComparisonOpen.value = false
+  isLoadingRouteComparison.value = false
+  routeComparison.value = null
+  routeComparisonError.value = null
+  comparisonRouteId.value = null
+}
+
 // Data loading functions
 const loadDashboardData = async () => {
   isLoadingStats.value = true
@@ -412,7 +463,7 @@ const loadDashboardData = async () => {
       await loadRouteDetails(routesData.items[0].id)
     }
   } else {
-    error.value = routesResult.reason?.message || 'Не удалось загрузить данные'
+    error.value = getApiErrorMessage(routesResult.reason, 'Не удалось загрузить данные')
     console.error('Routes loading error:', routesResult.reason)
   }
 

@@ -25,6 +25,7 @@ class OptimizeResponse(BaseModel):
     quality_score: float
     response_time_ms: int
     fallback_reason: Optional[str] = None
+    has_comparison: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -71,3 +72,6 @@ class ConfirmVariantRequest(BaseModel):
     quality_score: float
     model_used: str
     original_location_ids: List[str]
+    original_total_distance_km: Optional[float] = None
+    original_total_time_hours: Optional[float] = None
+    original_total_cost_rub: Optional[float] = None

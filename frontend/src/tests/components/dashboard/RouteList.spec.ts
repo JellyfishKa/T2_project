@@ -13,6 +13,7 @@ describe('RouteList.vue', () => {
       total_cost_rub: 1250,
       model_used: 'llama',
       fallback_reason: null,
+      has_comparison: true,
       created_at: '2026-02-13T09:15:00Z'
     },
     {
@@ -24,6 +25,7 @@ describe('RouteList.vue', () => {
       total_cost_rub: 2500,
       model_used: 'qwen',
       fallback_reason: null,
+      has_comparison: false,
       created_at: '2026-02-12T14:30:00Z'
     }
   ]
@@ -114,5 +116,21 @@ describe('RouteList.vue', () => {
     expect(wrapper.emitted('sort')).toBeTruthy()
     expect(wrapper.emitted('sort')![0][0]).toBe('total_distance_km')
     expect(wrapper.emitted('sort')![0][1]).toBe('asc')
+  })
+
+  it('TC-RL-007: эмитит compare-route только для маршрутов с историей', async () => {
+    const wrapper = mount(RouteList, {
+      props: {
+        routes: mockRoutes,
+        isLoading: false
+      }
+    })
+
+    const compareButton = wrapper.get('button[aria-label="Сравнить маршрут Test Route 1"]')
+    await compareButton.trigger('click')
+
+    expect(wrapper.emitted('compare-route')).toBeTruthy()
+    expect(wrapper.emitted('compare-route')![0][0]).toBe('route-1')
+    expect(wrapper.find('button[aria-label="Сравнить маршрут Test Route 2"]').exists()).toBe(false)
   })
 })

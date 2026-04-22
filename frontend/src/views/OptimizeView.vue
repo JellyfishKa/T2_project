@@ -263,6 +263,8 @@ interface RouteMetricsDetails {
   traffic_lights_count: number
 }
 
+const SERVICE_TIME_MINUTES_PER_STOP = 15
+
 const currentView = ref<ViewState>('form')
 
 // ─── Состояние формы ──────────────────────────────────────────────────────────
@@ -478,6 +480,7 @@ const handleVariantSelect = (variant: RouteVariant) => {
     total_cost_rub: variant.metrics.cost_rub,
     model_used: variantsResponse.value?.model_used ?? selectedModel.value,
     fallback_reason: null,
+    has_comparison: false,
     created_at: new Date().toISOString(),
   }
   currentRouteSource.value = 'road_network'
@@ -509,6 +512,9 @@ const saveRoute = async () => {
       quality_score: qualityScore,
       model_used: variantsResponse.value.model_used,
       original_location_ids: originalLocationIds.value,
+      original_total_distance_km: originalMetrics.value?.total_distance_km ?? null,
+      original_total_time_hours: originalMetrics.value?.total_time_hours ?? null,
+      original_total_cost_rub: originalMetrics.value?.total_cost_rub ?? null,
     })
     alert(
       qualityScore > 0
@@ -543,10 +549,11 @@ async function getRouteMetrics(routeLocationIds: string[]): Promise<RouteMetrics
         lon: location.lon,
       }))
     )
+    const serviceTimeHours = (points.length * SERVICE_TIME_MINUTES_PER_STOP) / 60
 
     return {
       total_distance_km: preview.distance_km,
-      total_time_hours: preview.time_minutes / 60,
+      total_time_hours: preview.time_minutes / 60 + serviceTimeHours,
       total_cost_rub: preview.cost_rub,
       source: (preview.source as RoutePreviewSource) ?? 'road_network',
       traffic_lights_count: preview.traffic_lights_count ?? 0,
@@ -598,6 +605,7 @@ async function applyResultRoute(
       total_cost_rub: metrics.total_cost_rub,
       model_used: variantsResponse.value?.model_used ?? selectedModel.value,
       fallback_reason: null,
+      has_comparison: false,
       created_at: optimizationResult.value?.created_at ?? new Date().toISOString(),
     }
     currentRouteSource.value = metrics.source
