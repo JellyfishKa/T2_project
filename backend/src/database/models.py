@@ -262,12 +262,22 @@ class OptimizationResult(Base):
 
     id = Column(String, primary_key=True, index=True,
                 default=lambda: str(uuid.uuid4()))
+    route_id = Column(String, ForeignKey("routes.id", ondelete="SET NULL"),
+                      nullable=True, index=True)
     original_route = Column(JSON, nullable=False)
     optimized_route = Column(JSON, nullable=False)
+    original_distance_km = Column(Float, nullable=True)
+    original_time_hours = Column(Float, nullable=True)
+    original_cost_rub = Column(Float, nullable=True)
+    optimized_distance_km = Column(Float, nullable=True)
+    optimized_time_hours = Column(Float, nullable=True)
+    optimized_cost_rub = Column(Float, nullable=True)
     improvement_percentage = Column(Float, nullable=False)
     model_used = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True),
                         default=lambda: datetime.now(timezone.utc))
+
+    route = relationship("Route")
 
     def __repr__(self):
         return "<OptimizationResult(imp={self.improvement_percentage}%)>"
