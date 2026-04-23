@@ -88,62 +88,6 @@ async def update_location(
     return LocationResponse.model_validate(location)
 
 
-@router.delete(
-    "/{location_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    responses={
-        404: {"description": "Location not found"},
-        409: {"description": "Location has related schedule or visit data"},
-    },
-)
-async def delete_location(
-    location_id: str,
-    force: bool = Query(False, description="Если true — удалить локацию вместе со связанными расписаниями и визитами"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Delete a location."""
-    location = await session.get(Location, location_id)
-    if not location:
-        raise HTTPException(status_code=404, detail="Локация не найдена")
-
-    schedules_count = (
-        await session.execute(
-            select(func.count()).where(VisitSchedule.location_id == location_id)
-        )
-    ).scalar() or 0
-    visits_count = (
-        await session.execute(
-            select(func.count()).where(VisitLog.location_id == location_id)
-        )
-    ).scalar() or 0
-    stash_count = (
-        await session.execute(
-            select(func.count()).where(SkippedVisitStash.location_id == location_id)
-        )
-    ).scalar() or 0
-
-    if force:
-        await session.execute(delete(VisitLog).where(VisitLog.location_id == location_id))
-        await session.execute(delete(SkippedVisitStash).where(SkippedVisitStash.location_id == location_id))
-        await session.execute(delete(VisitSchedule).where(VisitSchedule.location_id == location_id))
-        await session.delete(location)
-        await session.commit()
-        return
-
-    protected_records = schedules_count + visits_count + stash_count
-    if protected_records > 0:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Локацию нельзя удалить: с ней связаны расписания или визиты. "
-                "Используйте force=true для принудительного удаления."
-            ),
-        )
-
-    await session.delete(location)
-    await session.commit()
-
-
 @router.post(
     "/upload",
     response_model=UploadLocationsResponse,

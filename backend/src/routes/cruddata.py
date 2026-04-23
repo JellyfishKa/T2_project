@@ -1,3 +1,4 @@
+from uuid import UUID
 from typing import Type
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -143,11 +144,11 @@ def create_crud_router(model: Type, prefix: str) -> APIRouter:
     # =========================
     # DELETE
     # =========================
-    @router.delete(f"/{prefix}" + "/{item_id}")
+    @router.delete(f"/{prefix}" + "/{item_id:uuid}")
     async def delete_item(
-        item_id: str,
+        item_id: UUID,
         db: AsyncSession = Depends(get_session),
-    ):
+    ):  
         stmt = select(model).where(model.id == item_id)
         result = await db.execute(stmt)
         item = result.scalar_one_or_none()
