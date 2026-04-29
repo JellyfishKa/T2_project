@@ -30,7 +30,6 @@ from src.routes.audit_log import router as audit_log_router
 from src.routes.holidays import router as holidays_router
 from src.routes.visits import router as visits_router
 from src.routes.cruddata import (
-    location_router_crud,
     sales_rep_router_crud,
     visit_schedule_router_crud,
     daily_route_router_crud,
@@ -147,7 +146,6 @@ api_v1_router.include_router(import_router)
 api_v1_router.include_router(holidays_router)
 api_v1_router.include_router(audit_log_router)
 # crud
-api_v1_router.include_router(location_router_crud)
 api_v1_router.include_router(sales_rep_router_crud)
 api_v1_router.include_router(visit_schedule_router_crud)
 api_v1_router.include_router(daily_route_router_crud)

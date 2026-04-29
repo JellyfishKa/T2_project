@@ -175,7 +175,6 @@ def create_crud_router(model: Type, prefix: str) -> APIRouter:
 # ALL WILL APPEAR UNDER "Tables"
 # =====================================================
 
-location_router_crud = create_crud_router(Location, "locations")
 sales_rep_router_crud = create_crud_router(SalesRep, "sales-reps")
 visit_schedule_router_crud = create_crud_router(VisitSchedule, "visit-schedule")
 daily_route_router_crud = create_crud_router(DailyRouteOverride, "daily-route-overrides")
