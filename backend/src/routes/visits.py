@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.models import Location, VisitLog, get_session
+from src.database.models import VisitLog, get_session
 from src.schemas.visits import VisitCreate, VisitResponse, VisitStats
 
 router = APIRouter(prefix="/visits", tags=["Visits"])

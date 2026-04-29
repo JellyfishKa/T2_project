@@ -214,7 +214,13 @@ curl http://localhost:8000/health
 - **3 варианта маршрута** с pros/cons от LLM (`POST /optimize/variants`)
 - Сохранение выбранного варианта (`POST /optimize/confirm`)
 
-### 2. Расписание визитов
+### 2. Сравнение маршрутов
+- История сравнения строится из `optimization_results`, без отдельной таблицы версий маршрутов
+- `GET /api/v1/routes/{id}/comparison` возвращает snapshot до/после, дельты километража, времени, стоимости и число изменённых точек
+- В Dashboard и Analytics доступна общая модалка сравнения: одна карта с двумя полилиниями, список перестановок и summary-блок с дельтами
+- Для legacy-маршрутов без полного snapshot comparison скрывается, а API возвращает `404 No comparison data for this route`
+
+### 3. Расписание визитов
 - Автоматическая генерация месячного плана с учётом категорий ТТ:
   - **A**: 3 визита/мес (критические)
   - **B**: 2 визита/мес
@@ -222,16 +228,16 @@ curl http://localhost:8000/health
   - **D**: 1 визит/квартал
 - Ограничение: max 14 ТТ на ТП в день (рабочий день 09:00–18:00)
 
-### 3. Трекинг времени на ТТ
+### 4. Трекинг времени на ТТ
 - Фиксация `time_in` и `time_out` при отметке визита выполненным
 - Автоматический расчёт длительности в UI (`(22м)`)
 - Хранение в `VisitLog`, доступ через API и Excel
 
-### 4. Форс-мажоры
+### 5. Форс-мажоры
 - Регистрация болезни/отпуска сотрудника
 - Автоматическое перераспределение его визитов на свободных ТП
 
-### 5. Excel интеграция
+### 6. Excel интеграция
 ```
 Экспорт: GET /api/v1/export/schedule?month=YYYY-MM
   → t2_schedule_YYYY-MM.xlsx с 4 листами:
@@ -245,7 +251,7 @@ curl http://localhost:8000/health
   → Возвращает {updated, skipped, errors}
 ```
 
-### 6. Аналитика и инсайты
+### 7. Аналитика и инсайты
 - Охват ТТ (`coverage_percent`) за месяц
 - Статистика по категориям A/B/C/D
 - Активность торговых представителей (выходы на маршрут)
@@ -290,6 +296,7 @@ curl http://localhost:8000/health
 | GET  | `/api/v1/export/schedule?month=YYYY-MM` | Скачать Excel (4 листа) |
 | POST | `/api/v1/import/schedule` | Загрузить заполненный Excel |
 | GET  | `/api/v1/routes/` | Список маршрутов |
+| GET  | `/api/v1/routes/{id}/comparison` | Сравнение маршрута до/после |
 | GET  | `/health` | Health check |
 
 ---
@@ -305,6 +312,9 @@ cd backend && pytest tests/ -v
 
 # TypeScript проверка
 cd frontend && npx vue-tsc --noEmit
+
+# E2E compare modal
+cd e2e && npx playwright test tests/dashboard/route-comparison.spec.ts
 
 # ML бенчмарки
 python ml/benchmarks/llm_benchmark.py --mock
@@ -391,4 +401,4 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 ---
 
-*Последнее обновление: 10 марта 2026*
+*Последнее обновление: 22 апреля 2026*

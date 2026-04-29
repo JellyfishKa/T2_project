@@ -18,6 +18,7 @@ describe('OptimizationResult.vue', () => {
     total_cost_rub: 2850,
     model_used: 'qwen',
     fallback_reason: null,
+    has_comparison: false,
     created_at: '2026-02-15T10:30:00Z'
   }
 

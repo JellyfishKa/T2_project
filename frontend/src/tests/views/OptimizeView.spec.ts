@@ -188,6 +188,7 @@ describe('OptimizeView.vue', () => {
       total_cost_rub: variant.metrics.cost_rub,
       model_used: 'qwen',
       fallback_reason: null,
+      has_comparison: true,
       created_at: new Date().toISOString(),
     } as any)
 
@@ -266,7 +267,7 @@ describe('OptimizeView.vue', () => {
     )
     expect(wrapper.vm.originalMetrics).toEqual({
       total_distance_km: 19.2,
-      total_time_hours: 1.4,
+      total_time_hours: 2.15,
       total_cost_rub: 980,
       source: 'road_network',
       traffic_lights_count: 5,
@@ -314,6 +315,7 @@ describe('OptimizeView.vue', () => {
       total_cost_rub: 980,
       model_used: 'qwen',
       fallback_reason: null,
+      has_comparison: false,
       created_at: new Date().toISOString(),
     }
 
@@ -420,6 +422,11 @@ describe('OptimizeView.vue', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
     wrapper.vm.originalLocationIds = ['loc-1', 'loc-2', 'loc-3']
+    wrapper.vm.originalMetrics = {
+      total_distance_km: 19.2,
+      total_time_hours: 2.15,
+      total_cost_rub: 980,
+    }
     wrapper.vm.variantsResponse = {
       variants: [variant],
       model_used: 'qwen',
@@ -435,6 +442,7 @@ describe('OptimizeView.vue', () => {
       total_cost_rub: 910,
       model_used: 'qwen',
       fallback_reason: null,
+      has_comparison: false,
       created_at: new Date().toISOString(),
     }
     wrapper.vm.selectedAiVariantLocationIds = ['loc-2', 'loc-1', 'loc-3']
@@ -448,6 +456,9 @@ describe('OptimizeView.vue', () => {
         locations: ['loc-1', 'loc-3', 'loc-2'],
         quality_score: 0,
         original_location_ids: ['loc-1', 'loc-2', 'loc-3'],
+        original_total_distance_km: 19.2,
+        original_total_time_hours: 2.15,
+        original_total_cost_rub: 980,
       })
     )
     expect(alertSpy).toHaveBeenCalledWith(

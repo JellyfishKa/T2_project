@@ -107,9 +107,7 @@ class QwenClient(LLMClient):
                     locations_data,
                     constraints,
                 )
-                logger.info("RAW MODEL RESPONSE"
-                            f"(Attempt {attempt}):\n{response_text}")
-                print(response_text)
+                logger.debug("RAW MODEL RESPONSE (attempt %d):\n%s", attempt, response_text)
                 result = self._parse_response(response_text, locations)
 
                 duration = time() - start_time
@@ -306,7 +304,7 @@ class QwenClient(LLMClient):
             )
 
             content = output["choices"][0]["message"]["content"] or ""  # type: ignore[union-attr]
-            logger.info("RAW EVALUATION RESPONSE:\n%s", content)
+            logger.debug("RAW EVALUATION RESPONSE:\n%s", content)
             return self._parse_evaluation_response(content)
 
         except Exception as e:

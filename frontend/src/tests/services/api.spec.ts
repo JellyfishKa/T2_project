@@ -42,6 +42,7 @@ import {
   compareModels,
   fetchRoutes,
   fetchRouteDetails,
+  fetchRouteComparison,
   fetchRouteMetrics,
   runBenchmark,
   checkHealth,
@@ -109,6 +110,7 @@ describe('API Service', () => {
         total_cost_rub: 1500,
         model_used: 'qwen',
         fallback_reason: null,
+        has_comparison: false,
         created_at: '2026-02-13T10:30:00Z'
       }
 
@@ -256,10 +258,11 @@ describe('API Service', () => {
               locations: ['loc-1'],
               total_distance_km: 10.5,
               total_time_hours: 1.5,
-              total_cost_rub: 1250,
-              model_used: 'llama',
-              fallback_reason: null,
-              created_at: '2026-02-13T09:15:00Z'
+        total_cost_rub: 1250,
+        model_used: 'llama',
+        fallback_reason: null,
+        has_comparison: true,
+        created_at: '2026-02-13T09:15:00Z'
             },
             {
               id: 'route-2',
@@ -270,6 +273,7 @@ describe('API Service', () => {
               total_cost_rub: 2500,
               model_used: 'qwen',
               fallback_reason: null,
+              has_comparison: false,
               created_at: '2026-02-12T14:30:00Z'
             }
           ]
@@ -339,6 +343,7 @@ describe('API Service', () => {
         total_cost_rub: 1500,
         model_used: 'qwen',
         fallback_reason: null,
+        has_comparison: true,
         created_at: '2026-02-13T10:30:00Z'
       }
 
@@ -352,6 +357,37 @@ describe('API Service', () => {
       expect(result.locations_data).toBeDefined()
       expect(result.locations_data).toHaveLength(2)
       expect(mockedAxios.get).toHaveBeenCalledWith('/routes/route-123')
+    })
+  })
+
+  describe('fetchRouteComparison', () => {
+    it('should fetch route comparison details', async () => {
+      const mockComparison = {
+        route_id: 'route-123',
+        original: [
+          { id: 'loc-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' },
+        ],
+        current: [
+          { id: 'loc-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' },
+        ],
+        diff: {
+          distance_delta_km: -2.4,
+          time_delta_hours: -0.3,
+          cost_delta_rub: -180,
+          changed_stops_count: 1,
+          improvement_percentage: 12.5,
+        },
+        model_used: 'qwen',
+        created_at: '2026-02-13T10:30:00Z',
+      }
+
+      mockedAxios.get.mockResolvedValue({ data: mockComparison })
+
+      const result = await fetchRouteComparison('route-123')
+
+      expect(result.route_id).toBe('route-123')
+      expect(result.diff.changed_stops_count).toBe(1)
+      expect(mockedAxios.get).toHaveBeenCalledWith('/routes/route-123/comparison')
     })
   })
 

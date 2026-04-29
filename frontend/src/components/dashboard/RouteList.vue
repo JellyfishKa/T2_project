@@ -27,6 +27,9 @@
                 </span>
               </div>
             </th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Сравнение
+            </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -77,6 +80,18 @@
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
               {{ (route.total_cost_rub ?? 0).toFixed(0) }} ₽
+            </td>
+            <td class="px-4 py-4 whitespace-nowrap text-right">
+              <button
+                v-if="route.has_comparison"
+                type="button"
+                class="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                :aria-label="`Сравнить маршрут ${route.name}`"
+                @click.stop="$emit('compare-route', route.id)"
+              >
+                Сравнить
+              </button>
+              <span v-else class="text-xs text-gray-400">—</span>
             </td>
           </tr>
         </tbody>
@@ -147,6 +162,17 @@
         <div class="mt-3 text-xs text-gray-500">
           Создан: {{ formatDate(route.created_at) }}
         </div>
+
+        <div v-if="route.has_comparison" class="mt-4">
+          <button
+            type="button"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            :aria-label="`Сравнить маршрут ${route.name}`"
+            @click.stop="$emit('compare-route', route.id)"
+          >
+            Сравнить маршрут
+          </button>
+        </div>
       </div>
     </div>
 
@@ -198,6 +224,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'select-route', routeId: string): void
+  (e: 'compare-route', routeId: string): void
   (e: 'sort', field: SortField, direction: SortDirection): void
 }>()
 

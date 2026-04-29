@@ -920,6 +920,8 @@ interface RouteMetrics {
   cost_rub: number
 }
 
+const SERVICE_TIME_MINUTES_PER_STOP = 15
+
 // ─── Computed ─────────────────────────────────────────────────────────────────
 const currentMonth = computed(() => {
   const d = new Date(today.getFullYear(), today.getMonth() + monthOffset.value, 1)
@@ -1042,7 +1044,10 @@ async function optimizeRemainingVisits() {
   dayOptResult.value = null
   selectedVariantId.value = null
   try {
-    dayOptResult.value = await optimizeVariants(ids, selectedModel.value, {})
+    dayOptResult.value = await optimizeVariants(ids, selectedModel.value, {
+      vehicle_id: dayVehicleId.value,
+      transport_mode: dayTransportMode.value,
+    })
     const bestVariant = dayOptResult.value.variants[0]
     if (bestVariant) {
       previewVariant(bestVariant)
@@ -1307,9 +1312,10 @@ async function getRouteMetricsForLocationIds(locationIds: string[]): Promise<Rou
     vehicle_id: dayVehicleId.value,
     transport_mode: dayTransportMode.value,
   })
+  const serviceTimeHours = (points.length * SERVICE_TIME_MINUTES_PER_STOP) / 60
   return {
     distance_km: preview.distance_km,
-    time_hours: preview.time_minutes / 60,
+    time_hours: preview.time_minutes / 60 + serviceTimeHours,
     cost_rub: preview.cost_rub,
   }
 }
@@ -1573,7 +1579,10 @@ async function optimizeDayRoute() {
   plannerPanel.value = 'ai'
   try {
     const locationIds = currentLocationIds.value
-    dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {})
+    dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {
+      vehicle_id: dayVehicleId.value,
+      transport_mode: dayTransportMode.value,
+    })
     const bestVariant = dayOptResult.value.variants[0]
     if (bestVariant) {
       previewVariant(bestVariant)
@@ -1668,6 +1677,9 @@ async function applyDraftRoute() {
         quality_score: selectedVariant.value.metrics.quality_score,
         model_used: dayOptResult.value.model_used,
         original_location_ids: originalLocationIds.value,
+        original_total_distance_km: originalRouteMetrics.value?.distance_km ?? null,
+        original_total_time_hours: originalRouteMetrics.value?.time_hours ?? null,
+        original_total_cost_rub: originalRouteMetrics.value?.cost_rub ?? null,
       }
       await confirmVariant(payload)
     }

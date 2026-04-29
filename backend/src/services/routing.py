@@ -14,7 +14,7 @@ from src.schemas.vehicle import Vehicle
 logger = logging.getLogger("routing")
 
 # Тарифы для общественного транспорта
-TAXI_RATE_RUB_PER_KM: float = 75.0   # ₽/км (приблизительно Саранск)
+TAXI_RATE_RUB_PER_KM: float = 70.0   # ₽/км (приблизительно Саранск)
 BUS_FARE_RUB_PER_LEG: float = 40.0   # ₽ за одну поездку/пересадку
 
 

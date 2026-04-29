@@ -1,6 +1,6 @@
 # АРХИТЕКТУРА И ТЕХНИЧЕСКИЙ ДИЗАЙН
 
-> Последнее обновление: 27 февраля 2026 (Неделя 4)
+> Последнее обновление: 22 апреля 2026
 
 ---
 
@@ -38,7 +38,7 @@
 | `locations` | Торговые точки (ТТ): координаты, категория A/B/C/D, адрес |
 | `routes` | Оптимизированные маршруты (результаты LLM) |
 | `metrics` | Метрики LLM-запросов (время, качество, стоимость) |
-| `optimization_results` | История оптимизаций |
+| `optimization_results` | Persistent snapshot store для сравнения маршрутов до/после оптимизации |
 | `sales_reps` | Торговые представители (статус: active/sick/vacation/unavailable) |
 | `visit_schedule` | Плановые визиты (FK → rep, location, дата, статус) |
 | `visit_log` | Фактические визиты с `time_in`/`time_out` |
@@ -54,8 +54,11 @@ Location ──────────────┤
                   VisitSchedule ──── VisitLog
                        │              (schedule_id)
                        │
-             ForceMajeureEvent
+ForceMajeureEvent
                   (rep_id -> redistributed_to JSON)
+
+Route ─────────────── OptimizationResult
+ (route_id FK)        (original/optimized order + snapshot metrics)
 ```
 
 ### Миграции Alembic
@@ -64,6 +67,13 @@ Location ──────────────┤
 |--------|-----------|
 | `001_initial_schema` | `locations`, `routes`, `metrics`, `optimization_results` |
 | `002_add_reps_schedule` | `sales_reps`, `visit_schedule`, `visit_log`, `force_majeure_events`; расширение `locations`: category, city, district, address |
+| `003_add_audit_log` | Журнал изменений AuditLog |
+| `004_add_fm_return_time` | Поле `return_time` для форс-мажоров |
+| `005_add_skipped_stash` | Хранилище пропущенных визитов |
+| `006_add_vehicle_to_sales_rep` | Привязка транспорта к торговому представителю |
+| `007_route_comparison_snapshots` | `optimization_results.route_id` + snapshot-метрики original/optimized для compare modal |
+
+> Схемой БД управляет только Alembic. Runtime `ALTER TABLE` для `optimization_results.route_id` из приложения удалён.
 
 ---
 
@@ -83,7 +93,7 @@ backend/src/routes/
   insights.py          GET /insights
   metrics.py           GET /metrics
   locations.py         GET/POST /locations
-  routes.py            GET /routes
+  routes.py            GET /routes, GET /routes/{id}, GET /routes/{id}/comparison
   qwen.py              POST /qwen/optimize
   llama.py             POST /llama/optimize
 ```
@@ -95,6 +105,26 @@ backend/src/services/
   optimize.py              Optimizer.optimize() / generate_variants() / confirm_variant()
   schedule_planner.py      SchedulePlanner.generate_monthly_plan()
   force_majeure_service.py ForceMajeureService.redistribute()
+```
+
+### Поток сравнения маршрутов
+
+```text
+OptimizeView / ScheduleView
+    -> POST /api/v1/optimize/confirm
+       (current metrics + original metrics)
+    -> Optimizer.confirm_variant()
+    -> Route сохраняется в routes
+    -> OptimizationResult сохраняет:
+       route_id, original_route, optimized_route,
+       original_* metrics, optimized_* metrics
+
+DashboardView / AnalyticsView
+    -> GET /api/v1/routes
+       (каждый route получает has_comparison)
+    -> GET /api/v1/routes/{id}/comparison
+    -> RouteCompareModal
+       (2 полилинии + списки перестановок + summary deltas)
 ```
 
 ### LLM-клиенты (Strategy Pattern)
@@ -204,6 +234,7 @@ importScheduleExcel(file)
 fetchRoutes(offset, limit), getMetrics()
 compareModels().catch(() => null)
 getInsights().catch(() => null)
+fetchRouteComparison(routeId)
 ```
 
 ### Ключевые паттерны Frontend
@@ -229,6 +260,15 @@ function visitDuration(visit: VisitScheduleItem): number | null {
   const diff = (h2 * 60 + m2) - (h1 * 60 + m1)
   return diff > 0 ? diff : null
 }
+```
+
+Сравнение маршрутов на фронтенде:
+
+```typescript
+const comparison = await fetchRouteComparison(routeId)
+// comparison.original  -> серый before-layer
+// comparison.current   -> синий after-layer
+// comparison.diff      -> Δ км / Δ ч / Δ ₽ / changed_stops_count
 ```
 
 ---
@@ -329,4 +369,4 @@ vi.mock('@/services/api', () => ({
 | `.catch(() => null)` для optional API | Graceful degradation при отсутствии endpoint |
 | `MAX_TT_PER_DAY = 14` | floor((540-30)/35) — физический лимит рабочего дня |
 | Матчинг по имени в импорте | Excel не содержит UUID — матчим по rep_name + loc_name |
-| AUTO ALTER TABLE в main.py | Обратная совместимость при обновлении без потери данных |
+| Alembic как единственный источник схемы | Миграции воспроизводимы, а compare snapshots не зависят от runtime-патчей |

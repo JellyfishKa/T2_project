@@ -3,6 +3,7 @@ import type {
   Location,
   Route,
   RouteDetails,
+  RouteComparison,
   Metric,
   BenchmarkResult,
   BenchmarkRequest,
@@ -366,6 +367,17 @@ export const fetchRouteDetails = async (
   routeId: string
 ): Promise<RouteDetails> => {
   const response = await withRetry(() => api.get(`/routes/${routeId}`))
+  return response.data
+}
+
+/**
+ * Получение сравнения маршрута до/после оптимизации
+ * GET /api/v1/routes/{route_id}/comparison
+ */
+export const fetchRouteComparison = async (
+  routeId: string
+): Promise<RouteComparison> => {
+  const response = await withRetry(() => api.get(`/routes/${routeId}/comparison`))
   return response.data
 }
 
@@ -770,6 +782,7 @@ export type {
   Location,
   Route,
   RouteDetails,
+  RouteComparison,
   Metric,
   BenchmarkResult,
   BenchmarkRequest,

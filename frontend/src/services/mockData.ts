@@ -87,6 +87,7 @@ export const mockRoutes: Route[] = [
     total_cost_rub: 294,
     model_used: 'qwen',
     fallback_reason: null,
+    has_comparison: true,
     created_at: '2026-02-20T09:15:00Z'
   },
   {
@@ -98,6 +99,7 @@ export const mockRoutes: Route[] = [
     total_cost_rub: 1778,
     model_used: 'qwen',
     fallback_reason: null,
+    has_comparison: false,
     created_at: '2026-02-19T14:30:00Z'
   },
   {
@@ -109,6 +111,7 @@ export const mockRoutes: Route[] = [
     total_cost_rub: 2961,
     model_used: 'llama',
     fallback_reason: null,
+    has_comparison: false,
     created_at: '2026-02-18T11:45:00Z'
   }
 ]
@@ -215,6 +218,7 @@ export const generateMockRoute = (): Route => {
     total_cost_rub: 1200 + Math.random() * 1000,
     model_used: 'llama',
     fallback_reason: useFallback ? 'Primary model overloaded' : null,
+    has_comparison: false,
     created_at: new Date().toISOString()
   }
 }

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import Location as DBLocation, get_session
+from src.database.models import Location as DBLocation, Vehicle as DBVehicle, get_session
 from src.schemas.optimize import (
     ConfirmVariantRequest,
     OptimizeRequest,
@@ -13,9 +13,45 @@ from src.schemas.optimize import (
     OptimizeVariantsRequest,
     OptimizeVariantsResponse,
 )
+from src.schemas.vehicle import Vehicle as VehicleSchema
 from src.services.optimize import Optimizer
 
 router = APIRouter(tags=['Optimization'])
+ALLOWED_TRANSPORT_MODES = {"car", "taxi", "bus"}
+
+
+def _extract_constraints(constraints: object) -> dict:
+    return constraints if isinstance(constraints, dict) else {}
+
+
+async def _resolve_transport_options(
+    constraints: object,
+    db: AsyncSession,
+) -> tuple[str, VehicleSchema | None]:
+    normalized_constraints = _extract_constraints(constraints)
+    requested_mode = str(
+        normalized_constraints.get("transport_mode", "car")
+    ).strip().lower()
+    transport_mode = (
+        requested_mode if requested_mode in ALLOWED_TRANSPORT_MODES else "car"
+    )
+
+    vehicle_schema = None
+    if transport_mode == "car":
+        vehicle_id = normalized_constraints.get("vehicle_id")
+        if vehicle_id:
+            vehicle = await db.get(DBVehicle, str(vehicle_id))
+            if not vehicle:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Автомобиль не найден",
+                )
+            vehicle_schema = VehicleSchema.model_validate(
+                vehicle,
+                from_attributes=True,
+            )
+
+    return transport_mode, vehicle_schema
 
 
 @router.post('/optimize', response_model=OptimizeResponse)
@@ -45,11 +81,17 @@ async def run_optimization(
     ]
 
     optimizer = Optimizer(db)
+    transport_mode, vehicle_schema = await _resolve_transport_options(
+        payload.constraints,
+        db,
+    )
 
     try:
         optimized_route = await optimizer.optimize(
             db_locations=ordered_locations,
+            vehicle=vehicle_schema,
             model=payload.model,
+            transport_mode=transport_mode,
         )
 
         execution_time_ms = int((time.time() - start_time) * 1000)
@@ -76,6 +118,9 @@ async def run_optimization(
             quality_score=getattr(optimized_route, 'quality_score', 0.0),
             response_time_ms=execution_time_ms,
             fallback_reason=fallback_reason,
+            has_comparison=bool(
+                getattr(optimized_route, "comparison_saved", False)
+            ),
             created_at=datetime.now().isoformat(),
         )
 
@@ -119,13 +164,19 @@ async def get_optimization_variants(
         for loc_id in payload.location_ids
         if loc_id in loc_map
     ]
+    transport_mode, vehicle_schema = await _resolve_transport_options(
+        payload.constraints,
+        db,
+    )
 
     optimizer = Optimizer(db)
 
     try:
         return await optimizer.generate_variants(
             db_locations=ordered_locations,
+            vehicle=vehicle_schema,
             model=payload.model,
+            transport_mode=transport_mode,
         )
     except Exception as exc:
         raise HTTPException(
@@ -160,6 +211,9 @@ async def confirm_variant(
             quality_score=payload.quality_score,
             model_used=payload.model_used,
             original_location_ids=payload.original_location_ids,
+            original_total_distance_km=payload.original_total_distance_km,
+            original_total_time_hours=payload.original_total_time_hours,
+            original_total_cost_rub=payload.original_total_cost_rub,
         )
         return OptimizeResponse(**saved)
 

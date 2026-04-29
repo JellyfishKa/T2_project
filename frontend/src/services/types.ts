@@ -23,6 +23,7 @@ export interface Route {
   total_cost_rub: number
   model_used: string
   fallback_reason: string | null
+  has_comparison: boolean
   created_at: string
 }
 
@@ -205,6 +206,9 @@ export interface ConfirmVariantRequest {
   quality_score: number
   model_used: string
   original_location_ids: string[]
+  original_total_distance_km: number | null
+  original_total_time_hours: number | null
+  original_total_cost_rub: number | null
 }
 
 export interface RoutePreviewPoint {
@@ -350,4 +354,32 @@ export interface ModelComparison {
     recommended_model: string
     reason: string
   }>
+}
+
+// ─── Route Comparison ────────────────────────────────────────────────────────
+export interface ComparisonPoint {
+  id: string
+  name: string
+  lat: number
+  lon: number
+  order: number
+  address: string | null
+  category: string | null
+}
+
+export interface ComparisonDiff {
+  distance_delta_km: number
+  time_delta_hours: number
+  cost_delta_rub: number
+  changed_stops_count: number
+  improvement_percentage: number
+}
+
+export interface RouteComparison {
+  route_id: string
+  original: ComparisonPoint[]
+  current: ComparisonPoint[]
+  diff: ComparisonDiff
+  model_used: string
+  created_at: string | null
 }

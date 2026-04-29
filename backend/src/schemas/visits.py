@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class VisitCreate(BaseModel):

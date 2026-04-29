@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     database_name: str = "t2"
 
     debug: bool = False
+    perf_warn_threshold_ms: int = 10_000
 
     @field_validator("debug", mode="before")
     @classmethod

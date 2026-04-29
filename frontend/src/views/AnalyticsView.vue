@@ -269,6 +269,53 @@
         </div>
       </div>
 
+      <div class="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-900">
+            Маршруты с историей оптимизации
+          </h3>
+          <p class="mt-1 text-sm text-gray-600">
+            Быстрый доступ к сравнению маршрута до и после сохранённой оптимизации.
+          </p>
+        </div>
+        <div class="p-6">
+          <div v-if="isLoading" class="space-y-3">
+            <SkeletonLoader v-for="i in 3" :key="`comparison-skeleton-${i}`" height="64px" />
+          </div>
+          <div v-else-if="routesWithComparison.length" class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Маршрут</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Модель</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действие</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="route in routesWithComparison" :key="route.id">
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ route.name }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">{{ getModelName(route.model_used) }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">{{ new Date(route.created_at).toLocaleDateString('ru-RU') }}</td>
+                  <td class="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      class="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                      @click="openRouteComparison(route)"
+                    >
+                      Сравнить
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="text-center py-8 text-gray-500">
+            Пока нет маршрутов с доступной историей сравнения.
+          </div>
+        </div>
+      </div>
+
       <!-- ═══════════════════════════════════════════════════════════════════
            РАЗДЕЛ: Охват торговых точек (из /insights)
       ════════════════════════════════════════════════════════════════════ -->
@@ -498,6 +545,15 @@
       </div>
 
     </template>
+
+    <RouteCompareModal
+      :open="isRouteComparisonOpen"
+      :comparison="routeComparison"
+      :route-name="comparisonRouteName"
+      :is-loading="isLoadingRouteComparison"
+      :error="routeComparisonError"
+      @close="closeRouteComparison"
+    />
   </div>
 </template>
 
@@ -519,8 +575,10 @@ import { Bar as BarChart, Scatter as ScatterChart, Line as LineChart } from 'vue
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
 import PageHero from '@/components/common/PageHero.vue'
 import InfoStatCard from '@/components/common/InfoStatCard.vue'
+import RouteCompareModal from '@/components/dashboard/RouteCompareModal.vue'
 import {
   fetchRoutes,
+  fetchRouteComparison,
   getMetrics,
   compareModels,
   getInsights,
@@ -530,6 +588,7 @@ import {
   fetchReps,
   getApiErrorMessage,
   type Route,
+  type RouteComparison,
   type Metric,
   type VisitLog
 } from '@/services/api'
@@ -581,6 +640,11 @@ const importResult = ref<{ updated: number; skipped: number; errors: string[] } 
 const visits = ref<VisitLog[]>([])
 const repsForFilter = ref<SalesRep[]>([])
 const visitRepId = ref('')
+const isRouteComparisonOpen = ref(false)
+const isLoadingRouteComparison = ref(false)
+const routeComparison = ref<RouteComparison | null>(null)
+const routeComparisonError = ref<string | null>(null)
+const comparisonRouteId = ref<string | null>(null)
 
 // Текущий месяц для инсайтов
 const insightsMonth = computed(() => {
@@ -861,6 +925,15 @@ const timeSeriesData = computed(() => {
   }
 })
 
+const routesWithComparison = computed(() =>
+  routes.value.filter((route) => route.has_comparison)
+)
+
+const comparisonRouteName = computed(() => {
+  if (!comparisonRouteId.value) return null
+  return routes.value.find((route) => route.id === comparisonRouteId.value)?.name ?? null
+})
+
 // Methods
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
@@ -961,6 +1034,33 @@ const handleImport = async (event: Event) => {
     importLoading.value = false
     target.value = ''
   }
+}
+
+const openRouteComparison = async (route: Route) => {
+  comparisonRouteId.value = route.id
+  isRouteComparisonOpen.value = true
+  isLoadingRouteComparison.value = true
+  routeComparison.value = null
+  routeComparisonError.value = null
+
+  try {
+    routeComparison.value = await fetchRouteComparison(route.id)
+  } catch (err: any) {
+    routeComparisonError.value = getApiErrorMessage(
+      err,
+      'История сравнения для этого маршрута недоступна',
+    )
+  } finally {
+    isLoadingRouteComparison.value = false
+  }
+}
+
+const closeRouteComparison = () => {
+  isRouteComparisonOpen.value = false
+  isLoadingRouteComparison.value = false
+  routeComparison.value = null
+  routeComparisonError.value = null
+  comparisonRouteId.value = null
 }
 
 const refreshData = async () => {

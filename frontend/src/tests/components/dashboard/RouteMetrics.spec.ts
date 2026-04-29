@@ -35,6 +35,7 @@ describe('RouteMetrics.vue', () => {
     total_cost_rub: 1250,
     model_used: 'llama',
     fallback_reason: null,
+    has_comparison: true,
     created_at: '2026-02-13T09:15:00Z'
   }
 

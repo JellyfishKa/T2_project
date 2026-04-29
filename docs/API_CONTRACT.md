@@ -2,7 +2,7 @@
 
 **Соглашение Frontend-Backend по структуре API**
 
-> Последнее обновление: 10 марта 2026
+> Последнее обновление: 22 апреля 2026
 
 ---
 
@@ -131,9 +131,54 @@ Production:  http://<server-ip>/api/v1
   "total_cost_rub": 1500,
   "model_used": "qwen",
   "fallback_reason": null,
+  "has_comparison": true,
   "created_at": "2026-02-13T10:30:00Z"
 }
 ```
+
+---
+
+### RouteComparison (Сравнение маршрута до/после)
+
+```json
+{
+  "route_id": "route-456",
+  "original": [
+    {
+      "id": "store-1",
+      "name": "Магазин Саранск-1",
+      "lat": 54.187,
+      "lon": 45.183,
+      "order": 1,
+      "address": "г. Саранск, ул. Победы, 12",
+      "category": "A"
+    }
+  ],
+  "current": [
+    {
+      "id": "store-2",
+      "name": "Магазин Саранск-2",
+      "lat": 54.192,
+      "lon": 45.171,
+      "order": 1,
+      "address": "г. Саранск, ул. Ленина, 5",
+      "category": "B"
+    }
+  ],
+  "diff": {
+    "distance_delta_km": -4.6,
+    "time_delta_hours": -0.7,
+    "cost_delta_rub": -180.0,
+    "changed_stops_count": 2,
+    "improvement_percentage": 20.0
+  },
+  "model_used": "qwen",
+  "created_at": "2026-04-22T09:00:00Z"
+}
+```
+
+`distance_delta_km`, `time_delta_hours`, `cost_delta_rub` считаются как `optimized - original`.
+Отрицательное значение означает улучшение, положительное — ухудшение.
 
 ---
 
@@ -325,11 +370,16 @@ Production:  http://<server-ip>/api/v1
   "total_cost_rub": 850,
   "quality_score": 88.5,
   "model_used": "qwen",
-  "original_location_ids": ["store-1", "store-2", "store-3"]
+  "original_location_ids": ["store-1", "store-2", "store-3"],
+  "original_total_distance_km": 47.1,
+  "original_total_time_hours": 6.8,
+  "original_total_cost_rub": 1030
 }
 ```
 
 **Response** `200`: `Route` (полная схема с `id`, `created_at`)
+
+Новые поля `original_total_distance_km`, `original_total_time_hours`, `original_total_cost_rub` принимаются как nullable для обратной совместимости, но актуальные фронтовые call site передают их всегда.
 
 ---
 
@@ -588,7 +638,7 @@ Query params: ?month=2026-02   (обязательный)
 #### `GET /routes/`
 
 ```
-Query params: ?limit=100&offset=0
+Query params: ?skip=0&limit=100
 ```
 
 **Response** `200`:
@@ -599,9 +649,39 @@ Query params: ?limit=100&offset=0
 }
 ```
 
+`has_comparison=true` выставляется только если для маршрута найден последний `optimization_results` с полным snapshot-комплектом:
+`original_distance_km`, `original_time_hours`, `original_cost_rub`, `optimized_distance_km`, `optimized_time_hours`, `optimized_cost_rub`.
+
 #### `GET /routes/{id}`
 
-**Response** `200`: `Route` + `metrics: [<Metric>]`
+**Response** `200`:
+```json
+{
+  "id": "route-456",
+  "name": "Маршрут 1 — День 1",
+  "locations": ["store-2", "store-1", "store-3"],
+  "locations_sequence": ["store-2", "store-1", "store-3"],
+  "locations_data": [<Location>, ...],
+  "total_distance_km": 42.5,
+  "total_time_hours": 6.1,
+  "total_cost_rub": 850,
+  "model_used": "qwen",
+  "fallback_reason": null,
+  "has_comparison": true,
+  "created_at": "2026-02-13T10:30:00Z",
+  "metrics": [<Metric>, ...]
+}
+```
+
+#### `GET /routes/{id}/comparison`
+
+Возвращает последнее доступное сравнение маршрута по данным из `optimization_results`.
+
+**Response** `200`: `RouteComparison`
+
+**Errors**:
+- `404 Route {id} not found`
+- `404 No comparison data for this route` — если маршрут legacy и у последнего snapshot нет полного набора исходных и итоговых метрик
 
 ---
 
@@ -725,6 +805,7 @@ Query params: ?month=2026-02   (обязательный)
 | GET | `/api/v1/insights` | Insights | ✅ |
 | GET | `/api/v1/routes/` | Routes | ✅ |
 | GET | `/api/v1/routes/{id}` | Routes | ✅ |
+| GET | `/api/v1/routes/{id}/comparison` | Routes | ✅ |
 | GET | `/api/v1/reps` | Reps | ✅ |
 | POST | `/api/v1/reps` | Reps | ✅ |
 | PATCH | `/api/v1/reps/{id}` | Reps | ✅ |

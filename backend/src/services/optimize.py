@@ -25,13 +25,14 @@ from src.models.schemas import (
 )
 from src.schemas.vehicle import Vehicle 
 from src.services.model_selector import (
-    MODEL_QWEN,
     get_model_recommendation,
     select_best_model,
 )
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService
 from src.services.schedule_planner import VISIT_DURATION_MIN
+
+from src.utils.timing import timed_log
 
 logger = logging.getLogger("optimizer")
 
@@ -65,6 +66,7 @@ class Optimizer:
         self,
         locations: List[PydanticLocation],
         vehicle: Optional[Vehicle] = None,
+        transport_mode: str = "car",
     ) -> Dict[str, Any]:
         if not locations:
             return {
@@ -74,7 +76,8 @@ class Optimizer:
             }
 
         preview = await self.routing_service.build_route_preview(locations,
-                                                                 vehicle=vehicle)
+                                                                 vehicle=vehicle,
+                                                                 transport_mode=transport_mode)
         service_time_minutes = len(locations) * VISIT_DURATION_MIN
 
         return {
@@ -86,13 +89,16 @@ class Optimizer:
             "cost_rub": preview["cost_rub"],
         }
 
+    @timed_log("optimization")
     async def optimize(
         self,
         db_locations: List[DBLocation],
         vehicle: Optional[Vehicle] = None,
         model: str = "auto",
+        transport_mode: str = "car",
     ) -> PydanticRoute:
         start_time_ms = int(time.time() * 1000)
+        logger.info("optimize: %d locations, model=%s, transport=%s", len(db_locations), model, transport_mode)
 
         pydantic_locations = [
             self._convert_db_to_pydantic(loc)
@@ -100,8 +106,11 @@ class Optimizer:
         ]
 
         original_ids = [loc.id for loc in db_locations]
-        baseline = await self._calculate_real_metrics(pydantic_locations,
-                                                      vehicle=vehicle)
+        baseline = await self._calculate_real_metrics(
+            pydantic_locations,
+            vehicle=vehicle,
+            transport_mode=transport_mode,
+        )
 
         target_model = (
             select_best_model(len(pydantic_locations))
@@ -118,6 +127,7 @@ class Optimizer:
         real_stats = await self._calculate_real_metrics(
             optimized_route.locations,
             vehicle,
+            transport_mode=transport_mode,
         )
 
         optimized_route.total_distance_km = real_stats["distance_km"]
@@ -133,14 +143,10 @@ class Optimizer:
 
         improvement_pct = 0.0
         if baseline["distance_km"] > 0:
-            improvement_pct = max(
-                0.0,
-                (
-                    (baseline["distance_km"] - real_stats["distance_km"])
-                    / baseline["distance_km"]
-                )
-                * 100,
-            )
+            improvement_pct = (
+                (baseline["distance_km"] - real_stats["distance_km"])
+                / baseline["distance_km"]
+            ) * 100
 
         object.__setattr__(
             optimized_route,
@@ -148,11 +154,14 @@ class Optimizer:
             q_score,
         )
 
+        comparison_saved = False
         try:
             route_id = str(uuid.uuid4())
             optimized_ids = [
                 loc.ID for loc in optimized_route.locations
             ]
+            original_time_hours = round(baseline["time_minutes"] / 60, 2)
+            optimized_time_hours = round(real_stats["time_minutes"] / 60, 2)
 
             new_route = DBRoute(
                 id=route_id,
@@ -179,8 +188,15 @@ class Optimizer:
 
             self.db.add(
                 DBOptimizationResult(
+                    route_id=route_id,
                     original_route=original_ids,
                     optimized_route=optimized_ids,
+                    original_distance_km=round(baseline["distance_km"], 2),
+                    original_time_hours=original_time_hours,
+                    original_cost_rub=round(baseline["cost_rub"], 2),
+                    optimized_distance_km=round(real_stats["distance_km"], 2),
+                    optimized_time_hours=optimized_time_hours,
+                    optimized_cost_rub=round(real_stats["cost_rub"], 2),
                     improvement_percentage=round(
                         improvement_pct,
                         2,
@@ -193,6 +209,8 @@ class Optimizer:
             )
 
             await self.db.commit()
+            comparison_saved = True
+            object.__setattr__(optimized_route, "ID", route_id)
             logger.info(
                 "Optimization results for route %s saved successfully.",
                 route_id,
@@ -202,6 +220,11 @@ class Optimizer:
             await self.db.rollback()
             logger.error("Database sync failed: %s", exc)
 
+        object.__setattr__(
+            optimized_route,
+            "comparison_saved",
+            comparison_saved,
+        )
         optimized_route.recommendation = get_model_recommendation(
             len(db_locations),
             model,
@@ -330,6 +353,7 @@ class Optimizer:
         db_locations: List[DBLocation],
         vehicle: Optional[Vehicle] = None,
         model: str = "qwen",
+        transport_mode: str = "car",
     ):
         """
         Генерирует несколько детерминированных кандидатов маршрута,
@@ -349,7 +373,11 @@ class Optimizer:
         ]
 
         # Базовые метрики (неупорядоченный маршрут)
-        baseline = await self._calculate_real_metrics(pydantic_locations, vehicle)
+        baseline = await self._calculate_real_metrics(
+            pydantic_locations,
+            vehicle,
+            transport_mode=transport_mode,
+        )
 
         # ── Три варианта ────────────────────────────────────────────────────────
         variant_configs = [
@@ -379,7 +407,11 @@ class Optimizer:
         # Считаем метрики для каждого варианта
         variants_data = []
         for vc in variant_configs:
-            real = await self._calculate_real_metrics(vc["locations_ordered"], vehicle)
+            real = await self._calculate_real_metrics(
+                vc["locations_ordered"],
+                vehicle,
+                transport_mode=transport_mode,
+            )
             q_score = evaluate_route_quality(
                 {**baseline, "constraints_satisfied": True},
                 {**real, "constraints_satisfied": True},
@@ -464,6 +496,9 @@ class Optimizer:
         quality_score: float,
         model_used: str,
         original_location_ids: List[str],
+        original_total_distance_km: Optional[float] = None,
+        original_total_time_hours: Optional[float] = None,
+        original_total_cost_rub: Optional[float] = None,
         vehicle: Optional[Vehicle] = None,
     ):
         """
@@ -474,6 +509,14 @@ class Optimizer:
         route_id = str(uuid.uuid4())
 
         improvement_pct = 0.0
+        if (
+            original_total_distance_km is not None
+            and original_total_distance_km > 0
+        ):
+            improvement_pct = (
+                (original_total_distance_km - total_distance_km)
+                / original_total_distance_km
+            ) * 100
         try:
             new_route = DBRoute(
                 id=route_id,
@@ -498,8 +541,15 @@ class Optimizer:
 
             self.db.add(
                 DBOptimizationResult(
+                    route_id=route_id,
                     original_route=original_location_ids,
                     optimized_route=locations_order,
+                    original_distance_km=original_total_distance_km,
+                    original_time_hours=original_total_time_hours,
+                    original_cost_rub=original_total_cost_rub,
+                    optimized_distance_km=total_distance_km,
+                    optimized_time_hours=total_time_hours,
+                    optimized_cost_rub=total_cost_rub,
                     improvement_percentage=round(improvement_pct, 2),
                     model_used=model_used,
                     created_at=datetime.now(timezone.utc).replace(tzinfo=None),
@@ -525,6 +575,7 @@ class Optimizer:
             "quality_score": quality_score,
             "response_time_ms": int(time.time() * 1000) - start_time_ms,
             "fallback_reason": None,
+            "has_comparison": True,
             "created_at": datetime.now().isoformat(),
         }
 
