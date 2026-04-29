@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import Location, SalesRep, VisitSchedule
 from src.models.geo_utils import compute_distance_matrix, compute_route_metrics, infer_category
 
+from src.utils.timing import timed_log
+
 logger = logging.getLogger("schedule_planner")
 
 # ---------------------------------------------------------------------------
@@ -186,6 +188,7 @@ class SchedulePlanner:
             else frozenset(d for d, _ in HOLIDAYS_2026)
         )
 
+    @timed_log("schedule_gen")
     async def build_monthly_plan(
         self,
         month_str: str,
@@ -245,6 +248,10 @@ class SchedulePlanner:
             key=lambda t: (t[1], CATEGORY_PRIORITY.get(t[2], 4))
         )
 
+        logger.info(
+            "build_monthly_plan %s: %d ТТ, %d сотрудников, %d задач",
+            month_str, len(locations), len(reps), len(task_pool),
+        )
         locations_by_id = {location.id: location for location in locations}
         rep_day_locations: Dict[Tuple[str, date], List[Location]] = defaultdict(list)
         schedule_rows: List[VisitSchedule] = []

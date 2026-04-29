@@ -2,11 +2,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import (Metric as DBMetric,
-                                 OptimizationResult as DBOptimizationResult,
                                  get_session,
                                  )
 

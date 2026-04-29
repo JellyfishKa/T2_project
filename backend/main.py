@@ -51,7 +51,10 @@ from src.routes.cruddata import (
 
 import uvicorn
 
-logging.basicConfig(level=logging.INFO)
+from src.config import settings
+from src.logging_config import setup_logging
+
+setup_logging(settings.debug)
 logger = logging.getLogger(__name__)
 
 
@@ -208,6 +211,7 @@ async def _health_response(session: AsyncSession):
         except Exception:
             visits_today = None
 
+        from src.utils.timing import get_last_timing
         return {
             "status": "healthy",
             "database": "connected",
@@ -219,6 +223,8 @@ async def _health_response(session: AsyncSession):
             "disk_free_mb": disk_free_mb,
             "visits_today": visits_today,
             "version": "1.2.0",
+            "last_optimization_ms": get_last_timing("optimization"),
+            "last_schedule_gen_ms": get_last_timing("schedule_gen"),
         }
     except Exception as exc:
         logger.error(f"Health check failed: {exc}")
