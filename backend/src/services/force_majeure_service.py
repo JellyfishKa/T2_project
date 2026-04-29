@@ -1,11 +1,9 @@
 
 import logging
-import math
-from collections import defaultdict
 from datetime import date, time, timedelta
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -88,7 +86,7 @@ class ForceMajeureService:
         stmt = select(VisitSchedule).where(
             VisitSchedule.rep_id == rep_id,
             VisitSchedule.planned_date == event_date,
-            VisitSchedule.status == "planned",
+            VisitSchedule.status.in_(["planned", "rescheduled"]),
         ).order_by(VisitSchedule.created_at, VisitSchedule.id)
         result = await self.db.execute(stmt)
         all_planned = list(result.scalars().all())
@@ -170,6 +168,12 @@ class ForceMajeureService:
                         non_working=non_working,
                         chunk_locations=chunk_locations,
                     )
+                    if target_date is None:
+                        logger.warning(
+                            "FM: не удалось перераспределить %d ТТ на rep=%s — нет слота",
+                            len(loc_ids), target_rep.id,
+                        )
+                        continue
                     # Создаём новые плановые записи
                     for loc_id in loc_ids:
                         self.db.add(VisitSchedule(
@@ -224,8 +228,11 @@ class ForceMajeureService:
         self, rep_id: str, after_date: date, chunk_size: int = 1,
         non_working: FrozenSet[date] = frozenset(),
         chunk_locations: Optional[List[Location]] = None,
-    ) -> date:
-        """Ищет ближайший рабочий день после after_date, где влезает chunk_size ТТ."""
+    ) -> Optional[date]:
+        """Ищет ближайший рабочий день после after_date, где влезает chunk_size ТТ.
+
+        Возвращает None если подходящий день не найден в 30-дневном окне.
+        """
         candidate = _next_working_day(after_date, non_working)
         for _ in range(30):  # не дальше месяца вперёд
             existing_stmt = (
@@ -253,4 +260,8 @@ class ForceMajeureService:
             if projected_hours <= MAX_ROUTE_HOURS_PER_DAY:
                 return candidate
             candidate = _next_working_day(candidate, non_working)
-        return candidate
+        logger.warning(
+            "Не найден слот для rep=%s chunk_size=%d в 30-дневном окне после %s",
+            rep_id, chunk_size, after_date,
+        )
+        return None

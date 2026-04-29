@@ -25,13 +25,14 @@ from src.models.schemas import (
 )
 from src.schemas.vehicle import Vehicle 
 from src.services.model_selector import (
-    MODEL_QWEN,
     get_model_recommendation,
     select_best_model,
 )
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService
 from src.services.schedule_planner import VISIT_DURATION_MIN
+
+from src.utils.timing import timed_log
 
 logger = logging.getLogger("optimizer")
 
@@ -88,6 +89,7 @@ class Optimizer:
             "cost_rub": preview["cost_rub"],
         }
 
+    @timed_log("optimization")
     async def optimize(
         self,
         db_locations: List[DBLocation],

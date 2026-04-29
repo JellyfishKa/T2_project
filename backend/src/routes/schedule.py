@@ -217,7 +217,8 @@ async def generate_schedule(
     non_working = set(holidays_q.scalars().all())
 
     planner = SchedulePlanner(session, non_working_dates=non_working)
-    result = await planner.build_monthly_plan(req.month, req.rep_ids)
+    # Route already deleted planned/rescheduled/skipped above; skip planner's delete pass
+    result = await planner.build_monthly_plan(req.month, req.rep_ids, overwrite=False)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
 
@@ -335,7 +336,7 @@ async def update_visit_status(
 async def _reschedule_skipped_visit(
     session: AsyncSession,
     skipped: VisitSchedule,
-) -> None:
+) -> Optional[str]:
     """
     Создаёт новую запись в расписании для пропущенной ТТ на ближайший
     доступный день. Пытается назначить тому же сотруднику; если у него нет
@@ -397,10 +398,11 @@ async def _reschedule_skipped_visit(
             "Не удалось найти слот для переноса ТТ %s после пропуска",
             skipped.location_id,
         )
-        return
+        return None
 
+    new_id = str(uuid_mod.uuid4())
     session.add(VisitSchedule(
-        id=str(uuid_mod.uuid4()),
+        id=new_id,
         location_id=skipped.location_id,
         rep_id=target_rep_id,
         planned_date=target_date,
@@ -412,6 +414,7 @@ async def _reschedule_skipped_visit(
         target_date,
         target_rep_id,
     )
+    return new_id
 
 
 async def _add_to_skipped_stash(
@@ -532,11 +535,12 @@ async def resolve_stash_carry_over(
         planned_date=entry.original_date,
         status="skipped",
     )
-    await _reschedule_skipped_visit(session, fake_sched)
+    new_schedule_id = await _reschedule_skipped_visit(session, fake_sched)
     await session.flush()
 
     entry.resolution = "carry_over"
     entry.resolved_at = datetime.now(tz.utc)
+    entry.resolved_schedule_id = new_schedule_id
 
     await session.commit()
     await session.refresh(entry)
@@ -577,23 +581,21 @@ async def resolve_stash_ai(
         raise HTTPException(status_code=422, detail="Нет активных сотрудников для перераспределения")
 
     service = ForceMajeureService(session)
-    loc_ids = [e.location_id for e in entries]
-    chunks = _chunked_round_robin(loc_ids, len(active_reps))
-
-    loc_to_entry = {e.location_id: e for e in entries}
     import uuid as uuid_mod
 
-    for target_rep, chunk in zip(active_reps, chunks):
-        for loc_id in chunk:
-            entry = loc_to_entry.get(loc_id)
-            if not entry:
-                continue
+    # Chunk stash entries directly (not location_ids) to handle duplicate location_ids correctly
+    entry_chunks = _chunked_round_robin(list(entries), len(active_reps))
+
+    for target_rep, chunk_entries in zip(active_reps, entry_chunks):
+        for entry in chunk_entries:
             target_date = await service._find_available_day(
                 target_rep.id, entry.original_date, chunk_size=1
             )
+            if target_date is None:
+                continue
             new_sched = VisitSchedule(
                 id=str(uuid_mod.uuid4()),
-                location_id=loc_id,
+                location_id=entry.location_id,
                 rep_id=target_rep.id,
                 planned_date=target_date,
                 status="rescheduled",
@@ -748,8 +750,12 @@ async def _build_monthly_plan_response(
     schedule_ids = [s.id for s in schedules]
     logs_by_schedule = await _load_logs_by_schedule(session, schedule_ids)
 
-    # Количество всех ТТ для расчёта покрытия
-    total_tt_result = await session.execute(select(func.count()).select_from(Location))
+    # Только ТТ с категорией A/B/C/D — знаменатель совпадает с тем, что планирует planner
+    total_tt_result = await session.execute(
+        select(func.count()).select_from(Location).where(
+            Location.category.in_(["A", "B", "C", "D"])
+        )
+    )
     total_tt = total_tt_result.scalar() or 0
 
     by_rep_date = defaultdict(lambda: defaultdict(list))
