@@ -51,7 +51,10 @@ from src.routes.cruddata import (
 
 import uvicorn
 
-logging.basicConfig(level=logging.INFO)
+from src.config import settings
+from src.logging_config import setup_logging
+
+setup_logging(settings.debug)
 logger = logging.getLogger(__name__)
 
 

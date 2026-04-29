@@ -121,6 +121,10 @@ class ForceMajeureService:
             )
         else:
             affected_schedules = all_planned
+            logger.info(
+                "Полный ФМ: rep=%s date=%s, затронуто=%d визитов",
+                rep_id, event_date, len(affected_schedules),
+            )
 
         affected_tt_ids = [s.location_id for s in affected_schedules]
 
@@ -135,6 +139,11 @@ class ForceMajeureService:
             active_result = await self.db.execute(active_stmt)
             active_reps = active_result.scalars().all()
 
+            if not active_reps:
+                logger.warning(
+                    "FM rep=%s date=%s: нет активных сотрудников для перераспределения %d визитов",
+                    rep_id, event_date, len(affected_tt_ids),
+                )
             if active_reps:
                 locations_result = await self.db.execute(
                     select(Location).where(Location.id.in_(affected_tt_ids))

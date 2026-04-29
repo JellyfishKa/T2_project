@@ -96,6 +96,7 @@ class Optimizer:
         transport_mode: str = "car",
     ) -> PydanticRoute:
         start_time_ms = int(time.time() * 1000)
+        logger.info("optimize: %d locations, model=%s, transport=%s", len(db_locations), model, transport_mode)
 
         pydantic_locations = [
             self._convert_db_to_pydantic(loc)

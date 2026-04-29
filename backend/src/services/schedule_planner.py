@@ -245,6 +245,10 @@ class SchedulePlanner:
             key=lambda t: (t[1], CATEGORY_PRIORITY.get(t[2], 4))
         )
 
+        logger.info(
+            "build_monthly_plan %s: %d ТТ, %d сотрудников, %d задач",
+            month_str, len(locations), len(reps), len(task_pool),
+        )
         locations_by_id = {location.id: location for location in locations}
         rep_day_locations: Dict[Tuple[str, date], List[Location]] = defaultdict(list)
         schedule_rows: List[VisitSchedule] = []
