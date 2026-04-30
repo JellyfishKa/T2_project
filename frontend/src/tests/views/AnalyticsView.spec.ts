@@ -7,11 +7,15 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 // Мокаем API
 vi.mock('@/services/api', () => ({
   fetchRoutes: vi.fn(),
+  fetchRouteComparison: vi.fn(),
   getMetrics: vi.fn(),
   compareModels: vi.fn(),
   getInsights: vi.fn(),
   downloadScheduleExcel: vi.fn(),
   importScheduleExcel: vi.fn(),
+  fetchReps: vi.fn(),
+  fetchVisits: vi.fn(),
+  getApiErrorMessage: vi.fn((err: unknown) => err instanceof Error ? err.message : String(err)),
 }))
 
 // Мокаем Chart.js компоненты
@@ -40,6 +44,14 @@ vi.mock('@/components/common/SkeletonLoader.vue', () => ({
   }
 }))
 
+vi.mock('@/components/dashboard/RouteCompareModal.vue', () => ({
+  default: {
+    name: 'RouteCompareModal',
+    template: '<div data-testid="route-compare-modal" :data-open="String(open)">RouteCompareModal Mock</div>',
+    props: ['open', 'comparison', 'routeName', 'isLoading', 'error']
+  }
+}))
+
 // Создаем роутер
 const router = createRouter({
   history: createMemoryHistory(),
@@ -62,6 +74,7 @@ describe('AnalyticsView.vue', () => {
         total_cost_rub: 1250,
         model_used: 'llama',
         fallback_reason: null,
+        has_comparison: true,
         created_at: '2026-02-13T09:15:00Z'
       },
       {
@@ -73,6 +86,7 @@ describe('AnalyticsView.vue', () => {
         total_cost_rub: 2500,
         model_used: 'qwen',
         fallback_reason: null,
+        has_comparison: false,
         created_at: '2026-02-12T14:30:00Z'
       },
       {
@@ -84,6 +98,7 @@ describe('AnalyticsView.vue', () => {
         total_cost_rub: 3750,
         model_used: 'llama',
         fallback_reason: null,
+        has_comparison: false,
         created_at: '2026-02-11T11:45:00Z'
       }
     ]
@@ -143,6 +158,25 @@ describe('AnalyticsView.vue', () => {
     recommendations: []
   }
 
+  const mockRouteComparison = {
+    route_id: 'route-1',
+    original: [
+      { id: 'store-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' }
+    ],
+    current: [
+      { id: 'store-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' }
+    ],
+    diff: {
+      distance_delta_km: -1.1,
+      time_delta_hours: -0.2,
+      cost_delta_rub: -90,
+      changed_stops_count: 1,
+      improvement_percentage: 7.5,
+    },
+    model_used: 'llama',
+    created_at: '2026-02-13T09:15:00Z'
+  }
+
   let wrapper: VueWrapper<any>
 
   beforeEach(async () => {
@@ -154,6 +188,12 @@ describe('AnalyticsView.vue', () => {
     vi.mocked(api.getInsights).mockResolvedValue(null as any)
     vi.mocked(api.downloadScheduleExcel).mockResolvedValue(undefined)
     vi.mocked(api.importScheduleExcel).mockResolvedValue({ updated: 0, skipped: 0, errors: [] })
+    vi.mocked(api.fetchReps).mockResolvedValue([])
+    vi.mocked(api.fetchVisits).mockResolvedValue([])
+    vi.mocked(api.fetchRouteComparison).mockResolvedValue(mockRouteComparison)
+    vi.mocked(api.getApiErrorMessage).mockImplementation((err: unknown) =>
+      err instanceof Error ? err.message : String(err)
+    )
 
     await router.push('/analytics')
     await router.isReady()
@@ -242,6 +282,20 @@ describe('AnalyticsView.vue', () => {
 
     expect(errorWrapper.text()).toContain('Ошибка загрузки данных')
     expect(errorWrapper.text()).toContain('Network error')
+  })
+
+  it('открывает модалку сравнения из списка маршрутов', async () => {
+    await flushPromises()
+
+    const compareButton = wrapper.findAll('button').find((button) => button.text().includes('Сравнить'))
+    expect(compareButton).toBeDefined()
+
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    expect(api.fetchRouteComparison).toHaveBeenCalledWith('route-1')
+    const compareModal = wrapper.findComponent({ name: 'RouteCompareModal' })
+    expect(compareModal.props('open')).toBe(true)
   })
 
   it('позволяет обновить данные при клике на кнопку', async () => {

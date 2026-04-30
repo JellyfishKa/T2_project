@@ -8,7 +8,7 @@ from typing import Dict
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
-router = APIRouter(tags=["Benchmark"])
+router = APIRouter(prefix="/benchmark", tags=["Benchmark"])
 
 benchmark_status: Dict[str, str] = {}
 
@@ -72,7 +72,7 @@ def _run_benchmark_process(
         benchmark_status[task_id] = f"error: {exc}"
 
 
-@router.post("/api/v1/benchmark/run")
+@router.post("/run")
 async def start_benchmark(
     background_tasks: BackgroundTasks,
     iterations: int = Query(5, ge=1, le=20),
@@ -106,12 +106,12 @@ async def start_benchmark(
     }
 
 
-@router.get("/api/v1/benchmark/status")
+@router.get("/status")
 async def get_benchmark_status():
     return benchmark_status
 
 
-@router.get("/api/v1/benchmark/compare")
+@router.get("/compare")
 async def compare_models():
     """
     Возвращает сравнение моделей в формате, совместимом с фронтендом:
@@ -161,7 +161,7 @@ async def compare_models():
     }
 
 
-@router.get("/api/v1/benchmark/latest")
+@router.get("/latest")
 async def get_latest_result():
     if not RESULTS_FILE.exists():
         raise HTTPException(

@@ -1,9 +1,9 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen bg-slate-100">
     <!-- Header -->
     <Header @toggle-sidebar="isSidebarOpen = !isSidebarOpen" />
 
-    <div class="flex">
+    <div class="flex min-h-[calc(100vh-4rem)]">
       <!-- Sidebar для десктопа -->
       <Sidebar
         :is-open="isSidebarOpen"
@@ -37,8 +37,8 @@
       </Transition>
 
       <!-- Main Content -->
-      <main class="flex-1 p-4 md:p-6 lg:p-8">
-        <div class="mx-auto max-w-7xl">
+      <main class="flex-1 px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8">
+        <div class="mx-auto max-w-[1440px]">
           <router-view />
         </div>
       </main>

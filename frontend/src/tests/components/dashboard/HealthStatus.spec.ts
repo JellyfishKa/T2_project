@@ -8,7 +8,7 @@ describe('HealthStatus.vue', () => {
     status: 'healthy',
     services: {
       database: 'connected',
-      llama: 'connected',
+      llama: 'loaded',
       qwen: 'available'
     }
   }
@@ -89,9 +89,9 @@ describe('HealthStatus.vue', () => {
     })
 
     const serviceTexts = wrapper.findAll('.text-xs.text-gray-500')
-    expect(serviceTexts[0].text()).toBe('Подключено')
-    expect(serviceTexts[1].text()).toBe('Подключено')
-    expect(serviceTexts[2].text()).toBe('Доступно')
+    expect(serviceTexts[0].text()).toBe('Подключено')  // database: connected
+    expect(serviceTexts[1].text()).toBe('Загружена')   // llama: loaded
+    expect(serviceTexts[2].text()).toBe('Доступно')    // qwen: available
   })
 
   it('отображает правильные иконки', () => {

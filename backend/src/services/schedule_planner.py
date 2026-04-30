@@ -1,31 +1,18 @@
-"""
-Планировщик месячных маршрутов торговых представителей.
-
-Алгоритм:
-1. Определяет рабочие дни месяца (пн–пт).
-2. По категории ТТ вычисляет плановые даты визитов:
-   A → 3 визита (1-я, 2-я, 3-я рабочие недели месяца)
-   B → 2 визита (1-я и 3-я рабочие недели)
-   C → 1 визит (середина месяца)
-   D → 1 визит в квартал (если текущий квартал совпадает)
-3. Собирает пул (location_id, planned_date, category).
-4. Сортирует задачи по (дата, приоритет A→B→C→D).
-5. Для каждой задачи ищет ближайший свободный слот (date, rep)
-   начиная с целевой даты — сотрудника с наибольшим остатком слотов.
-6. Сохраняет в visit_schedule (batch insert).
-"""
 
 import logging
 import math
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Location, SalesRep, VisitSchedule
+from src.models.geo_utils import compute_distance_matrix, compute_route_metrics, infer_category
+
+from src.utils.timing import timed_log
 
 logger = logging.getLogger("schedule_planner")
 
@@ -42,29 +29,59 @@ WORK_MINUTES = (WORK_END_HOUR - WORK_START_HOUR) * 60   # 540 мин
 MAX_TT_PER_DAY = math.floor(
     (WORK_MINUTES - LUNCH_BREAK_MIN) / (VISIT_DURATION_MIN + AVG_TRAVEL_MIN_PER_TT)
 )   # floor(510/35) = 14 ТТ/день
+MAX_ROUTE_HOURS_PER_DAY = (WORK_MINUTES - LUNCH_BREAK_MIN) / 60 - 0.5  # 0.5h buffer for road variability
 
 CATEGORY_PRIORITY = {"A": 1, "B": 2, "C": 3, "D": 4}
+
+# ---------------------------------------------------------------------------
+# Российские праздники 2026 (используются для сидирования БД)
+# ---------------------------------------------------------------------------
+HOLIDAYS_2026: List[Tuple[date, str]] = [
+    (date(2026, 1, 1),  "Новый год"),
+    (date(2026, 1, 2),  "Новогодние каникулы"),
+    (date(2026, 1, 3),  "Новогодние каникулы"),
+    (date(2026, 1, 4),  "Новогодние каникулы"),
+    (date(2026, 1, 5),  "Новогодние каникулы"),
+    (date(2026, 1, 6),  "Новогодние каникулы"),
+    (date(2026, 1, 7),  "Рождество Христово"),
+    (date(2026, 1, 8),  "Новогодние каникулы"),
+    (date(2026, 1, 9),  "Перенос (Новый год)"),
+    (date(2026, 2, 23), "День защитника Отечества"),
+    (date(2026, 3, 8),  "Международный женский день"),
+    (date(2026, 3, 9),  "Перенос (Женский день)"),
+    (date(2026, 5, 1),  "Праздник Весны и Труда"),
+    (date(2026, 5, 9),  "День Победы"),
+    (date(2026, 5, 11), "Перенос (День Победы)"),
+    (date(2026, 6, 12), "День России"),
+    (date(2026, 11, 4), "День народного единства"),
+]
 
 
 # ---------------------------------------------------------------------------
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
 
-def _working_days(year: int, month: int) -> List[date]:
-    """Возвращает список рабочих дней месяца (пн–пт)."""
+def _is_working_day(d: date, non_working: FrozenSet[date]) -> bool:
+    """Рабочий день: не выходной и не праздник."""
+    return d.weekday() < 5 and d not in non_working
+
+
+def _working_days(year: int, month: int, non_working: FrozenSet[date] = frozenset()) -> List[date]:
+    """Возвращает список рабочих дней месяца (пн–пт, без праздников)."""
     _, last = monthrange(year, month)
     return [
         date(year, month, d)
         for d in range(1, last + 1)
-        if date(year, month, d).weekday() < 5  # 0=пн … 4=пт
+        if _is_working_day(date(year, month, d), non_working)
     ]
 
 
 def _week_groups(days: List[date]) -> List[List[date]]:
-    """Разбивает рабочие дни на рабочие недели (по номеру ISO-недели)."""
-    groups: Dict[int, List[date]] = defaultdict(list)
+    """Разбивает рабочие дни на рабочие недели (по ISO год+неделя)."""
+    groups: Dict[Tuple[int, int], List[date]] = defaultdict(list)
     for d in days:
-        groups[d.isocalendar()[1]].append(d)
+        iso = d.isocalendar()
+        groups[(iso[0], iso[1])].append(d)
     return [v for v in groups.values()]
 
 
@@ -109,12 +126,54 @@ def _visit_dates(
     return []
 
 
-def _next_working_day(d: date) -> date:
-    """Следующий рабочий день после d."""
+def _next_working_day(d: date, non_working: FrozenSet[date] = frozenset()) -> date:
+    """Следующий рабочий день после d (не выходной и не праздник)."""
     nxt = d + timedelta(days=1)
-    while nxt.weekday() >= 5:
+    while not _is_working_day(nxt, non_working):
         nxt += timedelta(days=1)
     return nxt
+
+
+def _estimate_route_hours(locations: List[Location]) -> float:
+    """Оценка длительности дневного маршрута с учётом переездов между ТТ."""
+    if not locations:
+        return 0.0
+    if len(locations) == 1:
+        return round(VISIT_DURATION_MIN / 60, 2)
+
+    points = [
+        {
+            "ID": location.id,
+            "name": location.name,
+            "lat": location.lat,
+            "lon": location.lon,
+            "priority": infer_category(location.category or "C"),
+        }
+        for location in locations
+    ]
+    matrix = compute_distance_matrix(points)
+    priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+    start_idx = min(
+        range(len(points)),
+        key=lambda idx: priority_rank.get(points[idx]["priority"], 3),
+    )
+
+    visited = [False] * len(points)
+    order = [start_idx]
+    visited[start_idx] = True
+
+    for _ in range(len(points) - 1):
+        current_idx = order[-1]
+        next_idx = min(
+            (idx for idx in range(len(points)) if not visited[idx]),
+            key=lambda idx: matrix[current_idx][idx],
+        )
+        order.append(next_idx)
+        visited[next_idx] = True
+
+    ordered_ids = [points[idx]["ID"] for idx in order]
+    _, total_time_hours, _ = compute_route_metrics(points, ordered_ids)
+    return total_time_hours
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +181,14 @@ def _next_working_day(d: date) -> date:
 # ---------------------------------------------------------------------------
 
 class SchedulePlanner:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, non_working_dates: Optional[Set[date]] = None):
         self.db = db
+        self.non_working: FrozenSet[date] = (
+            frozenset(non_working_dates) if non_working_dates is not None
+            else frozenset(d for d, _ in HOLIDAYS_2026)
+        )
 
+    @timed_log("schedule_gen")
     async def build_monthly_plan(
         self,
         month_str: str,
@@ -150,7 +214,7 @@ class SchedulePlanner:
             return {"error": "Нет торговых точек с категорией A/B/C/D в базе"}
 
         # --- Рабочие дни и недели ---
-        all_days = _working_days(year, month)
+        all_days = _working_days(year, month, self.non_working)
         work_weeks = _week_groups(all_days)
 
         # Первый месяц текущего квартала
@@ -184,38 +248,56 @@ class SchedulePlanner:
             key=lambda t: (t[1], CATEGORY_PRIORITY.get(t[2], 4))
         )
 
-        # Для каждой (дата, сотрудник) храним оставшиеся слоты
-        rep_day_slots: Dict[Tuple[str, date], int] = defaultdict(lambda: MAX_TT_PER_DAY)
+        logger.info(
+            "build_monthly_plan %s: %d ТТ, %d сотрудников, %d задач",
+            month_str, len(locations), len(reps), len(task_pool),
+        )
+        locations_by_id = {location.id: location for location in locations}
+        rep_day_locations: Dict[Tuple[str, date], List[Location]] = defaultdict(list)
         schedule_rows: List[VisitSchedule] = []
 
         for (loc_id, target_d, cat) in sorted_tasks:
             check_date = target_d
             assigned = False
+            location = locations_by_id.get(loc_id)
+            if location is None:
+                continue
 
             # Ограниченный lookahead: не дальше ~2 месяца
-            for _ in range(len(all_days) + 31):
-                # Пропускаем выходные
-                if check_date.weekday() >= 5:
-                    check_date = _next_working_day(check_date)
+            for _ in range(60):  # hard limit ~2 months lookahead
+                # Пропускаем выходные и праздники
+                if not _is_working_day(check_date, self.non_working):
+                    check_date = _next_working_day(check_date, self.non_working)
                     continue
 
-                # Выбираем сотрудника с наибольшим остатком слотов (fairness)
-                best_rep = max(
-                    reps,
-                    key=lambda r: rep_day_slots[(r.id, check_date)],
-                )
-                if rep_day_slots[(best_rep.id, check_date)] > 0:
+                candidates = []
+                for rep in reps:
+                    day_key = (rep.id, check_date)
+                    current_locations = rep_day_locations[day_key]
+                    projected_locations = current_locations + [location]
+                    if len(projected_locations) > MAX_TT_PER_DAY:
+                        continue
+
+                    projected_hours = _estimate_route_hours(projected_locations)
+                    if projected_hours <= MAX_ROUTE_HOURS_PER_DAY:
+                        candidates.append((projected_hours, len(current_locations), rep))
+
+                if candidates:
+                    projected_hours, _, best_rep = min(
+                        candidates,
+                        key=lambda item: (item[0], item[1], item[2].id),
+                    )
                     schedule_rows.append(VisitSchedule(
                         location_id=loc_id,
                         rep_id=best_rep.id,
                         planned_date=check_date,
                         status="planned",
                     ))
-                    rep_day_slots[(best_rep.id, check_date)] -= 1
+                    rep_day_locations[(best_rep.id, check_date)].append(location)
                     assigned = True
                     break
 
-                check_date = _next_working_day(check_date)
+                check_date = _next_working_day(check_date, self.non_working)
 
             if not assigned:
                 logger.warning(

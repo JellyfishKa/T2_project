@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.schemas.locations import LocationResponse
+
 
 class RouteResponse(BaseModel):
     """Schema for route list items.
@@ -31,6 +33,7 @@ class RouteResponse(BaseModel):
     )
     model_used: str = "unknown"
     fallback_reason: Optional[str] = None
+    has_comparison: bool = False
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -45,11 +48,14 @@ class RouteDetailResponse(BaseModel):
     id: str
     name: str
     locations: List[str] = []
+    locations_sequence: List[str] = []
+    locations_data: List[LocationResponse] = []
     total_distance_km: float = 0.0
     total_time_hours: float = 0.0
     total_cost_rub: float = 0.0
     model_used: str = "unknown"
     fallback_reason: Optional[str] = None
+    has_comparison: bool = False
     created_at: Optional[datetime] = None
     metrics: List[dict] = []
 
@@ -61,3 +67,32 @@ class PaginatedRoutes(BaseModel):
 
     total: int
     items: List[RouteResponse]
+
+
+class ComparisonPoint(BaseModel):
+    id: str
+    name: str
+    lat: float
+    lon: float
+    order: int
+    address: Optional[str] = None
+    category: Optional[str] = None
+
+
+class ComparisonDiff(BaseModel):
+    distance_delta_km: float
+    time_delta_hours: float
+    cost_delta_rub: float
+    changed_stops_count: int
+    improvement_percentage: float
+
+
+class RouteComparisonResponse(BaseModel):
+    route_id: str
+    original: List[ComparisonPoint]
+    current: List[ComparisonPoint]
+    diff: ComparisonDiff
+    model_used: str
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)

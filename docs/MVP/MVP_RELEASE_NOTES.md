@@ -2,6 +2,48 @@
 
 ---
 
+## v1.2.0 — 10 марта 2026
+
+**Тип:** Quality & UX Release — Валидация, Аудит, Производительность
+
+---
+
+### Новые функции
+
+#### Backend
+
+- **Валидация статус-машины визитов** — защита от незаконных переходов (например, `completed→planned` → 422)
+  - `VALID_TRANSITIONS`: `planned→{completed,skipped,cancelled,rescheduled}`, `skipped→{planned,cancelled}`, `rescheduled→{completed,skipped,cancelled}`, `completed/cancelled` — заблокированы
+- **Защита от дублирования расписания** — `POST /schedule/generate?force=false` возвращает 409 если расписание уже есть; `?force=true` перегенерирует
+- **Предупреждения при переводе сотрудника на sick/vacation** — `PATCH /reps/{id}` возвращает поля `warning` и `pending_visits_count`
+- **AuditLog** — новая таблица `audit_log` (миграция 003), логирует:
+  - Смену статуса визита (`visit_status_change`)
+  - Создание форс-мажора (`force_majeure_created`)
+  - Генерацию расписания (`schedule_generated`)
+- **Расширенный health check** — добавлены поля `disk_free_mb`, `visits_today`, `version: "1.2.0"`
+  - LLM-статусы изменены: `"loaded"` / `"not_loaded"` (вместо `available/unavailable`)
+- **Пагинация GET /schedule/** — добавлены query params `from_date` и `to_date` (YYYY-MM-DD)
+- **5-й лист Excel «Журнал изменений»** — `GET /export/schedule` теперь содержит таблицу AuditLog за месяц
+
+#### Frontend
+
+- **requestId pattern в AnalyticsView** — предотвращает применение устаревших ответов при быстром переключении
+- **localStorage: сохранение предпочтительной модели** — `OptimizeView` сохраняет `t2_preferred_model`, восстанавливает при перезагрузке
+- **localStorage: сохранение месяца** — `ScheduleView` сохраняет `t2_month_offset`, восстанавливает при перезагрузке
+- **Детализированный health-индикатор** — `HealthStatus.vue` показывает диск, визиты сегодня, версию
+  - Зелёный/красный цвет по значению диска (`> 1 GB = зелёный`)
+- **Новые тесты** — `ScheduleView.spec.ts` (8 тест-кейсов), `RepsView.spec.ts` (7 тест-кейсов)
+
+---
+
+### CI/CD
+
+- ~189+ frontend тестов (Vitest) — +15 новых (ScheduleView + RepsView spec)
+- 61+ backend тестов (pytest)
+- TypeScript: 0 ошибок
+
+---
+
 ## v1.1.0 — Неделя 4 (27 февраля 2026)
 
 **Тип:** Feature Release — Расписание, Трекинг времени, Excel

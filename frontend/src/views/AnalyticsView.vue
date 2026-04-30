@@ -1,37 +1,41 @@
 <template>
-  <div class="py-6 md:py-8">
-    <!-- Page Header -->
-    <div
-      class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between"
+  <div class="space-y-6 py-6 md:py-8">
+    <PageHero
+      eyebrow="Аналитика"
+      title="Аналитика"
+      description="Статистика и визуализация производительности маршрутов и моделей. Сначала ключевые показатели, затем графики и детальная таблица по моделям."
     >
-      <div>
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Аналитика</h1>
-        <p class="mt-2 text-gray-600">
-          Статистика и визуализация производительности маршрутов и моделей
-        </p>
-      </div>
-      <button
-        @click="refreshData"
-        :disabled="isRefreshing"
-        class="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <svg
-          class="h-4 w-4 mr-2"
-          :class="{ 'animate-spin': isRefreshing }"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+      <template #meta>
+        <div class="flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Качество</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Стоимость</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Динамика</span>
+        </div>
+      </template>
+      <template #actions>
+        <button
+          @click="refreshData"
+          :disabled="isRefreshing"
+          class="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-        {{ isRefreshing ? 'Обновление...' : 'Обновить' }}
-      </button>
-    </div>
+          <svg
+            class="h-4 w-4 mr-2"
+            :class="{ 'animate-spin': isRefreshing }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          {{ isRefreshing ? 'Обновление...' : 'Обновить' }}
+        </button>
+      </template>
+    </PageHero>
 
     <!-- Error State -->
     <div
@@ -74,129 +78,43 @@
       <!-- Statistics Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <!-- Total Routes -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-blue-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-blue-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Всего маршрутов</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.totalRoutes }}
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Всего маршрутов"
+          :value="stats.totalRoutes"
+          hint="Общее количество маршрутов в аналитической выборке."
+          tone="blue"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Average Distance -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-green-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-green-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">
-                Среднее расстояние
-              </p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.avgDistance.toFixed(1) }} км
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Среднее расстояние"
+          :value="`${stats.avgDistance.toFixed(1)} км`"
+          hint="Показывает общую транспортную нагрузку маршрутов."
+          tone="green"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Average Cost -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-purple-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-purple-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Средняя стоимость</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.avgCost.toFixed(0) }} ₽
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Средняя стоимость"
+          :value="`${stats.avgCost.toFixed(0)} ₽`"
+          hint="Средняя стоимость выполнения одного маршрута."
+          tone="amber"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Avg Quality -->
-        <div
+        <InfoStatCard
           v-if="!isLoading"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-yellow-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-yellow-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Среднее качество</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ stats.avgQuality.toFixed(1) }}%
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Среднее качество"
+          :value="`${stats.avgQuality.toFixed(1)}%`"
+          hint="Средний итоговый score по сохранённым решениям."
+          tone="slate"
+        />
         <SkeletonLoader v-else height="120px" />
       </div>
 
@@ -347,6 +265,53 @@
           </div>
           <div v-else class="text-center py-8 text-gray-500">
             Нет данных по моделям
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-900">
+            Маршруты с историей оптимизации
+          </h3>
+          <p class="mt-1 text-sm text-gray-600">
+            Быстрый доступ к сравнению маршрута до и после сохранённой оптимизации.
+          </p>
+        </div>
+        <div class="p-6">
+          <div v-if="isLoading" class="space-y-3">
+            <SkeletonLoader v-for="i in 3" :key="`comparison-skeleton-${i}`" height="64px" />
+          </div>
+          <div v-else-if="routesWithComparison.length" class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Маршрут</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Модель</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действие</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="route in routesWithComparison" :key="route.id">
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ route.name }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">{{ getModelName(route.model_used) }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">{{ new Date(route.created_at).toLocaleDateString('ru-RU') }}</td>
+                  <td class="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      class="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                      @click="openRouteComparison(route)"
+                    >
+                      Сравнить
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="text-center py-8 text-gray-500">
+            Пока нет маршрутов с доступной историей сравнения.
           </div>
         </div>
       </div>
@@ -526,12 +491,74 @@
         </div>
       </div>
 
+      <!-- ═══════════════════════════════════════════════════════════════════
+           РАЗДЕЛ: Журнал визитов (time_in / time_out)
+      ════════════════════════════════════════════════════════════════════ -->
+      <div class="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+          <h3 class="text-lg font-semibold text-gray-900">Журнал визитов</h3>
+          <div class="flex items-center gap-2">
+            <select
+              v-model="visitRepId"
+              @change="loadVisits"
+              class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Все сотрудники</option>
+              <option v-for="rep in repsForFilter" :key="rep.id" :value="rep.id">
+                {{ rep.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table v-if="visits.length" class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сотрудник</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ТТ (ID)</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Время прихода</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Время ухода</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Длительность</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="v in visits" :key="v.id" class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-sm text-gray-900">{{ repNameMap[v.rep_id] || v.rep_id }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono">{{ v.location_id.slice(0, 8) }}…</td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ v.visited_date }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ fmtTime(v.time_in) }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{ fmtTime(v.time_out) }}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">
+                  <span v-if="calcDuration(v.time_in, v.time_out) !== null">
+                    {{ calcDuration(v.time_in, v.time_out) }} мин
+                  </span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="py-10 text-center text-gray-400 text-sm">
+            Нет данных о визитах за {{ insightsMonth }}
+          </div>
+        </div>
+      </div>
+
     </template>
+
+    <RouteCompareModal
+      :open="isRouteComparisonOpen"
+      :comparison="routeComparison"
+      :route-name="comparisonRouteName"
+      :is-loading="isLoadingRouteComparison"
+      :error="routeComparisonError"
+      @close="closeRouteComparison"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   Chart as ChartJS,
   Title,
@@ -546,17 +573,26 @@ import {
 } from 'chart.js'
 import { Bar as BarChart, Scatter as ScatterChart, Line as LineChart } from 'vue-chartjs'
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import InfoStatCard from '@/components/common/InfoStatCard.vue'
+import RouteCompareModal from '@/components/dashboard/RouteCompareModal.vue'
 import {
   fetchRoutes,
+  fetchRouteComparison,
   getMetrics,
   compareModels,
   getInsights,
   downloadScheduleExcel,
   importScheduleExcel,
+  fetchVisits,
+  fetchReps,
+  getApiErrorMessage,
   type Route,
-  type Metric
+  type RouteComparison,
+  type Metric,
+  type VisitLog
 } from '@/services/api'
-import type { Insights } from '@/services/types'
+import type { Insights, SalesRep } from '@/services/types'
 
 // Register ChartJS components
 ChartJS.register(
@@ -591,6 +627,7 @@ interface Stats {
 const isLoading = ref(true)
 const isRefreshing = ref(false)
 const error = ref<string | null>(null)
+const currentRequestId = ref(0)
 
 const routes = ref<Route[]>([])
 const metrics = ref<Metric[]>([])
@@ -599,6 +636,15 @@ const insights = ref<Insights | null>(null)
 const exportLoading = ref(false)
 const importLoading = ref(false)
 const importResult = ref<{ updated: number; skipped: number; errors: string[] } | null>(null)
+
+const visits = ref<VisitLog[]>([])
+const repsForFilter = ref<SalesRep[]>([])
+const visitRepId = ref('')
+const isRouteComparisonOpen = ref(false)
+const isLoadingRouteComparison = ref(false)
+const routeComparison = ref<RouteComparison | null>(null)
+const routeComparisonError = ref<string | null>(null)
+const comparisonRouteId = ref<string | null>(null)
 
 // Текущий месяц для инсайтов
 const insightsMonth = computed(() => {
@@ -879,6 +925,15 @@ const timeSeriesData = computed(() => {
   }
 })
 
+const routesWithComparison = computed(() =>
+  routes.value.filter((route) => route.has_comparison)
+)
+
+const comparisonRouteName = computed(() => {
+  if (!comparisonRouteId.value) return null
+  return routes.value.find((route) => route.id === comparisonRouteId.value)?.name ?? null
+})
+
 // Methods
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
@@ -896,28 +951,61 @@ const getModelBadgeClass = (model: string): string => {
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }
 
+const calcDuration = (timeIn: string | null, timeOut: string | null): number | null => {
+  if (!timeIn || !timeOut) return null
+  const [hI, mI] = timeIn.split(':').map(Number)
+  const [hO, mO] = timeOut.split(':').map(Number)
+  return (hO * 60 + mO) - (hI * 60 + mI)
+}
+
+const fmtTime = (t: string | null): string => {
+  if (!t) return '—'
+  return t.slice(0, 5)  // "HH:MM:SS" → "HH:MM"
+}
+
+const repNameMap = computed<Record<string, string>>(() => {
+  const m: Record<string, string> = {}
+  repsForFilter.value.forEach(r => { m[r.id] = r.name })
+  return m
+})
+
 const loadAnalyticsData = async () => {
+  const myId = ++currentRequestId.value
   try {
     isLoading.value = true
     error.value = null
 
-    const [routesData, metricsData, comparisonData, insightsData] = await Promise.all([
+    const [routesData, metricsData, comparisonData, insightsData, repsData] = await Promise.all([
       fetchRoutes(0, 100),
       getMetrics(),
       compareModels().catch(() => null),  // /benchmark/compare может отсутствовать
       getInsights().catch(() => null),
+      fetchReps().catch(() => []),
     ])
+
+    if (currentRequestId.value !== myId) return  // запрос устарел — игнорируем
 
     routes.value = routesData.items ?? []
     metrics.value = metricsData?.metrics ?? []
     modelComparison.value = comparisonData
     insights.value = insightsData
+    repsForFilter.value = repsData
+
+    // Загружаем журнал визитов для текущего месяца
+    const visitsData = await fetchVisits(insightsMonth.value, visitRepId.value || undefined).catch(() => [])
+    if (currentRequestId.value !== myId) return  // запрос устарел — игнорируем
+    visits.value = visitsData
   } catch (err: any) {
-    error.value = err.message || 'Не удалось загрузить данные аналитики'
+    if (currentRequestId.value !== myId) return
+    error.value = getApiErrorMessage(err, 'Не удалось загрузить данные аналитики')
     console.error('Analytics data loading error:', err)
   } finally {
     isLoading.value = false
   }
+}
+
+const loadVisits = async () => {
+  visits.value = await fetchVisits(insightsMonth.value, visitRepId.value || undefined).catch(() => [])
 }
 
 const handleExport = async () => {
@@ -925,7 +1013,7 @@ const handleExport = async () => {
   try {
     await downloadScheduleExcel(insightsMonth.value)
   } catch (e: any) {
-    alert('Ошибка экспорта: ' + (e?.message ?? 'неизвестная ошибка'))
+    alert('Ошибка экспорта: ' + getApiErrorMessage(e, 'неизвестная ошибка'))
   } finally {
     exportLoading.value = false
   }
@@ -941,11 +1029,38 @@ const handleImport = async (event: Event) => {
     importResult.value = await importScheduleExcel(file)
     await loadAnalyticsData()
   } catch (e: any) {
-    importResult.value = { updated: 0, skipped: 0, errors: [e?.message ?? 'неизвестная ошибка'] }
+    importResult.value = { updated: 0, skipped: 0, errors: [getApiErrorMessage(e, 'неизвестная ошибка')] }
   } finally {
     importLoading.value = false
     target.value = ''
   }
+}
+
+const openRouteComparison = async (route: Route) => {
+  comparisonRouteId.value = route.id
+  isRouteComparisonOpen.value = true
+  isLoadingRouteComparison.value = true
+  routeComparison.value = null
+  routeComparisonError.value = null
+
+  try {
+    routeComparison.value = await fetchRouteComparison(route.id)
+  } catch (err: any) {
+    routeComparisonError.value = getApiErrorMessage(
+      err,
+      'История сравнения для этого маршрута недоступна',
+    )
+  } finally {
+    isLoadingRouteComparison.value = false
+  }
+}
+
+const closeRouteComparison = () => {
+  isRouteComparisonOpen.value = false
+  isLoadingRouteComparison.value = false
+  routeComparison.value = null
+  routeComparisonError.value = null
+  comparisonRouteId.value = null
 }
 
 const refreshData = async () => {
@@ -957,5 +1072,10 @@ const refreshData = async () => {
 // Lifecycle
 onMounted(() => {
   loadAnalyticsData()
+})
+
+onUnmounted(() => {
+  // Инвалидируем текущий requestId — все pending await больше не применят данные
+  currentRequestId.value = -1
 })
 </script>

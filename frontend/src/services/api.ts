@@ -3,12 +3,16 @@ import type {
   Location,
   Route,
   RouteDetails,
+  RouteComparison,
   Metric,
   BenchmarkResult,
   BenchmarkRequest,
+  BenchmarkRunResponse,
   OptimizeRequest,
   OptimizeVariantsResponse,
   ConfirmVariantRequest,
+  RoutePreviewPoint,
+  RoutePreviewResponse,
   PaginatedResponse,
   HealthStatus,
   ApiError,
@@ -16,8 +20,17 @@ import type {
   ModelComparison,
   SalesRep,
   MonthlyPlan,
+  DailyRoute,
+  DayRouteOverrideRequest,
   ForceMajeureEvent,
-  VisitScheduleItem
+  VisitScheduleItem,
+  VisitLog,
+  Holiday,
+  HolidayPatchResponse,
+  SkippedStashItem,
+  Vehicle,
+  TransportMode,
+  AuditLogItem,
 } from './types'
 
 // Конфигурация API
@@ -39,6 +52,74 @@ const RETRY_DELAY = 1000 // 1 секунда
 
 // Функция для задержки
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function flattenErrorPayload(payload: unknown): string | null {
+  if (typeof payload === 'string') {
+    const value = payload.trim()
+    return value || null
+  }
+
+  if (Array.isArray(payload)) {
+    const parts = payload
+      .map((item) => flattenErrorPayload(item))
+      .filter((item): item is string => !!item)
+    return parts.length ? parts.join('; ') : null
+  }
+
+  if (!payload || typeof payload !== 'object') return null
+
+  const record = payload as Record<string, unknown>
+
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message
+  }
+
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error
+  }
+
+  if ('detail' in record) {
+    const detailMessage = flattenErrorPayload(record.detail)
+    if (detailMessage) return detailMessage
+  }
+
+  if (typeof record.msg === 'string' && record.msg.trim()) {
+    if (Array.isArray(record.loc) && record.loc.length) {
+      return `${record.loc.join('.')} — ${record.msg}`
+    }
+    return record.msg
+  }
+
+  if (typeof record.reason === 'string' && record.reason.trim()) {
+    return record.reason
+  }
+
+  return null
+}
+
+export function getApiErrorMessage(error: unknown, fallback = 'Произошла ошибка'): string {
+  const direct = flattenErrorPayload(error)
+  if (direct) return direct
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    const responseData =
+      record.response && typeof record.response === 'object'
+        ? (record.response as Record<string, unknown>).data
+        : null
+    const nested = [
+      flattenErrorPayload(responseData),
+      flattenErrorPayload(record.response),
+      flattenErrorPayload(record.data),
+      flattenErrorPayload(record.detail),
+      typeof record.message === 'string' && record.message.trim() ? record.message : null,
+    ].find((item): item is string => !!item)
+
+    if (nested) return nested
+  }
+
+  return fallback
+}
 
 // Функция для повторных попыток
 async function withRetry<T>(
@@ -68,13 +149,17 @@ async function withRetry<T>(
 
 // ========== ТИПЫ ДЛЯ ОТВЕТОВ ==========
 export interface UploadLocationsResponse {
-  success: boolean
-  message: string
-  locations: Location[]
+  created?: Location[]
+  total_processed?: number
+  success?: boolean
+  message?: string
+  locations?: Location[]
   errors?: Array<{
     row: number
-    field: string
-    message: string
+    field?: string
+    message?: string
+    error?: string
+    data?: unknown
   }>
 }
 
@@ -136,10 +221,23 @@ api.interceptors.response.use(
         console.error('Service Unavailable:', data)
         break
       default:
-        console.error(`HTTP Error ${status}:`, data)
+        console.error(`HTTP Error ${status}:`, getApiErrorMessage(data, error.message), data)
     }
 
-    return Promise.reject(error.response?.data || error)
+    const normalizedError = error as AxiosError<ApiError> & {
+      status?: number
+      detail?: unknown
+      data?: unknown
+    }
+    normalizedError.status = status
+    normalizedError.detail =
+      data && typeof data === 'object' && 'detail' in data
+        ? (data as Record<string, unknown>).detail
+        : data
+    normalizedError.data = data
+    normalizedError.message = getApiErrorMessage(data, error.message)
+
+    return Promise.reject(normalizedError)
   }
 )
 
@@ -273,6 +371,17 @@ export const fetchRouteDetails = async (
 }
 
 /**
+ * Получение сравнения маршрута до/после оптимизации
+ * GET /api/v1/routes/{route_id}/comparison
+ */
+export const fetchRouteComparison = async (
+  routeId: string
+): Promise<RouteComparison> => {
+  const response = await withRetry(() => api.get(`/routes/${routeId}/comparison`))
+  return response.data
+}
+
+/**
  * Получение метрик для конкретного маршрута
  * GET /api/v1/metrics?route_id={route_id}
  */
@@ -291,11 +400,16 @@ export const fetchRouteMetrics = async (
  */
 export const runBenchmark = async (
   request: BenchmarkRequest
-): Promise<{
-  total_duration_seconds: number
-  results: BenchmarkResult[]
-}> => {
-  const response = await withRetry(() => api.post('/benchmark', request))
+): Promise<BenchmarkRunResponse> => {
+  const response = await withRetry(() =>
+    api.post('/benchmark/run', null, {
+      params: {
+        iterations: request.num_iterations,
+        use_mock: true,
+        use_backend: false
+      }
+    })
+  )
   return response.data
 }
 
@@ -321,7 +435,43 @@ export const checkHealth = async (): Promise<HealthStatus> => {
  * GET /api/v1/locations
  */
 export const fetchAllLocations = async (): Promise<Location[]> => {
-  const response = await withRetry(() => api.get('/locations'))
+  const response = await withRetry(() => api.get('/locations/'))
+  const payload = response.data
+
+  if (Array.isArray(payload)) {
+    return payload
+  }
+
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { locations?: unknown }).locations)) {
+    return (payload as { locations: Location[] }).locations
+  }
+
+  return []
+}
+
+export const updateLocation = async (
+  id: string,
+  data: Partial<Omit<Location, 'id'>>,
+): Promise<Location> => {
+  const response = await withRetry(() => api.patch(`/locations/${id}`, data))
+  return response.data
+}
+
+export const deleteLocation = async (id: string, force = false): Promise<void> => {
+  await withRetry(() => api.delete(`/locations/${id}`, force ? { params: { force: true } } : {}))
+}
+
+export const fetchRoutePreview = async (
+  points: RoutePreviewPoint[],
+  options?: { vehicle_id?: string | null; transport_mode?: TransportMode }
+): Promise<RoutePreviewResponse> => {
+  const response = await withRetry(() =>
+    api.post('/routing/preview', {
+      points,
+      vehicle_id: options?.vehicle_id ?? null,
+      transport_mode: options?.transport_mode ?? 'car',
+    })
+  )
   return response.data
 }
 
@@ -334,34 +484,94 @@ export const fetchReps = async (): Promise<SalesRep[]> => {
 
 export const createRep = async (
   name: string,
-  status: SalesRep['status'] = 'active'
+  status: SalesRep['status'] = 'active',
+  vehicle_id?: string | null,
 ): Promise<SalesRep> => {
   const response = await withRetry(() =>
-    api.post('/reps/', { name, status })
+    api.post('/reps/', { name, status, vehicle_id: vehicle_id ?? null })
   )
   return response.data
 }
 
 export const updateRep = async (
   repId: string,
-  data: Partial<Pick<SalesRep, 'name' | 'status'>>
+  data: Partial<Pick<SalesRep, 'name' | 'status' | 'vehicle_id'>>
 ): Promise<SalesRep> => {
   const response = await withRetry(() => api.patch(`/reps/${repId}`, data))
   return response.data
 }
 
-export const deleteRep = async (repId: string): Promise<void> => {
-  await withRetry(() => api.delete(`/reps/${repId}`))
+export const deleteRep = async (repId: string, force = false): Promise<void> => {
+  await withRetry(() => api.delete(`/reps/${repId}`, force ? { params: { force: true } } : {}))
+}
+
+// ========== АВТОПАРК ==========
+
+export const fetchVehicles = async (): Promise<Vehicle[]> => {
+  const response = await withRetry(() => api.get('/routing/'))
+  return response.data
+}
+
+export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<Vehicle> => {
+  const response = await withRetry(() => api.post('/routing/', data))
+  return response.data
+}
+
+export const deleteVehicle = async (vehicleId: string): Promise<void> => {
+  await withRetry(() => api.delete(`/routing/${vehicleId}`))
+}
+
+export const updateVehicle = async (
+  vehicleId: string,
+  data: { name?: string; fuel_price_rub?: number; consumption_city_l_100km?: number; consumption_highway_l_100km?: number },
+): Promise<Vehicle> => {
+  const response = await withRetry(() => api.patch(`/routing/${vehicleId}`, data))
+  return response.data
+}
+
+export const uploadVehiclesJson = async (
+  file: File,
+): Promise<{ created: Vehicle[]; errors: { row: number; error: string; data: unknown }[] }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await withRetry(() =>
+    api.post('/routing/upload_cars', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  )
+  return response.data
+}
+
+export const previewClearLocations = async (): Promise<{
+  preview: true; locations: number; visit_schedule: number; visit_log: number; skipped_visit_stash: number
+}> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: false } }))
+  return response.data
+}
+
+export const clearAllLocations = async (): Promise<{ deleted_locations: number; message: string }> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: true } }))
+  return response.data
+}
+
+export const fetchAuditLog = async (
+  month: string,
+  limit = 50,
+  offset = 0,
+): Promise<{ items: AuditLogItem[]; total: number }> => {
+  const response = await withRetry(() =>
+    api.get('/audit-log/monthly', { params: { month, limit, offset } })
+  )
+  return response.data
 }
 
 // ========== РАСПИСАНИЕ ==========
 
 export const generateSchedule = async (
   month: string,
-  repIds?: string[]
+  repIds?: string[],
+  force?: boolean
 ): Promise<{ total_visits_planned: number; coverage_pct: number }> => {
   const response = await withRetry(() =>
-    api.post('/schedule/generate', { month, rep_ids: repIds })
+    api.post('/schedule/generate', { month, rep_ids: repIds }, { params: force ? { force: true } : undefined })
   )
   return response.data
 }
@@ -375,12 +585,45 @@ export const fetchMonthlySchedule = async (
   return response.data
 }
 
+export const saveDayRouteOverride = async (
+  payload: DayRouteOverrideRequest
+): Promise<DailyRoute> => {
+  const response = await withRetry(() =>
+    api.put('/schedule/day-route', payload)
+  )
+  return response.data
+}
+
+export const revertDayRouteOverride = async (
+  repId: string,
+  date: string
+): Promise<DailyRoute> => {
+  const response = await withRetry(() =>
+    api.delete('/schedule/day-route', {
+      params: {
+        rep_id: repId,
+        date,
+      }
+    })
+  )
+  return response.data
+}
+
 export const fetchRepSchedule = async (
   repId: string,
   month: string
 ): Promise<MonthlyPlan> => {
   const response = await withRetry(() =>
     api.get(`/schedule/${repId}`, { params: { month } })
+  )
+  return response.data
+}
+
+export const fetchDailySchedule = async (
+  date: string
+): Promise<DailyRoute[]> => {
+  const response = await withRetry(() =>
+    api.get('/schedule/daily', { params: { date } })
   )
   return response.data
 }
@@ -409,11 +652,13 @@ export const updateVisitStatus = async (
  * GET /api/v1/export/schedule?month=YYYY-MM
  */
 export const downloadScheduleExcel = async (month: string): Promise<void> => {
-  const response = await api.get('/export/schedule', {
-    params: { month },
-    responseType: 'blob',
-    timeout: 30_000,
-  })
+  const response = await withRetry(() =>
+    api.get('/export/schedule', {
+      params: { month },
+      responseType: 'blob',
+      timeout: 30_000,
+    })
+  )
   const url = URL.createObjectURL(new Blob([response.data]))
   const link = document.createElement('a')
   link.href = url
@@ -442,6 +687,18 @@ export const importScheduleExcel = async (
   return response.data
 }
 
+// ========== ЖУРНАЛ ВИЗИТОВ ==========
+
+export const fetchVisits = async (
+  month: string,
+  repId?: string
+): Promise<VisitLog[]> => {
+  const params: Record<string, string> = { month }
+  if (repId) params.rep_id = repId
+  const response = await withRetry(() => api.get('/visits/', { params }))
+  return response.data
+}
+
 // ========== ФОРС-МАЖОРЫ ==========
 
 export const createForceMajeure = async (data: {
@@ -449,6 +706,7 @@ export const createForceMajeure = async (data: {
   rep_id: string
   event_date: string
   description?: string
+  return_time?: string
 }): Promise<ForceMajeureEvent> => {
   const response = await withRetry(() => api.post('/force_majeure/', data))
   return response.data
@@ -463,14 +721,72 @@ export const fetchForceMajeure = async (
   return response.data
 }
 
+// ========== ПРАЗДНИКИ ==========
+
+export const fetchHolidays = async (params: {
+  month?: string
+  year?: number
+}): Promise<Holiday[]> => {
+  const response = await withRetry(() => api.get('/holidays/', { params }))
+  return response.data
+}
+
+export const patchHoliday = async (
+  date: string,
+  isWorking: boolean
+): Promise<HolidayPatchResponse> => {
+  const response = await withRetry(() =>
+    api.patch(`/holidays/${date}`, { is_working: isWorking })
+  )
+  return response.data
+}
+
+// ========== СТЕШ ПРОПУЩЕННЫХ ВИЗИТОВ ==========
+
+export const fetchSkippedStash = async (): Promise<SkippedStashItem[]> => {
+  const response = await withRetry(() => api.get('/schedule/stash'))
+  return response.data
+}
+
+export const resolveStashManual = async (
+  id: string,
+  repId: string,
+  targetDate: string
+): Promise<SkippedStashItem> => {
+  const response = await withRetry(() =>
+    api.post(`/schedule/stash/${id}/resolve/manual`, { rep_id: repId, target_date: targetDate })
+  )
+  return response.data
+}
+
+export const resolveStashCarryOver = async (id: string): Promise<SkippedStashItem> => {
+  const response = await withRetry(() =>
+    api.post(`/schedule/stash/${id}/resolve/carry_over`)
+  )
+  return response.data
+}
+
+export const resolveStashAI = async (stashIds: string[]): Promise<SkippedStashItem[]> => {
+  const response = await withRetry(() =>
+    api.post('/schedule/stash/resolve/ai', { stash_ids: stashIds })
+  )
+  return response.data
+}
+
+export const discardStashEntry = async (id: string): Promise<void> => {
+  await withRetry(() => api.delete(`/schedule/stash/${id}`))
+}
+
 export { api }
 export type {
   Location,
   Route,
   RouteDetails,
+  RouteComparison,
   Metric,
   BenchmarkResult,
   BenchmarkRequest,
+  BenchmarkRunResponse,
   OptimizeRequest,
   OptimizeVariantsResponse,
   ConfirmVariantRequest,
@@ -482,5 +798,6 @@ export type {
   SalesRep,
   MonthlyPlan,
   ForceMajeureEvent,
-  VisitScheduleItem
+  VisitScheduleItem,
+  VisitLog
 }

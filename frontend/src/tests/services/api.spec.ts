@@ -42,10 +42,12 @@ import {
   compareModels,
   fetchRoutes,
   fetchRouteDetails,
+  fetchRouteComparison,
   fetchRouteMetrics,
   runBenchmark,
   checkHealth,
-  fetchAllLocations
+  fetchAllLocations,
+  getApiErrorMessage,
 } from '@/services/api'
 
 describe('API Service', () => {
@@ -108,6 +110,7 @@ describe('API Service', () => {
         total_cost_rub: 1500,
         model_used: 'qwen',
         fallback_reason: null,
+        has_comparison: false,
         created_at: '2026-02-13T10:30:00Z'
       }
 
@@ -255,10 +258,11 @@ describe('API Service', () => {
               locations: ['loc-1'],
               total_distance_km: 10.5,
               total_time_hours: 1.5,
-              total_cost_rub: 1250,
-              model_used: 'llama',
-              fallback_reason: null,
-              created_at: '2026-02-13T09:15:00Z'
+        total_cost_rub: 1250,
+        model_used: 'llama',
+        fallback_reason: null,
+        has_comparison: true,
+        created_at: '2026-02-13T09:15:00Z'
             },
             {
               id: 'route-2',
@@ -269,6 +273,7 @@ describe('API Service', () => {
               total_cost_rub: 2500,
               model_used: 'qwen',
               fallback_reason: null,
+              has_comparison: false,
               created_at: '2026-02-12T14:30:00Z'
             }
           ]
@@ -338,6 +343,7 @@ describe('API Service', () => {
         total_cost_rub: 1500,
         model_used: 'qwen',
         fallback_reason: null,
+        has_comparison: true,
         created_at: '2026-02-13T10:30:00Z'
       }
 
@@ -351,6 +357,37 @@ describe('API Service', () => {
       expect(result.locations_data).toBeDefined()
       expect(result.locations_data).toHaveLength(2)
       expect(mockedAxios.get).toHaveBeenCalledWith('/routes/route-123')
+    })
+  })
+
+  describe('fetchRouteComparison', () => {
+    it('should fetch route comparison details', async () => {
+      const mockComparison = {
+        route_id: 'route-123',
+        original: [
+          { id: 'loc-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' },
+        ],
+        current: [
+          { id: 'loc-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' },
+        ],
+        diff: {
+          distance_delta_km: -2.4,
+          time_delta_hours: -0.3,
+          cost_delta_rub: -180,
+          changed_stops_count: 1,
+          improvement_percentage: 12.5,
+        },
+        model_used: 'qwen',
+        created_at: '2026-02-13T10:30:00Z',
+      }
+
+      mockedAxios.get.mockResolvedValue({ data: mockComparison })
+
+      const result = await fetchRouteComparison('route-123')
+
+      expect(result.route_id).toBe('route-123')
+      expect(result.diff.changed_stops_count).toBe(1)
+      expect(mockedAxios.get).toHaveBeenCalledWith('/routes/route-123/comparison')
     })
   })
 
@@ -398,20 +435,9 @@ describe('API Service', () => {
 
       const mockResponse = {
         data: {
-          total_duration_seconds: 45.2,
-          results: [
-            {
-              model: 'llama',
-              num_tests: 5,
-              avg_response_time_ms: 1250,
-              min_response_time_ms: 850,
-              max_response_time_ms: 2100,
-              avg_quality_score: 0.87,
-              total_cost_rub: 250,
-              success_rate: 1.0,
-              timestamp: '2026-02-13T11:00:00Z'
-            }
-          ]
+          status: 'started',
+          task_id: 'bench_123',
+          mode: 'mock'
         }
       }
 
@@ -419,9 +445,15 @@ describe('API Service', () => {
 
       const result = await runBenchmark(mockRequest)
 
-      expect(result.total_duration_seconds).toBe(45.2)
-      expect(result.results).toHaveLength(1)
-      expect(mockedAxios.post).toHaveBeenCalledWith('/benchmark', mockRequest)
+      expect(result.status).toBe('started')
+      expect(result.task_id).toBe('bench_123')
+      expect(mockedAxios.post).toHaveBeenCalledWith('/benchmark/run', null, {
+        params: {
+          iterations: 5,
+          use_mock: true,
+          use_backend: false
+        }
+      })
     })
   })
 
@@ -501,7 +533,28 @@ describe('API Service', () => {
       const result = await fetchAllLocations()
 
       expect(result).toHaveLength(2)
-      expect(mockedAxios.get).toHaveBeenCalledWith('/locations')
+      expect(mockedAxios.get).toHaveBeenCalledWith('/locations/')
+    })
+
+    it('should normalize legacy CRUD locations response', async () => {
+      const mockLocations = [
+        {
+          id: 'loc-1',
+          name: 'Store 1',
+          latitude: 55.7558,
+          longitude: 37.6173,
+          address: 'Address 1',
+          time_window_start: '09:00',
+          time_window_end: '18:00',
+          priority: 1
+        }
+      ]
+
+      mockedAxios.get.mockResolvedValue({ data: { locations: mockLocations } })
+
+      const result = await fetchAllLocations()
+
+      expect(result).toEqual(mockLocations)
     })
   })
 
@@ -559,6 +612,49 @@ describe('API Service', () => {
       } catch (error) {
         expect(mockedAxios.get).toHaveBeenCalledTimes(1)
       }
+    })
+  })
+
+  describe('getApiErrorMessage', () => {
+    it('should extract nested detail.message from API error payload', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: {
+              message: 'Расписание уже существует',
+            },
+          },
+        },
+      })
+
+      expect(message).toBe('Расписание уже существует')
+    })
+
+    it('should extract string detail from API error payload', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: 'Сотрудника нельзя удалить: сначала переведите его в неактивный статус.',
+          },
+        },
+      })
+
+      expect(message).toBe('Сотрудника нельзя удалить: сначала переведите его в неактивный статус.')
+    })
+
+    it('should format validation errors array', () => {
+      const message = getApiErrorMessage({
+        response: {
+          data: {
+            detail: [
+              { loc: ['body', 'month'], msg: 'Field required' },
+              { loc: ['body', 'rep_ids'], msg: 'Invalid list' },
+            ],
+          },
+        },
+      })
+
+      expect(message).toBe('body.month — Field required; body.rep_ids — Invalid list')
     })
   })
 })

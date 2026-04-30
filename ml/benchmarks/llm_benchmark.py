@@ -51,7 +51,7 @@ TEST_LOCATIONS = [
     {"id": "store-1", "name": "Магазин Центральный", "lat": 55.7558, "lon": 37.6173, "address": "Красная площадь, 1"},
     {"id": "store-2", "name": "Магазин Арбат", "lat": 55.7489, "lon": 37.6160, "address": "Арбат, 15"},
     {"id": "store-3", "name": "Магазин Тверская", "lat": 55.7520, "lon": 37.6156, "address": "Тверская, 10"},
-    {"id": "store-4", "name": "Магазин Парк Культуры", "lat": 55.7358, "lon": 37.5933, "address": "Крымский вал, 9"},
+    {"id": "store-4", "name": "Магазин Парк Культуры", "lat": 55.7358, "lon": 37.5933, "address": "ул. Тверская, 9"},
     {"id": "store-5", "name": "Магазин Сокольники", "lat": 55.7904, "lon": 37.6794, "address": "Сокольническая площадь, 1"},
     {"id": "store-6", "name": "Магазин Измайлово", "lat": 55.7879, "lon": 37.7704, "address": "Измайловский проспект, 73"},
     {"id": "store-7", "name": "Магазин ВДНХ", "lat": 55.8294, "lon": 37.6283, "address": "Проспект Мира, 119"},
@@ -614,10 +614,28 @@ def run_benchmark(
         logger.info(f"  Общая стоимость: {total_cost_rub:.4f} руб")
     
     results_file = BENCH_DIR / "results.json"
+    results_log_file = BENCH_DIR / "results_log.json"
     results_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
+    # 1. Записываем текущий результат (перезаписываем файл)
     with open(results_file, 'w', encoding='utf-8') as f:
         json.dump(benchmark_results, f, indent=2, ensure_ascii=False)
+
+    # 2. Добавляем результат в общий лог (сохраняем историю)
+    all_logs = []
+    if results_log_file.exists():
+        try:
+            with open(results_log_file, 'r', encoding='utf-8') as f:
+                all_logs = json.load(f)
+                if not isinstance(all_logs, list):
+                    all_logs = [all_logs] # На случай, если файл был не списком
+        except (json.JSONDecodeError, ValueError):
+            all_logs = []
+
+    all_logs.append(benchmark_results)
+
+    with open(results_log_file, 'w', encoding='utf-8') as f:
+        json.dump(all_logs, f, indent=2, ensure_ascii=False)
     
     logger.info("\n" + "=" * 70)
     logger.info("БЕНЧМАРК ЗАВЕРШЕН")

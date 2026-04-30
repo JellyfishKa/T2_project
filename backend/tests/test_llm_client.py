@@ -14,6 +14,9 @@ class DummyLLMClient(LLMClient):
     async def analyze_metrics(self, data: dict) -> str:
         return "ok"
 
+    async def evaluate_variants(self, variants: list[dict]) -> list[dict]:
+        return []
+
     async def health_check(self) -> bool:
         return True
 

@@ -9,11 +9,11 @@
               d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
         </div>
-        <h2 class="text-xl font-bold text-gray-900">Выберите вариант маршрута</h2>
+        <h2 class="text-xl font-bold text-gray-900">Лучший маршрут от ИИ</h2>
       </div>
       <div class="flex items-center justify-between">
         <p class="text-sm text-gray-500">
-          Сгенерировано {{ variants.length }} варианта.
+          Построен лучший вариант маршрута.
           <span v-if="llmEvaluationSuccess" class="text-green-600 font-medium">
             Модель {{ modelLabel }} оценила каждый вариант.
           </span>
@@ -23,6 +23,33 @@
         </p>
         <span class="text-xs text-gray-400">{{ responseTime }}мс</span>
       </div>
+    </div>
+
+    <!-- Карта всех вариантов -->
+    <div v-if="hasMapData" class="mb-6 bg-white rounded-xl border border-gray-200 p-4">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h3 class="text-sm font-medium text-gray-900">Карта маршрута</h3>
+        <div class="flex items-center gap-3 text-xs">
+          <span
+            v-for="v in variants"
+            :key="v.id"
+            class="flex items-center gap-1.5 cursor-pointer"
+            @click="selectVariant(v)"
+          >
+            <span
+              class="inline-block w-3 h-3 rounded-sm"
+              :style="{ backgroundColor: VARIANT_COLORS[v.id] ?? '#6b7280' }"
+            />
+            <span :class="selectedId === v.id ? 'font-semibold text-gray-900' : 'text-gray-500'">
+              Маршрут
+            </span>
+          </span>
+        </div>
+      </div>
+      <RouteMap :routes="routeSets" height="20rem" @select-route="onMapSelect" />
+      <p class="text-xs text-gray-400 mt-2">
+        Маркеры показаны для текущего маршрута.
+      </p>
     </div>
 
     <!-- Карточки вариантов -->
@@ -196,24 +223,43 @@
         "
       >
         <span v-if="selectedId !== null">
-          Применить вариант {{ selectedId }}
+          Применить маршрут
         </span>
-        <span v-else>Выберите вариант</span>
+        <span v-else>Маршрут не выбран</span>
       </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { RouteVariant } from '@/services/types'
+import RouteMap, { type RoutePoint, type RouteSet } from '@/components/RouteMap.vue'
+
+interface VariantLocation {
+  id: string
+  name: string
+  address: string
+  lat: number
+  lon: number
+  time_window_start: string
+  time_window_end: string
+}
 
 const props = defineProps<{
   variants: RouteVariant[]
+  locations?: VariantLocation[]
   modelUsed: string
   llmEvaluationSuccess: boolean
   responseTimeMs: number
 }>()
+
+// Единая палитра цветов для вариантов — используется и в карточках, и в карте, и в легенде.
+const VARIANT_COLORS: Record<number, string> = {
+  1: '#3b82f6', // blue-500
+  2: '#10b981', // emerald-500
+  3: '#8b5cf6', // violet-500
+}
 
 const emit = defineEmits<{
   select: [variant: RouteVariant]
@@ -232,6 +278,50 @@ const responseTime = computed(() =>
     ? `${(props.responseTimeMs / 1000).toFixed(1)}с`
     : `${props.responseTimeMs}мс`
 )
+
+// ─── Карта вариантов ─────────────────────────────────────────────────────────
+const routeSets = computed<RouteSet[]>(() => {
+  if (!props.locations?.length) return []
+  const byId = new Map(props.locations.map((l) => [l.id, l]))
+  return props.variants.map((v) => {
+    const points: RoutePoint[] = []
+    v.locations.forEach((id, i) => {
+      const loc = byId.get(id)
+      if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) {
+        points.push({
+          id,
+          name: loc.name,
+          address: loc.address,
+          lat: loc.lat,
+          lon: loc.lon,
+          order: i + 1,
+        })
+      }
+    })
+    return {
+      id: v.id,
+      color: VARIANT_COLORS[v.id] ?? '#6b7280',
+      selected: selectedId.value === v.id,
+      points,
+    }
+  })
+})
+
+const hasMapData = computed(() => routeSets.value.some((s) => s.points.length >= 2))
+
+function onMapSelect(id: string | number) {
+  const v = props.variants.find((x) => x.id === id)
+  if (v) selectVariant(v)
+}
+
+// Автовыбор первого варианта при появлении данных, чтобы карта всегда имела "selected"
+function ensureAutoSelect() {
+  if (selectedId.value === null && props.variants.length > 0) {
+    selectedId.value = props.variants[0].id
+  }
+}
+onMounted(ensureAutoSelect)
+watch(() => props.variants, ensureAutoSelect)
 
 // ─── Выбор варианта ───────────────────────────────────────────────────────────
 function selectVariant(variant: RouteVariant) {

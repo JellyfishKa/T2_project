@@ -2,7 +2,7 @@
 
 **Соглашение Frontend-Backend по структуре API**
 
-> Последнее обновление: 27 февраля 2026 (Неделя 4)
+> Последнее обновление: 22 апреля 2026
 
 ---
 
@@ -50,13 +50,17 @@ Production:  http://<server-ip>/api/v1
   "id": "rep-001",
   "name": "Иванов А.А.",
   "status": "active",
-  "phone": "+7 927 123-45-67",
-  "email": "ivanov@t2.ru",
-  "created_at": "2026-01-15T08:00:00Z"
+  "created_at": "2026-01-15T08:00:00Z",
+  "warning": null,
+  "pending_visits_count": 0
 }
 ```
 
 Допустимые значения `status`: `active` | `sick` | `vacation` | `unavailable`
+
+> **Новое (v1.2.0)**: При `PATCH /reps/{id}` с `status=sick` или `status=vacation` — в ответе могут присутствовать:
+> - `warning`: строка с предупреждением о незакрытых визитах
+> - `pending_visits_count`: кол-во плановых будущих визитов сотрудника
 
 ---
 
@@ -90,8 +94,26 @@ Production:  http://<server-ip>/api/v1
   "rep_name": "Иванов А.А.",
   "visits": [...],
   "total_tt": 12,
-  "estimated_distance_km": 45.3,
-  "estimated_duration_hours": 7.2
+  "estimated_duration_hours": 7.2,
+  "lunch_break_at": "13:00"
+}
+```
+
+---
+
+### VisitLog (Фактический визит)
+
+```json
+{
+  "id": "log-101",
+  "location_id": "store-123",
+  "rep_id": "rep-001",
+  "visited_date": "2026-02-13",
+  "schedule_id": "sched-456",
+  "time_in": "10:00:00",
+  "time_out": "10:22:00",
+  "notes": null,
+  "created_at": "2026-02-13T10:22:05Z"
 }
 ```
 
@@ -109,9 +131,54 @@ Production:  http://<server-ip>/api/v1
   "total_cost_rub": 1500,
   "model_used": "qwen",
   "fallback_reason": null,
+  "has_comparison": true,
   "created_at": "2026-02-13T10:30:00Z"
 }
 ```
+
+---
+
+### RouteComparison (Сравнение маршрута до/после)
+
+```json
+{
+  "route_id": "route-456",
+  "original": [
+    {
+      "id": "store-1",
+      "name": "Магазин Саранск-1",
+      "lat": 54.187,
+      "lon": 45.183,
+      "order": 1,
+      "address": "г. Саранск, ул. Победы, 12",
+      "category": "A"
+    }
+  ],
+  "current": [
+    {
+      "id": "store-2",
+      "name": "Магазин Саранск-2",
+      "lat": 54.192,
+      "lon": 45.171,
+      "order": 1,
+      "address": "г. Саранск, ул. Ленина, 5",
+      "category": "B"
+    }
+  ],
+  "diff": {
+    "distance_delta_km": -4.6,
+    "time_delta_hours": -0.7,
+    "cost_delta_rub": -180.0,
+    "changed_stops_count": 2,
+    "improvement_percentage": 20.0
+  },
+  "model_used": "qwen",
+  "created_at": "2026-04-22T09:00:00Z"
+}
+```
+
+`distance_delta_km`, `time_delta_hours`, `cost_delta_rub` считаются как `optimized - original`.
+Отрицательное значение означает улучшение, положительное — ухудшение.
 
 ---
 
@@ -157,17 +224,29 @@ Production:  http://<server-ip>/api/v1
   "id": "fm-789",
   "type": "illness",
   "rep_id": "rep-001",
+  "rep_name": "Иванов А.А.",
   "event_date": "2026-02-20",
   "description": "Грипп, больничный лист",
-  "redistributed_to": {
-    "sched-100": "rep-002",
-    "sched-101": "rep-003"
-  },
+  "affected_tt_count": 7,
+  "redistributed_to": [
+    {
+      "rep_id": "rep-002",
+      "rep_name": "Петров В.В.",
+      "location_ids": ["store-1", "store-2", "store-3", "store-4"],
+      "new_date": "2026-02-21"
+    },
+    {
+      "rep_id": "rep-003",
+      "rep_name": "Сидоров С.С.",
+      "location_ids": ["store-5", "store-6", "store-7"],
+      "new_date": "2026-02-21"
+    }
+  ],
   "created_at": "2026-02-20T07:30:00Z"
 }
 ```
 
-Допустимые значения `type`: `illness` | `vacation` | `accident` | `other`
+Допустимые значения `type`: `illness` | `weather` | `vehicle_breakdown` | `other`
 
 ---
 
@@ -193,25 +272,30 @@ Production:  http://<server-ip>/api/v1
 {
   "month": "2026-02",
   "total_tt": 250,
-  "covered_tt": 198,
-  "coverage_percent": 79.2,
-  "category_stats": {
-    "A": {"planned": 60, "completed": 57, "skipped": 3, "pct": 95.0},
-    "B": {"planned": 80, "completed": 72, "skipped": 8, "pct": 90.0},
-    "C": {"planned": 35, "completed": 28, "skipped": 7, "pct": 80.0},
-    "D": {"planned": 23, "completed": 18, "skipped": 5, "pct": 78.3}
+  "coverage_pct": 79.2,
+  "visits_this_month": {
+    "planned": 198,
+    "completed": 157,
+    "completion_rate": 79.3
   },
+  "by_category": {
+    "A": {"total": 50, "planned": 150, "completed": 143, "pct": 95.3},
+    "B": {"total": 75, "planned": 150, "completed": 135, "pct": 90.0},
+    "C": {"total": 50, "planned": 50, "completed": 40, "pct": 80.0},
+    "D": {"total": 75, "planned": 75, "completed": 60, "pct": 80.0}
+  },
+  "by_district": [
+    {"district": "Саранск", "total": 50, "coverage_pct": 88.0}
+  ],
   "rep_activity": [
     {
       "rep_id": "rep-001",
       "rep_name": "Иванов А.А.",
-      "outings": 20,
-      "planned": 48,
-      "completed": 45,
-      "skipped": 3,
-      "pct": 93.75
+      "outings_count": 20,
+      "tt_visited": 45
     }
-  ]
+  ],
+  "force_majeure_count": 2
 }
 ```
 
@@ -286,11 +370,16 @@ Production:  http://<server-ip>/api/v1
   "total_cost_rub": 850,
   "quality_score": 88.5,
   "model_used": "qwen",
-  "original_location_ids": ["store-1", "store-2", "store-3"]
+  "original_location_ids": ["store-1", "store-2", "store-3"],
+  "original_total_distance_km": 47.1,
+  "original_total_time_hours": 6.8,
+  "original_total_cost_rub": 1030
 }
 ```
 
 **Response** `200`: `Route` (полная схема с `id`, `created_at`)
+
+Новые поля `original_total_distance_km`, `original_total_time_hours`, `original_total_cost_rub` принимаются как nullable для обратной совместимости, но актуальные фронтовые call site передают их всегда.
 
 ---
 
@@ -309,16 +398,10 @@ Production:  http://<server-ip>/api/v1
 #### `GET /reps`
 
 ```
-Query params: ?status=active&limit=100&offset=0
+Query params: ?status=active
 ```
 
-**Response** `200`:
-```json
-{
-  "total": 5,
-  "items": [<SalesRep>, ...]
-}
-```
+**Response** `200`: `[<SalesRep>, ...]` (плоский массив)
 
 #### `POST /reps`
 
@@ -330,7 +413,9 @@ Query params: ?status=active&limit=100&offset=0
 
 **Request**: `{"status": "sick"}` или `{"name": "Новое имя"}`
 
-**Response** `200`: обновлённый `SalesRep`
+**Response** `200`: обновлённый `SalesRep` с полями `warning` и `pending_visits_count`
+
+> **v1.2.0**: При переводе в `sick` или `vacation` — ответ содержит `warning` (строка предупреждения о незакрытых визитах) и `pending_visits_count` (кол-во плановых будущих визитов).
 
 **Errors**: `404` — не найден | `422` — недопустимый статус
 
@@ -346,21 +431,35 @@ Query params: ?status=active&limit=100&offset=0
 
 Генерация месячного плана визитов.
 
+```
+Query params: ?force=false   (true — удалить существующие planned и создать заново)
+```
+
 **Request**:
 ```json
 {
   "month": "2026-02",
-  "rep_ids": ["rep-001", "rep-002"],
-  "location_ids": ["store-1", "store-2", "..."]
+  "rep_ids": ["rep-001", "rep-002"]
 }
 ```
 
-**Response** `200`:
+**Response** `201`:
 ```json
 {
   "month": "2026-02",
-  "total_visits": 248,
-  "routes": [<DailyRoute>, ...]
+  "total_visits_planned": 248,
+  "total_tt_planned": 198,
+  "total_locations": 250,
+  "coverage_pct": 79.2,
+  "reps_count": 4
+}
+```
+
+**Errors**: `409` — расписание уже существует (при `force=false`):
+```json
+{
+  "message": "Расписание на 2026-02 уже существует (248 плановых визитов). Используйте ?force=true для перегенерации.",
+  "existing_count": 248
 }
 ```
 
@@ -369,22 +468,29 @@ Query params: ?status=active&limit=100&offset=0
 #### `GET /schedule/`
 
 ```
-Query params: ?month=2026-02&rep_id=rep-001&location_id=store-1&status=planned&limit=100&offset=0
+Query params: ?month=2026-02   (обязательный)
+              &rep_id=rep-001  (опционально)
+              &from_date=2026-02-10  (опционально, YYYY-MM-DD)
+              &to_date=2026-02-20    (опционально, YYYY-MM-DD)
 ```
 
-**Response** `200`:
+**Response** `200`: `MonthlyPlan`
 ```json
 {
-  "total": 248,
-  "items": [<VisitScheduleItem>, ...]
+  "month": "2026-02",
+  "routes": [<DailyRoute>, ...],
+  "total_tt_planned": 248,
+  "coverage_pct": 79.2
 }
 ```
 
-> `time_in` и `time_out` заполнены если существует `VisitLog` для этого визита.
+> `time_in` и `time_out` в `VisitScheduleItem` заполнены если существует `VisitLog` для этого визита.
+>
+> **v1.2.0**: `from_date` / `to_date` фильтруют визиты внутри месяца.
 
 ---
 
-#### `PATCH /schedule/{id}/status`
+#### `PATCH /schedule/{id}`
 
 Обновление статуса визита (и опционально — времени).
 
@@ -399,17 +505,29 @@ Query params: ?month=2026-02&rep_id=rep-001&location_id=store-1&status=planned&l
 
 **Response** `200`: обновлённый `VisitScheduleItem`
 
-> При `status=completed` + наличии `time_in`/`time_out` → создаётся или обновляется `VisitLog`.
+> При `status=completed` + наличии `time_in`/`time_out` → создаётся `VisitLog`.
+
+#### State Machine (v1.2.0)
+
+| Текущий статус | Допустимые переходы |
+|----------------|---------------------|
+| `planned` | `completed`, `skipped`, `cancelled`, `rescheduled` |
+| `skipped` | `planned`, `cancelled` |
+| `rescheduled` | `completed`, `skipped`, `cancelled` |
+| `completed` | — (заблокировано) |
+| `cancelled` | — (заблокировано) |
+
+**Errors**: `422` — недопустимый переход статуса:
+```json
+{
+  "message": "Переход 'completed' → 'planned' не разрешён.",
+  "current_status": "completed",
+  "requested_status": "planned",
+  "allowed_transitions": []
+}
+```
 
 ---
-
-#### `GET /schedule/daily`
-
-```
-Query params: ?date=2026-02-13&rep_id=rep-001
-```
-
-**Response** `200`: `DailyRoute`
 
 ---
 
@@ -464,10 +582,10 @@ Query params: ?month=2026-02&rep_id=rep-001
 #### `GET /visits`
 
 ```
-Query params: ?month=2026-02&rep_id=rep-001&location_id=store-123
+Query params: ?month=2026-02&rep_id=rep-001   (month обязательный)
 ```
 
-**Response** `200`: `{"total": N, "items": [...]}`
+**Response** `200`: `[<VisitLog>, ...]` (плоский массив, отсортирован по visited_date)
 
 ---
 
@@ -520,7 +638,7 @@ Query params: ?month=2026-02   (обязательный)
 #### `GET /routes/`
 
 ```
-Query params: ?limit=100&offset=0
+Query params: ?skip=0&limit=100
 ```
 
 **Response** `200`:
@@ -531,9 +649,39 @@ Query params: ?limit=100&offset=0
 }
 ```
 
+`has_comparison=true` выставляется только если для маршрута найден последний `optimization_results` с полным snapshot-комплектом:
+`original_distance_km`, `original_time_hours`, `original_cost_rub`, `optimized_distance_km`, `optimized_time_hours`, `optimized_cost_rub`.
+
 #### `GET /routes/{id}`
 
-**Response** `200`: `Route` + `metrics: [<Metric>]`
+**Response** `200`:
+```json
+{
+  "id": "route-456",
+  "name": "Маршрут 1 — День 1",
+  "locations": ["store-2", "store-1", "store-3"],
+  "locations_sequence": ["store-2", "store-1", "store-3"],
+  "locations_data": [<Location>, ...],
+  "total_distance_km": 42.5,
+  "total_time_hours": 6.1,
+  "total_cost_rub": 850,
+  "model_used": "qwen",
+  "fallback_reason": null,
+  "has_comparison": true,
+  "created_at": "2026-02-13T10:30:00Z",
+  "metrics": [<Metric>, ...]
+}
+```
+
+#### `GET /routes/{id}/comparison`
+
+Возвращает последнее доступное сравнение маршрута по данным из `optimization_results`.
+
+**Response** `200`: `RouteComparison`
+
+**Errors**:
+- `404 Route {id} not found`
+- `404 No comparison data for this route` — если маршрут legacy и у последнего snapshot нет полного набора исходных и итоговых метрик
 
 ---
 
@@ -549,7 +697,7 @@ Query params: ?month=2026-02   (обязательный)
 - `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
 - `Content-Disposition: attachment; filename="t2_schedule_2026-02.xlsx"`
 
-Структура файла (4 листа):
+Структура файла (5 листов):
 
 | Лист | Содержимое |
 |------|-----------|
@@ -557,6 +705,7 @@ Query params: ?month=2026-02   (обязательный)
 | Журнал визитов | Выполненные визиты с длительностью (мин) |
 | Статистика по ТТ | Охват, плановые/выполненные/пропущенные, % |
 | Активность ТП | Выходы на маршрут, % выполнения |
+| Журнал изменений | AuditLog за месяц: смена статусов, форс-мажоры, генерации |
 
 ---
 
@@ -588,18 +737,23 @@ Query params: ?month=2026-02   (обязательный)
 
 #### `GET /health` и `GET /api/v1/health`
 
-**Response** `200`:
+**Response** `200` (v1.2.0):
 ```json
 {
   "status": "healthy",
   "database": "connected",
   "services": {
     "database": "connected",
-    "qwen": "available",
-    "llama": "unavailable"
-  }
+    "qwen": "loaded",
+    "llama": "not_loaded"
+  },
+  "disk_free_mb": 4200,
+  "visits_today": 12,
+  "version": "1.2.0"
 }
 ```
+
+Значения `qwen`/`llama`: `"loaded"` | `"not_loaded"` | `"error"`
 
 **Response** `503` — если БД недоступна.
 
@@ -611,9 +765,20 @@ Query params: ?month=2026-02   (обязательный)
 |-----|---------|
 | 400 | Неверный запрос (формат, параметры) |
 | 404 | Ресурс не найден |
-| 422 | Ошибка валидации Pydantic |
+| 409 | Конфликт — например, расписание уже существует (`POST /schedule/generate`) |
+| 422 | Недопустимое действие — invalid state machine transition, ошибка валидации |
 | 500 | Внутренняя ошибка сервера |
 | 503 | Сервис недоступен (БД, модели) |
+
+> **409 (Conflict)** при `POST /schedule/generate?force=false`:
+> ```json
+> {"detail": {"message": "...", "existing_count": 248}}
+> ```
+>
+> **422 (Unprocessable)** при `PATCH /schedule/{id}` с недопустимым переходом:
+> ```json
+> {"detail": {"message": "Переход 'completed' → 'planned' не разрешён.", "current_status": "completed", "requested_status": "planned", "allowed_transitions": []}}
+> ```
 
 Формат ошибки:
 ```json
@@ -640,6 +805,7 @@ Query params: ?month=2026-02   (обязательный)
 | GET | `/api/v1/insights` | Insights | ✅ |
 | GET | `/api/v1/routes/` | Routes | ✅ |
 | GET | `/api/v1/routes/{id}` | Routes | ✅ |
+| GET | `/api/v1/routes/{id}/comparison` | Routes | ✅ |
 | GET | `/api/v1/reps` | Reps | ✅ |
 | POST | `/api/v1/reps` | Reps | ✅ |
 | PATCH | `/api/v1/reps/{id}` | Reps | ✅ |
@@ -647,7 +813,6 @@ Query params: ?month=2026-02   (обязательный)
 | POST | `/api/v1/schedule/generate` | Schedule | ✅ |
 | GET | `/api/v1/schedule/` | Schedule | ✅ |
 | PATCH | `/api/v1/schedule/{id}/status` | Schedule | ✅ |
-| GET | `/api/v1/schedule/daily` | Schedule | ✅ |
 | POST | `/api/v1/force_majeure` | ForceMajeure | ✅ |
 | GET | `/api/v1/force_majeure` | ForceMajeure | ✅ |
 | POST | `/api/v1/visits` | Visits | ✅ |

@@ -34,6 +34,18 @@ STATUS_MAP = {
     "Перенесён":    "rescheduled",
 }
 
+HEADER_ALIASES = {
+    "date": {"дата"},
+    "rep_name": {"сотрудник"},
+    "location_name": {"тт"},
+    "status": {"статус"},
+    "time_in": {"время прихода"},
+    "time_out": {"время ухода"},
+    "schedule_id": {"id визита"},
+    "rep_id": {"id сотрудника"},
+    "location_id": {"id тт"},
+}
+
 
 def _parse_time(raw) -> dtime | None:
     if not raw:
@@ -62,6 +74,30 @@ def _parse_date(raw) -> date | None:
     except Exception:
         pass
     return None
+
+
+def _normalize_header(raw) -> str:
+    return str(raw or "").strip().lower()
+
+
+def _build_header_index(header_row) -> dict[str, int]:
+    index: dict[str, int] = {}
+    for idx, raw_header in enumerate(header_row):
+        normalized = _normalize_header(raw_header)
+        if not normalized:
+            continue
+        for field, aliases in HEADER_ALIASES.items():
+            if normalized in aliases:
+                index[field] = idx
+                break
+    return index
+
+
+def _get_row_value(row, header_index: dict[str, int], field: str):
+    idx = header_index.get(field)
+    if idx is None or idx >= len(row):
+        return None
+    return row[idx]
 
 
 @router.post("/schedule")
@@ -96,6 +132,14 @@ async def import_schedule_excel(
     if ws is None:
         raise HTTPException(status_code=400, detail="Лист 'Расписание' не найден")
 
+    header_row = next(ws.iter_rows(min_row=2, max_row=2, values_only=True), None)
+    header_index = _build_header_index(header_row or [])
+    if "date" not in header_index or "status" not in header_index:
+        raise HTTPException(
+            status_code=400,
+            detail="В Excel не найдены обязательные колонки 'Дата' и 'Статус'",
+        )
+
     # Загружаем словари для матчинга по имени
     rep_by_name = {
         r.name: r
@@ -116,29 +160,20 @@ async def import_schedule_excel(
             continue
 
         # Читаем значения колонок
-        raw_date   = row[0]  # Дата
-        rep_name   = str(row[1]).strip() if row[1] else ""
-        loc_name   = str(row[2]).strip() if row[2] else ""
-        status_ru  = str(row[5]).strip() if row[5] else ""
-        raw_tin    = row[6]  # Время прихода
-        raw_tout   = row[7]  # Время ухода
+        raw_date = _get_row_value(row, header_index, "date")
+        rep_name = str(_get_row_value(row, header_index, "rep_name") or "").strip()
+        loc_name = str(_get_row_value(row, header_index, "location_name") or "").strip()
+        status_ru = str(_get_row_value(row, header_index, "status") or "").strip()
+        raw_tin = _get_row_value(row, header_index, "time_in")
+        raw_tout = _get_row_value(row, header_index, "time_out")
+        schedule_id = str(_get_row_value(row, header_index, "schedule_id") or "").strip()
+        rep_id = str(_get_row_value(row, header_index, "rep_id") or "").strip()
+        location_id = str(_get_row_value(row, header_index, "location_id") or "").strip()
 
         planned_date = _parse_date(raw_date)
         if not planned_date:
             skipped += 1
             errors.append(f"Стр.{row_num}: неверный формат даты '{raw_date}'")
-            continue
-
-        rep = rep_by_name.get(rep_name)
-        if not rep:
-            skipped += 1
-            errors.append(f"Стр.{row_num}: сотрудник '{rep_name}' не найден")
-            continue
-
-        loc = loc_by_name.get(loc_name)
-        if not loc:
-            skipped += 1
-            errors.append(f"Стр.{row_num}: ТТ '{loc_name}' не найдена")
             continue
 
         internal_status = STATUS_MAP.get(status_ru)
@@ -147,13 +182,40 @@ async def import_schedule_excel(
             errors.append(f"Стр.{row_num}: неизвестный статус '{status_ru}'")
             continue
 
-        # Ищем запись расписания
-        sched_q = select(VisitSchedule).where(
-            VisitSchedule.planned_date == planned_date,
-            VisitSchedule.rep_id == rep.id,
-            VisitSchedule.location_id == loc.id,
-        )
-        sched = (await session.execute(sched_q)).scalar_one_or_none()
+        sched = None
+        rep = None
+        loc = None
+
+        if schedule_id:
+            sched = await session.get(VisitSchedule, schedule_id)
+
+        if sched is None and rep_id and location_id:
+            sched_q = select(VisitSchedule).where(
+                VisitSchedule.planned_date == planned_date,
+                VisitSchedule.rep_id == rep_id,
+                VisitSchedule.location_id == location_id,
+            )
+            sched = (await session.execute(sched_q)).scalar_one_or_none()
+
+        if sched is None:
+            rep = rep_by_name.get(rep_name)
+            if not rep:
+                skipped += 1
+                errors.append(f"Стр.{row_num}: сотрудник '{rep_name}' не найден")
+                continue
+
+            loc = loc_by_name.get(loc_name)
+            if not loc:
+                skipped += 1
+                errors.append(f"Стр.{row_num}: ТТ '{loc_name}' не найдена")
+                continue
+
+            sched_q = select(VisitSchedule).where(
+                VisitSchedule.planned_date == planned_date,
+                VisitSchedule.rep_id == rep.id,
+                VisitSchedule.location_id == loc.id,
+            )
+            sched = (await session.execute(sched_q)).scalar_one_or_none()
 
         if not sched:
             skipped += 1
@@ -162,6 +224,11 @@ async def import_schedule_excel(
                 f"({planned_date}, {rep_name}, {loc_name})"
             )
             continue
+
+        if rep is None:
+            rep = await session.get(SalesRep, sched.rep_id)
+        if loc is None:
+            loc = await session.get(Location, sched.location_id)
 
         sched.status = internal_status
 

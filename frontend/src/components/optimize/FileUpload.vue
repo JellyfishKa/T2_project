@@ -329,12 +329,10 @@
             <span
               :class="[
                 'flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium',
-                location.priority === 'high' ? 'bg-red-100 text-red-700' :
-                location.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-gray-100 text-gray-600'
+                getLocationBadgeClass(location)
               ]"
             >
-              {{ location.priority === 'high' ? 'Высокий' : location.priority === 'medium' ? 'Средний' : 'Низкий' }}
+              {{ getLocationBadgeLabel(location) }}
             </span>
           </div>
         </div>
@@ -345,8 +343,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { uploadLocations } from '@/services/api'
+import { uploadLocations, getApiErrorMessage } from '@/services/api'
 import type { Location } from './types'
+import {
+  normalizeLocationCategory,
+  resolveLocationPriority,
+} from './locationPriority'
 
 interface FilePreviewRow {
   [key: string]: string | number
@@ -532,6 +534,7 @@ const uploadToServer = async () => {
         const cityGuess = cityFromData || guessCityFromName(loc.name ?? '')
         const streetFromData = loc.street ?? ''
         const houseFromData = loc.houseNumber ?? loc.house_number ?? ''
+        const category = normalizeLocationCategory(loc.category)
 
         return {
           id: loc.id ?? `srv-${Date.now()}-${i}`,
@@ -539,13 +542,16 @@ const uploadToServer = async () => {
           city: cityGuess || 'Саранск',
           street: streetFromData,
           houseNumber: houseFromData,
+          address: loc.address ?? '',
           latitude: loc.lat ?? loc.latitude ?? 0,
           longitude: loc.lon ?? loc.longitude ?? 0,
           timeWindowStart: loc.time_window_start ?? '09:00',
           timeWindowEnd: loc.time_window_end ?? '18:00',
-          priority: (loc.priority === 'high' || loc.priority === 'low'
-            ? loc.priority
-            : 'medium') as 'low' | 'medium' | 'high'
+          priority: resolveLocationPriority({
+            priority: loc.priority,
+            category,
+          }),
+          category,
         }
       })
 
@@ -559,7 +565,7 @@ const uploadToServer = async () => {
       }
     }
   } catch (err: any) {
-    error.value = err?.message ?? err?.detail ?? 'Ошибка при загрузке файла на сервер'
+    error.value = getApiErrorMessage(err, 'Ошибка при загрузке файла на сервер')
     console.error('Upload error:', err)
   } finally {
     isUploading.value = false
@@ -639,5 +645,22 @@ const guessCityFromName = (name: string): string => {
     if (lower.includes(key)) return city
   }
   return ''
+}
+
+const getLocationBadgeClass = (location: Location): string => {
+  if (location.category === 'A') return 'bg-red-100 text-red-700'
+  if (location.category === 'B') return 'bg-yellow-100 text-yellow-700'
+  if (location.category === 'C') return 'bg-blue-100 text-blue-700'
+  if (location.category === 'D') return 'bg-gray-100 text-gray-700'
+  if (location.priority === 'high') return 'bg-red-100 text-red-700'
+  if (location.priority === 'medium') return 'bg-yellow-100 text-yellow-700'
+  return 'bg-gray-100 text-gray-600'
+}
+
+const getLocationBadgeLabel = (location: Location): string => {
+  if (location.category) return location.category
+  if (location.priority === 'high') return 'Высокий'
+  if (location.priority === 'medium') return 'Средний'
+  return 'Низкий'
 }
 </script>

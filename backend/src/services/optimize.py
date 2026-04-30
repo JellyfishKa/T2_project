@@ -2,7 +2,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,8 +14,6 @@ from src.database.models import (
 )
 from src.models.geo_utils import (
     compute_distance_matrix,
-    detect_region_info,
-    estimate_fuel_cost,
     haversine,
     infer_category,
 )
@@ -25,12 +23,16 @@ from src.models.schemas import (
     Location as PydanticLocation,
     Route as PydanticRoute,
 )
+from src.schemas.vehicle import Vehicle 
 from src.services.model_selector import (
-    MODEL_QWEN,
     get_model_recommendation,
     select_best_model,
 )
 from src.services.quality_evaluator import evaluate_route_quality
+from src.services.routing import RoutingService
+from src.services.schedule_planner import VISIT_DURATION_MIN
+
+from src.utils.timing import timed_log
 
 logger = logging.getLogger("optimizer")
 
@@ -41,13 +43,14 @@ class Optimizer:
         self.qwen_client = QwenClient()
         self.llama_client = LlamaClient()
         self.max_locations_per_prompt = 40
+        self.routing_service = RoutingService()
 
     def _convert_db_to_pydantic(
         self,
         db_loc: DBLocation,
     ) -> PydanticLocation:
         # Используем реальную категорию ТТ; при её отсутствии — "C" (средний приоритет)
-        priority = db_loc.category if db_loc.category in ("A", "B", "C", "D") else "C"
+        priority = db_loc.category if db_loc.category in ("A", "B", "C", "D") else "D"
         return PydanticLocation(
             ID=db_loc.id,
             name=db_loc.name,
@@ -59,9 +62,11 @@ class Optimizer:
             priority=priority,
         )
 
-    def _calculate_real_metrics(
+    async def _calculate_real_metrics(
         self,
         locations: List[PydanticLocation],
+        vehicle: Optional[Vehicle] = None,
+        transport_mode: str = "car",
     ) -> Dict[str, Any]:
         if not locations:
             return {
@@ -70,31 +75,30 @@ class Optimizer:
                 "cost_rub": 0.0,
             }
 
-        loc_dicts = [{"lat": loc.lat,
-                      "lon": loc.lon} for loc in locations]
-
-        info = detect_region_info(loc_dicts)
-        matrix = compute_distance_matrix(loc_dicts)
-
-        total_dist = 0.0
-        for i in range(len(locations) - 1):
-            total_dist += matrix[i][i + 1]
-
-        speed = 25.0 if info["classification"] == "urban" else 45.0
-        time_mins = (total_dist / speed) * 60 + (len(locations) * 15)
+        preview = await self.routing_service.build_route_preview(locations,
+                                                                 vehicle=vehicle,
+                                                                 transport_mode=transport_mode)
+        service_time_minutes = len(locations) * VISIT_DURATION_MIN
 
         return {
-            "distance_km": round(total_dist, 2),
-            "time_minutes": round(time_mins, 2),
-            "cost_rub": estimate_fuel_cost(total_dist),
+            "distance_km": round(preview["distance_km"], 2),
+            "time_minutes": round(
+                preview["time_minutes"] + service_time_minutes,
+                2,
+            ),
+            "cost_rub": preview["cost_rub"],
         }
 
+    @timed_log("optimization")
     async def optimize(
         self,
         db_locations: List[DBLocation],
+        vehicle: Optional[Vehicle] = None,
         model: str = "auto",
+        transport_mode: str = "car",
     ) -> PydanticRoute:
         start_time_ms = int(time.time() * 1000)
+        logger.info("optimize: %d locations, model=%s, transport=%s", len(db_locations), model, transport_mode)
 
         pydantic_locations = [
             self._convert_db_to_pydantic(loc)
@@ -102,7 +106,11 @@ class Optimizer:
         ]
 
         original_ids = [loc.id for loc in db_locations]
-        baseline = self._calculate_real_metrics(pydantic_locations)
+        baseline = await self._calculate_real_metrics(
+            pydantic_locations,
+            vehicle=vehicle,
+            transport_mode=transport_mode,
+        )
 
         target_model = (
             select_best_model(len(pydantic_locations))
@@ -112,12 +120,14 @@ class Optimizer:
 
         optimized_route = await self._generate_with_fallback(
             pydantic_locations[: self.max_locations_per_prompt],
-            {"fuel_rate": 7.0},
+            vehicle.model_dump() if vehicle else {},
             target_model,
         )
 
-        real_stats = self._calculate_real_metrics(
+        real_stats = await self._calculate_real_metrics(
             optimized_route.locations,
+            vehicle,
+            transport_mode=transport_mode,
         )
 
         optimized_route.total_distance_km = real_stats["distance_km"]
@@ -133,14 +143,10 @@ class Optimizer:
 
         improvement_pct = 0.0
         if baseline["distance_km"] > 0:
-            improvement_pct = max(
-                0.0,
-                (
-                    (baseline["distance_km"] - real_stats["distance_km"])
-                    / baseline["distance_km"]
-                )
-                * 100,
-            )
+            improvement_pct = (
+                (baseline["distance_km"] - real_stats["distance_km"])
+                / baseline["distance_km"]
+            ) * 100
 
         object.__setattr__(
             optimized_route,
@@ -148,11 +154,14 @@ class Optimizer:
             q_score,
         )
 
+        comparison_saved = False
         try:
             route_id = str(uuid.uuid4())
             optimized_ids = [
                 loc.ID for loc in optimized_route.locations
             ]
+            original_time_hours = round(baseline["time_minutes"] / 60, 2)
+            optimized_time_hours = round(real_stats["time_minutes"] / 60, 2)
 
             new_route = DBRoute(
                 id=route_id,
@@ -179,8 +188,15 @@ class Optimizer:
 
             self.db.add(
                 DBOptimizationResult(
+                    route_id=route_id,
                     original_route=original_ids,
                     optimized_route=optimized_ids,
+                    original_distance_km=round(baseline["distance_km"], 2),
+                    original_time_hours=original_time_hours,
+                    original_cost_rub=round(baseline["cost_rub"], 2),
+                    optimized_distance_km=round(real_stats["distance_km"], 2),
+                    optimized_time_hours=optimized_time_hours,
+                    optimized_cost_rub=round(real_stats["cost_rub"], 2),
                     improvement_percentage=round(
                         improvement_pct,
                         2,
@@ -193,6 +209,8 @@ class Optimizer:
             )
 
             await self.db.commit()
+            comparison_saved = True
+            object.__setattr__(optimized_route, "ID", route_id)
             logger.info(
                 "Optimization results for route %s saved successfully.",
                 route_id,
@@ -202,6 +220,11 @@ class Optimizer:
             await self.db.rollback()
             logger.error("Database sync failed: %s", exc)
 
+        object.__setattr__(
+            optimized_route,
+            "comparison_saved",
+            comparison_saved,
+        )
         optimized_route.recommendation = get_model_recommendation(
             len(db_locations),
             model,
@@ -328,11 +351,13 @@ class Optimizer:
     async def generate_variants(
         self,
         db_locations: List[DBLocation],
+        vehicle: Optional[Vehicle] = None,
         model: str = "qwen",
+        transport_mode: str = "car",
     ):
         """
-        Генерирует 3 детерминированных варианта маршрута,
-        затем запрашивает у LLM pros/cons для каждого.
+        Генерирует несколько детерминированных кандидатов маршрута,
+        затем выбирает один лучший вариант и возвращает только его.
         БД не используется — результат возвращается напрямую.
         """
         from src.schemas.optimize import (
@@ -348,7 +373,11 @@ class Optimizer:
         ]
 
         # Базовые метрики (неупорядоченный маршрут)
-        baseline = self._calculate_real_metrics(pydantic_locations)
+        baseline = await self._calculate_real_metrics(
+            pydantic_locations,
+            vehicle,
+            transport_mode=transport_mode,
+        )
 
         # ── Три варианта ────────────────────────────────────────────────────────
         variant_configs = [
@@ -378,7 +407,11 @@ class Optimizer:
         # Считаем метрики для каждого варианта
         variants_data = []
         for vc in variant_configs:
-            real = self._calculate_real_metrics(vc["locations_ordered"])
+            real = await self._calculate_real_metrics(
+                vc["locations_ordered"],
+                vehicle,
+                transport_mode=transport_mode,
+            )
             q_score = evaluate_route_quality(
                 {**baseline, "constraints_satisfied": True},
                 {**real, "constraints_satisfied": True},
@@ -417,19 +450,31 @@ class Optimizer:
         except Exception as exc:
             logger.warning("LLM evaluate_variants failed: %s", exc)
 
-        # ── Строим ответ ────────────────────────────────────────────────────────
+        best_variant = min(
+            variants_data,
+            key=lambda variant: (
+                -variant["metrics"]["quality_score"],
+                variant["metrics"]["distance_km"],
+                variant["metrics"]["time_hours"],
+                variant["metrics"]["cost_rub"],
+                variant["id"],
+            ),
+        )
+
         response_variants = [
             RouteVariant(
-                id=v["id"],
-                name=v["name"],
-                description=v["description"],
-                algorithm=v["algorithm"],
-                pros=v["pros"],
-                cons=v["cons"],
-                locations=[loc.ID for loc in v["locations_ordered"]],
-                metrics=RouteVariantMetrics(**v["metrics"]),
+                id=1,
+                name="Лучший маршрут",
+                description=(
+                    f"{best_variant['name']}. "
+                    "Выбран автоматически как лучший вариант по качеству и метрикам."
+                ),
+                algorithm=best_variant["algorithm"],
+                pros=best_variant["pros"],
+                cons=best_variant["cons"],
+                locations=[loc.ID for loc in best_variant["locations_ordered"]],
+                metrics=RouteVariantMetrics(**best_variant["metrics"]),
             )
-            for v in variants_data
         ]
 
         return OptimizeVariantsResponse(
@@ -451,6 +496,10 @@ class Optimizer:
         quality_score: float,
         model_used: str,
         original_location_ids: List[str],
+        original_total_distance_km: Optional[float] = None,
+        original_total_time_hours: Optional[float] = None,
+        original_total_cost_rub: Optional[float] = None,
+        vehicle: Optional[Vehicle] = None,
     ):
         """
         Сохраняет выбранный пользователем вариант маршрута в БД.
@@ -460,6 +509,14 @@ class Optimizer:
         route_id = str(uuid.uuid4())
 
         improvement_pct = 0.0
+        if (
+            original_total_distance_km is not None
+            and original_total_distance_km > 0
+        ):
+            improvement_pct = (
+                (original_total_distance_km - total_distance_km)
+                / original_total_distance_km
+            ) * 100
         try:
             new_route = DBRoute(
                 id=route_id,
@@ -484,8 +541,15 @@ class Optimizer:
 
             self.db.add(
                 DBOptimizationResult(
+                    route_id=route_id,
                     original_route=original_location_ids,
                     optimized_route=locations_order,
+                    original_distance_km=original_total_distance_km,
+                    original_time_hours=original_total_time_hours,
+                    original_cost_rub=original_total_cost_rub,
+                    optimized_distance_km=total_distance_km,
+                    optimized_time_hours=total_time_hours,
+                    optimized_cost_rub=total_cost_rub,
                     improvement_percentage=round(improvement_pct, 2),
                     model_used=model_used,
                     created_at=datetime.now(timezone.utc).replace(tzinfo=None),
@@ -511,6 +575,7 @@ class Optimizer:
             "quality_score": quality_score,
             "response_time_ms": int(time.time() * 1000) - start_time_ms,
             "fallback_reason": None,
+            "has_comparison": True,
             "created_at": datetime.now().isoformat(),
         }
 

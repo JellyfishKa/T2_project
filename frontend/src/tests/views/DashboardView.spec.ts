@@ -19,9 +19,11 @@ type DashboardViewInstance = ComponentPublicInstance<{
 vi.mock('@/services/api', () => ({
   fetchRoutes: vi.fn(),
   fetchRouteDetails: vi.fn(),
+  fetchRouteComparison: vi.fn(),
   getMetrics: vi.fn(),
   compareModels: vi.fn(),
-  checkHealth: vi.fn()
+  checkHealth: vi.fn(),
+  getApiErrorMessage: vi.fn((err: unknown) => err instanceof Error ? err.message : String(err))
 }))
 
 // Мокаем компоненты
@@ -29,7 +31,7 @@ vi.mock('@/components/dashboard/RouteList.vue', () => ({
   default: {
     name: 'RouteList',
     template:
-      '<div data-testid="route-list" @click="$emit(\'select-route\', \'route-1\')">RouteList Mock</div>',
+      '<div data-testid="route-list">RouteList Mock<button data-testid="select-route-button" @click="$emit(\'select-route\', \'route-1\')">Select</button><button data-testid="compare-route-button" @click="$emit(\'compare-route\', \'route-1\')">Compare</button></div>',
     props: [
       'routes',
       'isLoading',
@@ -38,7 +40,16 @@ vi.mock('@/components/dashboard/RouteList.vue', () => ({
       'sortField',
       'sortDirection'
     ],
-    emits: ['select-route', 'sort']
+    emits: ['select-route', 'compare-route', 'sort']
+  }
+}))
+
+vi.mock('@/components/dashboard/RouteCompareModal.vue', () => ({
+  default: {
+    name: 'RouteCompareModal',
+    template: '<div data-testid="route-compare-modal" :data-open="String(open)">RouteCompareModal Mock</div>',
+    props: ['open', 'comparison', 'routeName', 'isLoading', 'error'],
+    emits: ['close']
   }
 }))
 
@@ -104,6 +115,7 @@ describe('DashboardView.vue', () => {
         total_cost_rub: 1250,
         model_used: 'llama',
         fallback_reason: null,
+        has_comparison: true,
         created_at: '2026-02-13T09:15:00Z'
       },
       {
@@ -115,6 +127,7 @@ describe('DashboardView.vue', () => {
         total_cost_rub: 2500,
         model_used: 'qwen',
         fallback_reason: null,
+        has_comparison: false,
         created_at: '2026-02-12T14:30:00Z'
       },
       {
@@ -126,6 +139,7 @@ describe('DashboardView.vue', () => {
         total_cost_rub: 3750,
         model_used: 'llama',
         fallback_reason: null,
+        has_comparison: false,
         created_at: '2026-02-11T11:45:00Z'
       }
     ]
@@ -167,6 +181,7 @@ describe('DashboardView.vue', () => {
     total_cost_rub: 1250,
     model_used: 'llama',
     fallback_reason: null,
+    has_comparison: true,
     created_at: '2026-02-13T09:15:00Z'
   }
 
@@ -235,8 +250,27 @@ describe('DashboardView.vue', () => {
     services: {
       database: 'connected' as const,
       qwen: 'available' as const,
-      llama: 'connected' as const
+      llama: 'loaded' as const
     }
+  }
+
+  const mockRouteComparison = {
+    route_id: 'route-1',
+    original: [
+      { id: 'store-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' }
+    ],
+    current: [
+      { id: 'store-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1, address: null, category: 'A' }
+    ],
+    diff: {
+      distance_delta_km: -1.2,
+      time_delta_hours: -0.2,
+      cost_delta_rub: -120,
+      changed_stops_count: 1,
+      improvement_percentage: 8.4
+    },
+    model_used: 'llama',
+    created_at: '2026-02-13T09:15:00Z'
   }
 
   let wrapper: VueWrapper<DashboardViewInstance>
@@ -249,21 +283,17 @@ describe('DashboardView.vue', () => {
     vi.mocked(api.getMetrics).mockResolvedValue(mockAllMetrics)
     vi.mocked(api.compareModels).mockResolvedValue(mockModelComparison)
     vi.mocked(api.checkHealth).mockResolvedValue(mockHealthStatus)
+    vi.mocked(api.fetchRouteComparison).mockResolvedValue(mockRouteComparison)
+    vi.mocked(api.getApiErrorMessage).mockImplementation((err: unknown) =>
+      err instanceof Error ? err.message : String(err)
+    )
 
     await router.push('/dashboard')
     await router.isReady()
 
     wrapper = mount(DashboardView, {
       global: {
-        plugins: [router],
-        stubs: {
-          RouteList: true,
-          RouteMetrics: true,
-          ModelComparison: true,
-          MetricsTable: true,
-          HealthStatus: true,
-          SkeletonLoader: true
-        }
+        plugins: [router]
       }
     }) as VueWrapper<DashboardViewInstance>
   })
@@ -285,17 +315,11 @@ describe('DashboardView.vue', () => {
   it('отображает ошибку при неудачной загрузке', async () => {
     vi.mocked(api.fetchRoutes).mockRejectedValue(new Error('Network error'))
 
+    wrapper.unmount()
+
     const errorWrapper = mount(DashboardView, {
       global: {
-        plugins: [router],
-        stubs: {
-          RouteList: true,
-          RouteMetrics: true,
-          ModelComparison: true,
-          MetricsTable: true,
-          HealthStatus: true,
-          SkeletonLoader: true
-        }
+        plugins: [router]
       }
     })
 
@@ -387,5 +411,16 @@ describe('DashboardView.vue', () => {
     expect(routeList.props('sortable')).toBe(true)
     expect(routeList.props('sortField')).toBe(wrapper.vm.routeSortField)
     expect(routeList.props('sortDirection')).toBe(wrapper.vm.routeSortDirection)
+  })
+
+  it('открывает модалку сравнения маршрута', async () => {
+    await flushPromises()
+
+    await wrapper.get('[data-testid="compare-route-button"]').trigger('click')
+    await flushPromises()
+
+    expect(api.fetchRouteComparison).toHaveBeenCalledWith('route-1')
+    const compareModal = wrapper.findComponent({ name: 'RouteCompareModal' })
+    expect(compareModal.props('open')).toBe(true)
   })
 })

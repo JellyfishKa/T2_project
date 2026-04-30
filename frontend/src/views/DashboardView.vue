@@ -1,38 +1,41 @@
 <template>
-  <div class="py-6 md:py-8">
-    <!-- Page Header -->
-    <div
-      class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between"
+  <div class="space-y-6 py-6 md:py-8">
+    <PageHero
+      eyebrow="Обзор"
+      title="Дашборд"
+      description="Короткий срез по маршрутам, сервисам и моделям: сначала здоровье системы и главные цифры, потом уже детали маршрута и история метрик."
     >
-      <div>
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p class="mt-2 text-gray-600">
-          Обзор оптимизированных маршрутов и сравнение производительности
-          моделей
-        </p>
-      </div>
-      <button
-        @click="refreshAllData"
-        :disabled="isRefreshing"
-        class="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <svg
-          class="h-4 w-4 mr-2"
-          :class="{ 'animate-spin': isRefreshing }"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+      <template #meta>
+        <div class="flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Маршруты</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Сервисы</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Модели</span>
+        </div>
+      </template>
+      <template #actions>
+        <button
+          @click="refreshAllData"
+          :disabled="isRefreshing"
+          class="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-        {{ isRefreshing ? 'Обновление...' : 'Обновить все' }}
-      </button>
-    </div>
+          <svg
+            class="h-4 w-4 mr-2"
+            :class="{ 'animate-spin': isRefreshing }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          {{ isRefreshing ? 'Обновление...' : 'Обновить все' }}
+        </button>
+      </template>
+    </PageHero>
 
     <!-- Error State -->
     <div
@@ -80,96 +83,33 @@
       <!-- Route Statistics -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <!-- Total Routes Card -->
-        <div
+        <InfoStatCard
           v-if="!isLoadingStats"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-blue-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-blue-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Всего маршрутов</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ routes.total || 0 }}
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Всего маршрутов"
+          :value="routes.total || 0"
+          hint="Сколько маршрутов доступно для просмотра и анализа."
+          tone="blue"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Average Time Card -->
-        <div
+        <InfoStatCard
           v-if="!isLoadingStats"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-green-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-green-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Среднее время</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ averageTime }} ч
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Среднее время"
+          :value="`${averageTime} ч`"
+          hint="Помогает быстро понять общий темп маршрутов."
+          tone="green"
+        />
         <SkeletonLoader v-else height="120px" />
 
         <!-- Average Cost Card -->
-        <div
+        <InfoStatCard
           v-if="!isLoadingStats"
-          class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6"
-        >
-          <div class="flex items-center">
-            <div class="flex-shrink-0 bg-purple-100 rounded-lg p-3">
-              <svg
-                class="h-6 w-6 text-purple-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Средняя стоимость</p>
-              <p class="text-2xl font-semibold text-gray-900">
-                {{ averageCost }} ₽
-              </p>
-            </div>
-          </div>
-        </div>
+          label="Средняя стоимость"
+          :value="`${averageCost} ₽`"
+          hint="Средняя операционная стоимость по сохранённым маршрутам."
+          tone="amber"
+        />
         <SkeletonLoader v-else height="120px" />
       </div>
 
@@ -195,6 +135,7 @@
                 :sort-field="routeSortField"
                 :sort-direction="routeSortDirection"
                 @select-route="handleRouteSelect"
+                @compare-route="openRouteComparison"
                 @sort="handleRouteSort"
               />
             </div>
@@ -285,6 +226,15 @@
           />
         </div>
       </div>
+
+      <RouteCompareModal
+        :open="isRouteComparisonOpen"
+        :comparison="routeComparison"
+        :route-name="comparisonRouteName"
+        :is-loading="isLoadingRouteComparison"
+        :error="routeComparisonError"
+        @close="closeRouteComparison"
+      />
     </template>
   </div>
 </template>
@@ -292,19 +242,25 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import RouteList from '@/components/dashboard/RouteList.vue'
+import RouteCompareModal from '@/components/dashboard/RouteCompareModal.vue'
 import RouteMetrics from '@/components/dashboard/RouteMetrics.vue'
 import ModelComparison from '@/components/dashboard/ModelComparison.vue'
 import MetricsTable from '@/components/dashboard/MetricsTable.vue'
 import HealthStatus from '@/components/dashboard/HealthStatus.vue'
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import InfoStatCard from '@/components/common/InfoStatCard.vue'
 import {
   fetchRoutes,
   fetchRouteDetails,
+  fetchRouteComparison,
   getMetrics,
   compareModels,
   checkHealth,
+  getApiErrorMessage,
   type Route,
   type RouteDetails,
+  type RouteComparison,
   type Metric,
   type ModelComparison as ApiModelComparison,
   type HealthStatus as HealthStatusType,
@@ -345,6 +301,11 @@ const routeMetrics = ref<Metric[]>([])
 const allMetrics = ref<Metric[]>([])
 const modelComparison = ref<ApiModelComparison | null>(null)
 const healthStatus = ref<HealthStatusType | null>(null)
+const isRouteComparisonOpen = ref(false)
+const isLoadingRouteComparison = ref(false)
+const routeComparison = ref<RouteComparison | null>(null)
+const routeComparisonError = ref<string | null>(null)
+const comparisonRouteId = ref<string | null>(null)
 
 // Sort state
 const routeSortField = ref<RouteSortField>('created_at')
@@ -369,6 +330,11 @@ const averageCost = computed(() => {
     0
   )
   return Math.round(sum / routes.value.items.length)
+})
+
+const comparisonRouteName = computed(() => {
+  if (!comparisonRouteId.value) return null
+  return routes.value.items.find((route) => route.id === comparisonRouteId.value)?.name ?? null
 })
 
 // Sort functions
@@ -445,6 +411,33 @@ const handleRouteSelect = async (routeId: string) => {
   await loadRouteDetails(routeId)
 }
 
+const openRouteComparison = async (routeId: string) => {
+  comparisonRouteId.value = routeId
+  isRouteComparisonOpen.value = true
+  isLoadingRouteComparison.value = true
+  routeComparison.value = null
+  routeComparisonError.value = null
+
+  try {
+    routeComparison.value = await fetchRouteComparison(routeId)
+  } catch (err: any) {
+    routeComparisonError.value = getApiErrorMessage(
+      err,
+      'История сравнения для этого маршрута недоступна',
+    )
+  } finally {
+    isLoadingRouteComparison.value = false
+  }
+}
+
+const closeRouteComparison = () => {
+  isRouteComparisonOpen.value = false
+  isLoadingRouteComparison.value = false
+  routeComparison.value = null
+  routeComparisonError.value = null
+  comparisonRouteId.value = null
+}
+
 // Data loading functions
 const loadDashboardData = async () => {
   isLoadingStats.value = true
@@ -470,7 +463,7 @@ const loadDashboardData = async () => {
       await loadRouteDetails(routesData.items[0].id)
     }
   } else {
-    error.value = routesResult.reason?.message || 'Не удалось загрузить данные'
+    error.value = getApiErrorMessage(routesResult.reason, 'Не удалось загрузить данные')
     console.error('Routes loading error:', routesResult.reason)
   }
 
