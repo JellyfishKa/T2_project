@@ -1,6 +1,6 @@
 # АРХИТЕКТУРА И ТЕХНИЧЕСКИЙ ДИЗАЙН
 
-> Последнее обновление: 22 апреля 2026
+> Последнее обновление: 29 апреля 2026
 
 ---
 
@@ -35,14 +35,20 @@
 
 | Таблица | Назначение |
 |---------|-----------|
-| `locations` | Торговые точки (ТТ): координаты, категория A/B/C/D, адрес |
-| `routes` | Оптимизированные маршруты (результаты LLM) |
-| `metrics` | Метрики LLM-запросов (время, качество, стоимость) |
-| `optimization_results` | Persistent snapshot store для сравнения маршрутов до/после оптимизации |
-| `sales_reps` | Торговые представители (статус: active/sick/vacation/unavailable) |
-| `visit_schedule` | Плановые визиты (FK → rep, location, дата, статус) |
-| `visit_log` | Фактические визиты с `time_in`/`time_out` |
-| `force_majeure_events` | Форс-мажоры с JSON перераспределения визитов |
+| locations | Торговые точки: координаты, категория A/B/C/D, адрес, город, район |
+| sales_reps | Торговые представители (статус: active/sick/vacation/unavailable, vehicle_id) |
+| visit_schedule | Плановые визиты (FK → rep, location, дата, статус) |
+| visit_log | Фактические визиты с time_in/time_out, notes |
+| daily_route_overrides | Переопределение порядка точек для конкретного дня |
+| force_majeure_events | Форс-мажоры с affected_tt_ids, redistributed_to, return_time |
+| skipped_visit_stash | Хранилище пропущенных визитов (resolution: manual/ai/carry_over) |
+| routes | Оптимизированные маршруты (результаты LLM) |
+| metrics | Метрики LLM-запросов (время, качество, стоимость) |
+| optimization_results | Snapshot для сравнения маршрутов до/после оптимизации |
+| holidays | Праздничные дни: date (PK), name, is_working |
+| audit_log | Журнал изменений: action, table_name, record_id, old_value, new_value |
+| vehicles | Транспорт: fuel_price_rub, consumption_city_l_100km, consumption_highway_l_100km |
+
 
 ### Связи
 
@@ -81,22 +87,25 @@ Route ─────────────── OptimizationResult
 
 ### Структура маршрутов (routes)
 
-```
-backend/src/routes/
-  optimize.py          POST /optimize, /optimize/variants, /optimize/confirm
-  schedule.py          POST /generate, GET /, PATCH /{id}/status, GET /daily
-  reps.py              GET/POST/PATCH/DELETE /reps
-  force_majeure.py     POST/GET /force_majeure
-  visits.py            POST/GET /visits
-  export.py            GET /export/schedule   (Excel 4 листа)
-  import_excel.py      POST /import/schedule  (Excel -> БД)
-  insights.py          GET /insights
-  metrics.py           GET /metrics
-  locations.py         GET/POST /locations
-  routes.py            GET /routes, GET /routes/{id}, GET /routes/{id}/comparison
-  qwen.py              POST /qwen/optimize
-  llama.py             POST /llama/optimize
-```
+| Файл | Эндпоинты |
+|------|-----------|
+| optimize.py | POST /optimize, /optimize/variants, /optimize/confirm |
+| schedule.py | POST /generate, GET /, GET /{rep_id}, PATCH /{visit_id}, GET /daily, PUT /day-route, DELETE /day-route, GET /stash, POST /stash/{id}/resolve/* |
+| reps.py | GET/POST/PATCH/DELETE /reps |
+| force_majeure.py | POST/GET /force_majeure |
+| visits.py | POST/GET /visits, GET /visits/stats |
+| export.py | GET /export/schedule (Excel 6 листов) |
+| import_excel.py | POST /import/schedule |
+| insights.py | GET /insights |
+| metrics.py | GET /metrics |
+| locations.py | GET/POST/PATCH/DELETE /locations, POST /upload, DELETE /all |
+| routes.py | GET /routes, GET /routes/{id}, GET /routes/{id}/comparison |
+| routing.py | CRUD /routing (Vehicle), POST /routing/preview |
+| holidays.py | GET /holidays, PATCH /holidays/{date} |
+| audit_log.py | GET /audit-log/monthly |
+| qwen.py | POST /qwen/optimize |
+| llama.py | POST /llama/optimize |
+| benchmark.py | POST /benchmark/run, GET /benchmark/status, GET /benchmark/compare |
 
 ### Сервисный слой
 
@@ -126,6 +135,42 @@ DashboardView / AnalyticsView
     -> RouteCompareModal
        (2 полилинии + списки перестановок + summary deltas)
 ```
+
+
+## LLM-интеграция
+
+### Стратегия выбора модели (model_selector.py)
+```python
+    MODEL_QWEN = "qwen"   
+    MODEL_LLAMA = "llama" 
+
+    def select_best_model(num_locations: int, time_constraint: Optional[str] = None) -> str:
+        return MODEL_QWEN  
+```
+
+#### QwenClient (qwen_client.py)
+
+| Параметр | Значение |
+|----------|----------|
+| Модель | qwen2-0_5b-instruct-q4_k_m.gguf |
+| Бэкенд | llama-cpp-python (GGUF) |
+| n_ctx | 8192 (8K токенов) |
+| n_gpu_layers | 0 (CPU only) |
+| n_threads | 4 |
+| Temperature | 0.1 |
+| Lazy loading | _llm = None → загрузка при первом запросе |
+
+#### LlamaClient (llama_client.py)
+
+| Параметр | Значение |
+|----------|----------|
+| Модель | Llama-3.2-1B-Instruct-Q4_K_M.gguf |
+| Бэкенд | llama-cpp-python (GGUF) |
+| n_ctx | 49152 (48K токенов) |
+| n_gpu_layers | -1 (GPU accel если доступен) |
+| n_threads | 8 |
+| Temperature | 0.1 |
+| Lazy loading | _llm = None → загрузка при первом запросе 
 
 ### LLM-клиенты (Strategy Pattern)
 
@@ -182,6 +227,65 @@ POST /optimize
 Сохраняем VisitSchedule в БД
 ```
 
+## Data Flow: Генерация расписания
+```
+    ScheduleView.vue
+        |
+        v  "Сгенерировать план"
+    POST /api/v1/schedule/generate?force=true
+        |
+        v
+    schedule.py::generate_schedule()
+        |
+        v (если force=true) удаляем существующие planned/rescheduled/skipped + overrides + stash
+        |
+        v
+    SchedulePlanner(DB, non_working_dates=frozenset(holidays_query))
+        |
+        v
+    _locations() ← SELECT category IN ('A','B','C','D')
+    _reps() ← SELECT status='active'
+    _working_days() ← исключая выходные + non_working_dates
+        |
+        v
+    _visit_dates() по категориям (A: недели 1,2,3; B: 1,3; C: середина; D: квартал)
+        |
+        v
+    sorted_tasks = по (дата, приоритет A>B>C>D)
+        |
+        v
+    for each task:
+        ищем сотрудника с день < MAX_TT_PER_DAY (14) и
+        _estimate_route_hours(projected_locations) < MAX_ROUTE_HOURS_PER_DAY (7.5)
+        |
+        v
+    batch insert в VisitSchedule
+        |
+        v
+    return {total_visits_planned, coverage_pct}
+        |
+        v
+    POST /api/v1/audit-log (audit action="schedule_generated")
+```
+
+## Data Flow: Сравнение маршрутов
+```
+    OptimizeView / ScheduleView
+        -> POST /api/v1/optimize/confirm
+           (current metrics + original metrics)
+        -> Optimizer.confirm_variant()
+        -> Route сохраняется в routes
+        -> OptimizationResult сохраняет:
+           route_id, original_route, optimized_route,
+           original_* metrics, optimized_* metrics
+
+    DashboardView / AnalyticsView
+        -> GET /api/v1/routes
+           (каждый route получает has_comparison)
+        -> GET /api/v1/routes/{id}/comparison
+        -> RouteCompareModal
+           (2 полилинии + списки перестановок + summary deltas)
+```
 ### Excel экспорт/импорт
 
 ```
