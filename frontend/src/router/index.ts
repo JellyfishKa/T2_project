@@ -28,6 +28,28 @@ const router = createRouter({
       component: () => import('../views/AnalyticsView.vue'),
       meta: { title: 'Analytics - T2 LLM Platform' }
     },
+    {
+      path: '/schedule',
+      name: 'schedule',
+      component: () => import('../views/ScheduleView.vue'),
+      meta: { title: 'Расписание - T2 Platform' }
+    },
+    {
+      path: '/reps',
+      name: 'reps-legacy',
+      redirect: () => ({ path: '/database', query: { tab: 'employees' } })
+    },
+    {
+      path: '/cars',
+      name: 'cars-legacy',
+      redirect: () => ({ path: '/database', query: { tab: 'vehicles' } })
+    },
+    {
+      path: '/database',
+      name: 'database',
+      component: () => import('../views/DatabaseView.vue'),
+      meta: { title: 'База данных - T2 Platform' }
+    },
     // Redirect to home if route not found
     {
       path: '/:pathMatch(.*)*',

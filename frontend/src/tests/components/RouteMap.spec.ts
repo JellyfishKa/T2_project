@@ -1,37 +1,87 @@
-import { mount } from '@vue/test-utils'
-import { describe, it, expect } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+
+const { fetchRoutePreviewMock } = vi.hoisted(() => ({
+  fetchRoutePreviewMock: vi.fn(),
+}))
+
+vi.mock('@/services/api', () => ({
+  fetchRoutePreview: fetchRoutePreviewMock,
+}))
+
+vi.mock('leaflet', () => {
+  const createMapInstance = () => ({
+    setView: vi.fn().mockReturnThis(),
+    remove: vi.fn(),
+    fitBounds: vi.fn(),
+    removeLayer: vi.fn(),
+  })
+
+  return {
+    default: {
+      Icon: {
+        Default: {
+          mergeOptions: vi.fn(),
+        },
+      },
+      divIcon: vi.fn(() => ({})),
+      marker: vi.fn(() => ({
+        bindTooltip: vi.fn().mockReturnThis(),
+      })),
+      polyline: vi.fn(() => ({
+        on: vi.fn().mockReturnThis(),
+      })),
+      featureGroup: vi.fn(() => ({
+        addTo: vi.fn().mockReturnThis(),
+        getBounds: vi.fn(() => ({})),
+      })),
+      map: vi.fn(() => createMapInstance()),
+      tileLayer: vi.fn(() => ({
+        addTo: vi.fn().mockReturnThis(),
+      })),
+    },
+  }
+})
+
 import RouteMap from '@/components/RouteMap.vue'
 
 describe('RouteMap.vue', () => {
-  it('renders the route map component with title', () => {
-    const wrapper = mount(RouteMap)
-
-    // Check if the title is rendered
-    expect(wrapper.find('h2').text()).toBe('Route Map')
-
-    // Check if the placeholder content is displayed
-    expect(wrapper.text()).toContain(
-      'Map visualization will be implemented here'
-    )
-
-    // Check if the container has the correct classes
-    expect(wrapper.classes()).toContain('border')
-    expect(wrapper.classes()).toContain('rounded-lg')
-    expect(wrapper.classes()).toContain('p-4')
-    expect(wrapper.classes()).toContain('h-96')
+  beforeEach(() => {
+    fetchRoutePreviewMock.mockReset()
+    fetchRoutePreviewMock.mockResolvedValue({
+      geometry: [
+        [55.7558, 37.6173],
+        [55.7489, 37.616],
+      ],
+      distance_km: 12.5,
+      time_minutes: 34,
+      cost_rub: 500,
+      traffic_lights_count: 4,
+      source: 'road_network',
+      transport_mode: 'car',
+    })
   })
 
-  it('has the correct structure', () => {
-    const wrapper = mount(RouteMap)
+  it('does not reuse route preview cache across unmount/remount', async () => {
+    const points = [
+      { id: 'loc-1', name: 'Store 1', lat: 55.7558, lon: 37.6173, order: 1 },
+      { id: 'loc-2', name: 'Store 2', lat: 55.7489, lon: 37.616, order: 2 },
+    ]
 
-    // Check if the main container div exists
-    const container = wrapper.find('.border.rounded-lg.p-4.h-96')
-    expect(container.exists()).toBe(true)
+    const firstWrapper = mount(RouteMap, {
+      props: { points },
+    })
 
-    // Check if the inner content div exists
-    const contentDiv = wrapper.find(
-      '.bg-gray-100.h-full.flex.items-center.justify-center'
-    )
-    expect(contentDiv.exists()).toBe(true)
+    await flushPromises()
+    firstWrapper.unmount()
+
+    const secondWrapper = mount(RouteMap, {
+      props: { points },
+    })
+
+    await flushPromises()
+    secondWrapper.unmount()
+
+    expect(fetchRoutePreviewMock).toHaveBeenCalledTimes(2)
   })
 })

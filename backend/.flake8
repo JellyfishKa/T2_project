@@ -2,4 +2,11 @@
 max-line-length = 100
 inline-quotes = double
 import-order-style = google
-extend-ignore = E203, W503, BLK, AZ, ASY, I1, I2
+extend-ignore = E203, W503, W292, BLK, AZ, ASY, I1, I2
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    migrations,
+    *.egg-info

@@ -24,7 +24,7 @@ describe('HomeView.vue', () => {
     })
 
     // Check if the main heading is rendered
-    expect(wrapper.find('h1').text()).toBe('T2 Розничная сеть')
+    expect(wrapper.find('h1').text()).toBe('Т2.Логист')
 
     // Check if the description is rendered
     expect(wrapper.text()).toContain(
@@ -48,10 +48,10 @@ describe('HomeView.vue', () => {
 
     // Check if the links have correct text
     const linkTexts = links.map((link) => link.text())
-    expect(linkTexts).toContain('Dashboard')
-    expect(linkTexts).toContain('Test Models')
-    expect(linkTexts).toContain('Optimize')
-    expect(linkTexts).toContain('Analytics')
+    expect(linkTexts).toContain('Дашборд')
+    expect(linkTexts).toContain('Тест моделей')
+    expect(linkTexts).toContain('Оптимизация')
+    expect(linkTexts).toContain('Аналитика')
   })
 
   it('links navigate to correct routes', () => {

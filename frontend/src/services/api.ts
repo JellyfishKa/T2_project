@@ -1,24 +1,803 @@
-import axios from 'axios'
+import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios'
+import type {
+  Location,
+  Route,
+  RouteDetails,
+  RouteComparison,
+  Metric,
+  BenchmarkResult,
+  BenchmarkRequest,
+  BenchmarkRunResponse,
+  OptimizeRequest,
+  OptimizeVariantsResponse,
+  ConfirmVariantRequest,
+  RoutePreviewPoint,
+  RoutePreviewResponse,
+  PaginatedResponse,
+  HealthStatus,
+  ApiError,
+  Insights,
+  ModelComparison,
+  SalesRep,
+  MonthlyPlan,
+  DailyRoute,
+  DayRouteOverrideRequest,
+  ForceMajeureEvent,
+  VisitScheduleItem,
+  VisitLog,
+  Holiday,
+  HolidayPatchResponse,
+  SkippedStashItem,
+  Vehicle,
+  TransportMode,
+  AuditLogItem,
+} from './types'
 
-export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
-  timeout: 30000,
+// Конфигурация API
+const API_CONFIG = {
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
+  timeout: 30000, // 30 секунд
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    Accept: 'application/json'
   }
-})
+}
 
-// Mock interceptor for development
-api.interceptors.response.use(
-  (config) => {
-    if (import.meta.env.DEV) {
-      // Return mock data in development
-      console.log('Mock interceptor active')
+// Создаем экземпляр axios
+const api: AxiosInstance = axios.create(API_CONFIG)
+
+// ========== НАСТРОЙКИ ПОВТОРНЫХ ПОПЫТОК ==========
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // 1 секунда
+
+// Функция для задержки
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function flattenErrorPayload(payload: unknown): string | null {
+  if (typeof payload === 'string') {
+    const value = payload.trim()
+    return value || null
+  }
+
+  if (Array.isArray(payload)) {
+    const parts = payload
+      .map((item) => flattenErrorPayload(item))
+      .filter((item): item is string => !!item)
+    return parts.length ? parts.join('; ') : null
+  }
+
+  if (!payload || typeof payload !== 'object') return null
+
+  const record = payload as Record<string, unknown>
+
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message
+  }
+
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error
+  }
+
+  if ('detail' in record) {
+    const detailMessage = flattenErrorPayload(record.detail)
+    if (detailMessage) return detailMessage
+  }
+
+  if (typeof record.msg === 'string' && record.msg.trim()) {
+    if (Array.isArray(record.loc) && record.loc.length) {
+      return `${record.loc.join('.')} — ${record.msg}`
     }
-    return config
-  },
-  (error) => {
-    console.error('API Error:', error)
-    return Promise.reject(error)
+    return record.msg
+  }
+
+  if (typeof record.reason === 'string' && record.reason.trim()) {
+    return record.reason
+  }
+
+  return null
+}
+
+export function getApiErrorMessage(error: unknown, fallback = 'Произошла ошибка'): string {
+  const direct = flattenErrorPayload(error)
+  if (direct) return direct
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    const responseData =
+      record.response && typeof record.response === 'object'
+        ? (record.response as Record<string, unknown>).data
+        : null
+    const nested = [
+      flattenErrorPayload(responseData),
+      flattenErrorPayload(record.response),
+      flattenErrorPayload(record.data),
+      flattenErrorPayload(record.detail),
+      typeof record.message === 'string' && record.message.trim() ? record.message : null,
+    ].find((item): item is string => !!item)
+
+    if (nested) return nested
+  }
+
+  return fallback
+}
+
+// Функция для повторных попыток
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries: number = MAX_RETRIES
+): Promise<T> {
+  try {
+    return await fn()
+  } catch (error) {
+    const axiosError = error as AxiosError
+
+    // Retry только на 5xx ошибки (серверные)
+    if (
+      retries > 0 &&
+      axiosError.response?.status &&
+      axiosError.response.status >= 500
+    ) {
+      console.log(`Retrying... ${MAX_RETRIES - retries + 1}/${MAX_RETRIES}`)
+      await delay(RETRY_DELAY)
+      return withRetry(fn, retries - 1)
+    }
+
+    // Пробрасываем ошибку дальше
+    throw error
+  }
+}
+
+// ========== ТИПЫ ДЛЯ ОТВЕТОВ ==========
+export interface UploadLocationsResponse {
+  created?: Location[]
+  total_processed?: number
+  success?: boolean
+  message?: string
+  locations?: Location[]
+  errors?: Array<{
+    row: number
+    field?: string
+    message?: string
+    error?: string
+    data?: unknown
+  }>
+}
+
+// ========== ИНТЕРСЕПТОРЫ ==========
+// Интерсептор для обработки ошибок
+api.interceptors.response.use(
+  (response: AxiosResponse) => response,
+  async (error: AxiosError<ApiError>) => {
+    // Обработка timeout
+    if (error.code === 'ECONNABORTED') {
+      console.error('Request timeout:', error.message)
+      return Promise.reject({
+        error: 'Timeout Error',
+        message:
+          'Запрос занял слишком много времени. Пожалуйста, попробуйте снова.',
+        code: 'TIMEOUT_ERROR'
+      })
+    }
+
+    // Обработка сетевых ошибок
+    if (!error.response) {
+      console.error('Network error:', error.message)
+      return Promise.reject({
+        error: 'Network Error',
+        message:
+          'Не удалось подключиться к серверу. Проверьте интернет-соединение.',
+        code: 'NETWORK_ERROR'
+      })
+    }
+
+    const { status, data } = error.response
+
+    // Логируем ошибки для отладки
+    switch (status) {
+      case 400:
+        console.error('Bad Request:', data)
+        break
+      case 401:
+        console.error('Unauthorized:', data)
+        break
+      case 403:
+        console.error('Forbidden:', data)
+        break
+      case 404:
+        console.error('Not Found:', data)
+        break
+      case 422:
+        console.error('Validation Error:', data)
+        break
+      case 429:
+        console.error('Too Many Requests:', data)
+        break
+      case 500:
+        console.error('Internal Server Error:', data)
+        break
+      case 502:
+      case 503:
+      case 504:
+        console.error('Service Unavailable:', data)
+        break
+      default:
+        console.error(`HTTP Error ${status}:`, getApiErrorMessage(data, error.message), data)
+    }
+
+    const normalizedError = error as AxiosError<ApiError> & {
+      status?: number
+      detail?: unknown
+      data?: unknown
+    }
+    normalizedError.status = status
+    normalizedError.detail =
+      data && typeof data === 'object' && 'detail' in data
+        ? (data as Record<string, unknown>).detail
+        : data
+    normalizedError.data = data
+    normalizedError.message = getApiErrorMessage(data, error.message)
+
+    return Promise.reject(normalizedError)
   }
 )
+
+// ========== REAL API ФУНКЦИИ ==========
+
+/**
+ * Загрузка файла с локациями
+ * POST /api/v1/locations/upload
+ */
+export const uploadLocations = async (
+  file: File
+): Promise<UploadLocationsResponse> => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await withRetry(() =>
+    api.post('/locations/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  )
+  return response.data
+}
+
+/**
+ * Оптимизация маршрута
+ * POST /api/v1/optimize
+ */
+export const optimize = async (
+  locationIds: string[],
+  model: string,
+  constraints: any
+): Promise<Route> => {
+  const request = {
+    location_ids: locationIds,
+    model: model,
+    constraints: constraints
+  }
+
+  const response = await withRetry(() => api.post('/optimize', request))
+  return response.data
+}
+
+/**
+ * Генерация 3 вариантов оптимизации с оценкой LLM (без сохранения в БД)
+ * POST /api/v1/optimize/variants
+ */
+export const optimizeVariants = async (
+  locationIds: string[],
+  model: string,
+  constraints: any
+): Promise<OptimizeVariantsResponse> => {
+  const request = {
+    location_ids: locationIds,
+    model,
+    constraints
+  }
+  // LLM может работать 30-120с → увеличенный timeout
+  const response = await api.post('/optimize/variants', request, {
+    timeout: 180_000
+  })
+  return response.data
+}
+
+/**
+ * Сохранение выбранного варианта маршрута в БД
+ * POST /api/v1/optimize/confirm
+ */
+export const confirmVariant = async (
+  payload: ConfirmVariantRequest
+): Promise<Route> => {
+  const response = await withRetry(() =>
+    api.post('/optimize/confirm', payload)
+  )
+  return response.data
+}
+
+/**
+ * Получение метрик
+ * GET /api/v1/metrics
+ */
+export const getMetrics = async (): Promise<{ metrics: Metric[] }> => {
+  const response = await withRetry(() => api.get('/metrics'))
+  return response.data
+}
+
+/**
+ * Получение инсайтов
+ * GET /api/v1/insights
+ */
+export const getInsights = async (): Promise<Insights> => {
+  const response = await withRetry(() => api.get('/insights'))
+  return response.data
+}
+
+/**
+ * Сравнение моделей
+ * GET /api/v1/benchmark/compare
+ */
+export const compareModels = async (): Promise<ModelComparison> => {
+  const response = await withRetry(() => api.get('/benchmark/compare'))
+  return response.data
+}
+
+/**
+ * Получение списка маршрутов
+ * GET /api/v1/routes
+ */
+export const fetchRoutes = async (
+  skip: number = 0,
+  limit: number = 10
+): Promise<PaginatedResponse<Route>> => {
+  const response = await withRetry(() =>
+    api.get('/routes', { params: { skip, limit } })
+  )
+  return response.data
+}
+
+/**
+ * Получение деталей маршрута
+ * GET /api/v1/routes/{route_id}
+ *
+ * ВНИМАНИЕ: Этот endpoint возвращает RouteDetails с полями locations_sequence и locations_data
+ */
+export const fetchRouteDetails = async (
+  routeId: string
+): Promise<RouteDetails> => {
+  const response = await withRetry(() => api.get(`/routes/${routeId}`))
+  return response.data
+}
+
+/**
+ * Получение сравнения маршрута до/после оптимизации
+ * GET /api/v1/routes/{route_id}/comparison
+ */
+export const fetchRouteComparison = async (
+  routeId: string
+): Promise<RouteComparison> => {
+  const response = await withRetry(() => api.get(`/routes/${routeId}/comparison`))
+  return response.data
+}
+
+/**
+ * Получение метрик для конкретного маршрута
+ * GET /api/v1/metrics?route_id={route_id}
+ */
+export const fetchRouteMetrics = async (
+  routeId: string
+): Promise<{ metrics: Metric[] }> => {
+  const response = await withRetry(() =>
+    api.get('/metrics', { params: { route_id: routeId } })
+  )
+  return response.data
+}
+
+/**
+ * Запуск бенчмарка
+ * POST /api/v1/benchmark
+ */
+export const runBenchmark = async (
+  request: BenchmarkRequest
+): Promise<BenchmarkRunResponse> => {
+  const response = await withRetry(() =>
+    api.post('/benchmark/run', null, {
+      params: {
+        iterations: request.num_iterations,
+        use_mock: true,
+        use_backend: false
+      }
+    })
+  )
+  return response.data
+}
+
+/**
+ * Проверка здоровья сервиса
+ * GET /api/v1/health
+ */
+export const checkHealth = async (): Promise<HealthStatus> => {
+  try {
+    const response = await withRetry(() => api.get('/health'))
+    return response.data
+  } catch (error) {
+    // Если сервер недоступен, возвращаем unhealthy статус
+    if ((error as AxiosError).response?.status === 503) {
+      return (error as AxiosError).response?.data as HealthStatus
+    }
+    throw error
+  }
+}
+
+/**
+ * Получение всех локаций
+ * GET /api/v1/locations
+ */
+export const fetchAllLocations = async (): Promise<Location[]> => {
+  const response = await withRetry(() => api.get('/locations/'))
+  const payload = response.data
+
+  if (Array.isArray(payload)) {
+    return payload
+  }
+
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { locations?: unknown }).locations)) {
+    return (payload as { locations: Location[] }).locations
+  }
+
+  return []
+}
+
+export const updateLocation = async (
+  id: string,
+  data: Partial<Omit<Location, 'id'>>,
+): Promise<Location> => {
+  const response = await withRetry(() => api.patch(`/locations/${id}`, data))
+  return response.data
+}
+
+export const deleteLocation = async (id: string, force = false): Promise<void> => {
+  await withRetry(() => api.delete(`/locations/${id}`, force ? { params: { force: true } } : {}))
+}
+
+export const fetchRoutePreview = async (
+  points: RoutePreviewPoint[],
+  options?: { vehicle_id?: string | null; transport_mode?: TransportMode }
+): Promise<RoutePreviewResponse> => {
+  const response = await withRetry(() =>
+    api.post('/routing/preview', {
+      points,
+      vehicle_id: options?.vehicle_id ?? null,
+      transport_mode: options?.transport_mode ?? 'car',
+    })
+  )
+  return response.data
+}
+
+// ========== СОТРУДНИКИ ==========
+
+export const fetchReps = async (): Promise<SalesRep[]> => {
+  const response = await withRetry(() => api.get('/reps/'))
+  return response.data
+}
+
+export const createRep = async (
+  name: string,
+  status: SalesRep['status'] = 'active',
+  vehicle_id?: string | null,
+): Promise<SalesRep> => {
+  const response = await withRetry(() =>
+    api.post('/reps/', { name, status, vehicle_id: vehicle_id ?? null })
+  )
+  return response.data
+}
+
+export const updateRep = async (
+  repId: string,
+  data: Partial<Pick<SalesRep, 'name' | 'status' | 'vehicle_id'>>
+): Promise<SalesRep> => {
+  const response = await withRetry(() => api.patch(`/reps/${repId}`, data))
+  return response.data
+}
+
+export const deleteRep = async (repId: string, force = false): Promise<void> => {
+  await withRetry(() => api.delete(`/reps/${repId}`, force ? { params: { force: true } } : {}))
+}
+
+// ========== АВТОПАРК ==========
+
+export const fetchVehicles = async (): Promise<Vehicle[]> => {
+  const response = await withRetry(() => api.get('/routing/'))
+  return response.data
+}
+
+export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<Vehicle> => {
+  const response = await withRetry(() => api.post('/routing/', data))
+  return response.data
+}
+
+export const deleteVehicle = async (vehicleId: string): Promise<void> => {
+  await withRetry(() => api.delete(`/routing/${vehicleId}`))
+}
+
+export const updateVehicle = async (
+  vehicleId: string,
+  data: { name?: string; fuel_price_rub?: number; consumption_city_l_100km?: number; consumption_highway_l_100km?: number },
+): Promise<Vehicle> => {
+  const response = await withRetry(() => api.patch(`/routing/${vehicleId}`, data))
+  return response.data
+}
+
+export const uploadVehiclesJson = async (
+  file: File,
+): Promise<{ created: Vehicle[]; errors: { row: number; error: string; data: unknown }[] }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await withRetry(() =>
+    api.post('/routing/upload_cars', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  )
+  return response.data
+}
+
+export const previewClearLocations = async (): Promise<{
+  preview: true; locations: number; visit_schedule: number; visit_log: number; skipped_visit_stash: number
+}> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: false } }))
+  return response.data
+}
+
+export const clearAllLocations = async (): Promise<{ deleted_locations: number; message: string }> => {
+  const response = await withRetry(() => api.delete('/locations/all', { params: { confirm: true } }))
+  return response.data
+}
+
+export const fetchAuditLog = async (
+  month: string,
+  limit = 50,
+  offset = 0,
+): Promise<{ items: AuditLogItem[]; total: number }> => {
+  const response = await withRetry(() =>
+    api.get('/audit-log/monthly', { params: { month, limit, offset } })
+  )
+  return response.data
+}
+
+// ========== РАСПИСАНИЕ ==========
+
+export const generateSchedule = async (
+  month: string,
+  repIds?: string[],
+  force?: boolean
+): Promise<{ total_visits_planned: number; coverage_pct: number }> => {
+  const response = await withRetry(() =>
+    api.post('/schedule/generate', { month, rep_ids: repIds }, { params: force ? { force: true } : undefined })
+  )
+  return response.data
+}
+
+export const fetchMonthlySchedule = async (
+  month: string
+): Promise<MonthlyPlan> => {
+  const response = await withRetry(() =>
+    api.get('/schedule/', { params: { month } })
+  )
+  return response.data
+}
+
+export const saveDayRouteOverride = async (
+  payload: DayRouteOverrideRequest
+): Promise<DailyRoute> => {
+  const response = await withRetry(() =>
+    api.put('/schedule/day-route', payload)
+  )
+  return response.data
+}
+
+export const revertDayRouteOverride = async (
+  repId: string,
+  date: string
+): Promise<DailyRoute> => {
+  const response = await withRetry(() =>
+    api.delete('/schedule/day-route', {
+      params: {
+        rep_id: repId,
+        date,
+      }
+    })
+  )
+  return response.data
+}
+
+export const fetchRepSchedule = async (
+  repId: string,
+  month: string
+): Promise<MonthlyPlan> => {
+  const response = await withRetry(() =>
+    api.get(`/schedule/${repId}`, { params: { month } })
+  )
+  return response.data
+}
+
+export const fetchDailySchedule = async (
+  date: string
+): Promise<DailyRoute[]> => {
+  const response = await withRetry(() =>
+    api.get('/schedule/daily', { params: { date } })
+  )
+  return response.data
+}
+
+// ========== ВИЗИТЫ: ОБНОВЛЕНИЕ СТАТУСА ==========
+
+export const updateVisitStatus = async (
+  visitId: string,
+  data: {
+    status: 'completed' | 'skipped' | 'cancelled' | 'rescheduled' | 'planned'
+    time_in?: string
+    time_out?: string
+    notes?: string
+  }
+): Promise<VisitScheduleItem> => {
+  const response = await withRetry(() =>
+    api.patch(`/schedule/${visitId}`, data)
+  )
+  return response.data
+}
+
+// ========== ЭКСПОРТ ==========
+
+/**
+ * Скачать Excel-отчёт по расписанию и визитам
+ * GET /api/v1/export/schedule?month=YYYY-MM
+ */
+export const downloadScheduleExcel = async (month: string): Promise<void> => {
+  const response = await withRetry(() =>
+    api.get('/export/schedule', {
+      params: { month },
+      responseType: 'blob',
+      timeout: 30_000,
+    })
+  )
+  const url = URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `t2_schedule_${month}.xlsx`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+// ========== ИМПОРТ ==========
+
+/**
+ * Загрузка заполненного Excel с результатами визитов
+ * POST /api/v1/import/schedule
+ */
+export const importScheduleExcel = async (
+  file: File
+): Promise<{ updated: number; skipped: number; errors: string[] }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await api.post('/import/schedule', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60_000,
+  })
+  return response.data
+}
+
+// ========== ЖУРНАЛ ВИЗИТОВ ==========
+
+export const fetchVisits = async (
+  month: string,
+  repId?: string
+): Promise<VisitLog[]> => {
+  const params: Record<string, string> = { month }
+  if (repId) params.rep_id = repId
+  const response = await withRetry(() => api.get('/visits/', { params }))
+  return response.data
+}
+
+// ========== ФОРС-МАЖОРЫ ==========
+
+export const createForceMajeure = async (data: {
+  type: string
+  rep_id: string
+  event_date: string
+  description?: string
+  return_time?: string
+}): Promise<ForceMajeureEvent> => {
+  const response = await withRetry(() => api.post('/force_majeure/', data))
+  return response.data
+}
+
+export const fetchForceMajeure = async (
+  month: string
+): Promise<ForceMajeureEvent[]> => {
+  const response = await withRetry(() =>
+    api.get('/force_majeure/', { params: { month } })
+  )
+  return response.data
+}
+
+// ========== ПРАЗДНИКИ ==========
+
+export const fetchHolidays = async (params: {
+  month?: string
+  year?: number
+}): Promise<Holiday[]> => {
+  const response = await withRetry(() => api.get('/holidays/', { params }))
+  return response.data
+}
+
+export const patchHoliday = async (
+  date: string,
+  isWorking: boolean
+): Promise<HolidayPatchResponse> => {
+  const response = await withRetry(() =>
+    api.patch(`/holidays/${date}`, { is_working: isWorking })
+  )
+  return response.data
+}
+
+// ========== СТЕШ ПРОПУЩЕННЫХ ВИЗИТОВ ==========
+
+export const fetchSkippedStash = async (): Promise<SkippedStashItem[]> => {
+  const response = await withRetry(() => api.get('/schedule/stash'))
+  return response.data
+}
+
+export const resolveStashManual = async (
+  id: string,
+  repId: string,
+  targetDate: string
+): Promise<SkippedStashItem> => {
+  const response = await withRetry(() =>
+    api.post(`/schedule/stash/${id}/resolve/manual`, { rep_id: repId, target_date: targetDate })
+  )
+  return response.data
+}
+
+export const resolveStashCarryOver = async (id: string): Promise<SkippedStashItem> => {
+  const response = await withRetry(() =>
+    api.post(`/schedule/stash/${id}/resolve/carry_over`)
+  )
+  return response.data
+}
+
+export const resolveStashAI = async (stashIds: string[]): Promise<SkippedStashItem[]> => {
+  const response = await withRetry(() =>
+    api.post('/schedule/stash/resolve/ai', { stash_ids: stashIds })
+  )
+  return response.data
+}
+
+export const discardStashEntry = async (id: string): Promise<void> => {
+  await withRetry(() => api.delete(`/schedule/stash/${id}`))
+}
+
+export { api }
+export type {
+  Location,
+  Route,
+  RouteDetails,
+  RouteComparison,
+  Metric,
+  BenchmarkResult,
+  BenchmarkRequest,
+  BenchmarkRunResponse,
+  OptimizeRequest,
+  OptimizeVariantsResponse,
+  ConfirmVariantRequest,
+  PaginatedResponse,
+  HealthStatus,
+  ApiError,
+  Insights,
+  ModelComparison,
+  SalesRep,
+  MonthlyPlan,
+  ForceMajeureEvent,
+  VisitScheduleItem,
+  VisitLog
+}

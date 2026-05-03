@@ -11,7 +11,9 @@ const router = createRouter({
     { path: '/', component: { template: '<div>Home</div>' } },
     { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
     { path: '/optimize', component: { template: '<div>Optimize</div>' } },
-    { path: '/analytics', component: { template: '<div>Analytics</div>' } }
+    { path: '/analytics', component: { template: '<div>Analytics</div>' } },
+    { path: '/schedule', component: { template: '<div>Schedule</div>' } },
+    { path: '/database', component: { template: '<div>Database</div>' } }
   ]
 })
 
@@ -28,7 +30,7 @@ describe('Sidebar.vue', () => {
 
     // Check if navigation items exist
     const navLinks = wrapper.findAll('a')
-    expect(navLinks.length).toBe(4) // Home, Dashboard, Optimize, Analytics
+    expect(navLinks.length).toBe(6) // Главная, Дашборд, Оптимизация, Аналитика, Расписание, База данных
 
     // Check if the close button exists for mobile view
     expect(wrapper.find('button').exists()).toBe(true)
@@ -84,7 +86,7 @@ describe('Sidebar.vue', () => {
     // Check if the dashboard link is highlighted
     const dashboardLink = wrapper
       .findAll('a')
-      .find((link: any) => link.text().includes('Dashboard'))
+      .find((link: any) => link.text().includes('Дашборд'))
     expect(dashboardLink?.classes()).toContain('text-blue-600')
     expect(dashboardLink?.classes()).toContain('bg-blue-50')
   })

@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import re
+import uuid
 from datetime import datetime
 from time import time
 from typing import (
@@ -22,11 +24,20 @@ from src.models.exceptions import (
     QwenTimeoutError,
     QwenValidationError,
 )
+from src.models.geo_utils import (
+    build_constraints_text,
+    build_nearest_neighbors,
+    compute_distance_matrix,
+    detect_region_info,
+    format_locations_compact,
+    format_nearest_neighbors,
+)
 from src.models.llm_client import LLMClient
 from src.models.schemas import (
     Location,
     Route,
 )
+
 
 logger = logging.getLogger("qwen_client")
 
@@ -57,9 +68,9 @@ class QwenClient(LLMClient):
                     model_path=self.model_path,
                     n_threads=4,
                     n_gpu_layers=0,
-                    n_ctx=2048,
+                    n_ctx=8192,   # 8K — достаточно для 50 точек с запасом
                     n_batch=512,
-                    verbose=False,
+                    verbose=True,
                 )
                 logger.info("Qwen GGUF model loaded successfully.")
             except Exception as e:
@@ -96,6 +107,7 @@ class QwenClient(LLMClient):
                     locations_data,
                     constraints,
                 )
+                logger.debug("RAW MODEL RESPONSE (attempt %d):\n%s", attempt, response_text)
                 result = self._parse_response(response_text, locations)
 
                 duration = time() - start_time
@@ -140,8 +152,8 @@ class QwenClient(LLMClient):
             {
                 "role": "system",
                 "content": (
-                    "You are a logistics expert. "
-                    "Return ONLY valid JSON."
+                    "You are a route optimizer. "
+                    "Output ONLY valid JSON, no text."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -176,35 +188,36 @@ class QwenClient(LLMClient):
         locations: List[Dict],
         constraints: Dict,
     ) -> str:
-        locations_json = json.dumps(locations, ensure_ascii=False)
-        constraints_str = json.dumps(constraints) if constraints else "{}"
+        region = detect_region_info(locations)
+        dm = compute_distance_matrix(locations)
+        nn = build_nearest_neighbors(dm, k=3)
 
-        return f"""
-        Role: You are a professional logistics expert specializing
-        in route optimization in Russia.
-        Task:
-        1. Optimize the route for the provided locations.
-        2. Prioritize high-priority points.
-        3. Estimate the total cost in RUB based on average petrol prices
-        for the region identified in the addresses.
+        locations_text = format_locations_compact(locations)
+        nn_text = format_nearest_neighbors(locations, nn)
+        constraints_text = build_constraints_text(constraints)
 
-        Input Data:
-        Locations: {locations_json}
-        Constraints: {constraints_str}
+        fuel_rate = (constraints or {}).get("fuel_rate", 7.0)
+        speed = 25 if region["classification"] == "urban" else 40
 
-        Output Format:
-        Return ONLY a valid JSON object matching exactly this schema
-        (no markdown, no comments):
-        {{
-            "route_id": "string",
-            "locations_sequence": ["id_from_input", ...],
-            "total_distance_km": float,
-            "total_time_hours": float,
-            "total_cost_rub": float,
-            "model_used": "{self.model_name}",
-            "created_at": "{datetime.now().isoformat()}"
-        }}
-        """
+        n = len(locations)
+        # Показываем первые 3 реальных ID без эллипсиса — модель копирует шаблон
+        # дословно, поэтому ",...," приводит к невалидному JSON
+        sample_ids = '","'.join(loc["ID"] for loc in locations[:min(3, n)])
+
+        return (
+            f"Route optimization: {n} stops, "
+            f"{region['classification']} ({region['area_km2']} km2).\n\n"
+            f"STOPS (ID|name|lat,lon|priority):\n{locations_text}\n\n"
+            f"NEAREST 3 NEIGHBORS:\n{nn_text}\n\n"
+            f"RULES: {constraints_text} "
+            f"Speed={speed}km/h+15min/stop. "
+            f"Cost=dist*{fuel_rate}rub/km. A>B>C>D priority.\n\n"
+            f"OUTPUT — reorder ALL {n} stop IDs optimally (JSON only, no text):\n"
+            f'{{"locations_sequence":["{sample_ids}"],'
+            f'"total_distance_km":0.0,'
+            f'"total_time_hours":0.0,'
+            f'"total_cost_rub":0.0}}'
+        )
 
     def _parse_response(
         self,
@@ -218,6 +231,8 @@ class QwenClient(LLMClient):
                 clean_text = clean_text[7:]
             if clean_text.endswith("```"):
                 clean_text = clean_text[:-3]
+            # Заменяем COMPUTE (модель иногда копирует шаблон дословно)
+            clean_text = re.sub(r':\s*COMPUTE\b', ':0', clean_text)
 
             json_start = clean_text.find("{")
             json_end = clean_text.rfind("}") + 1
@@ -231,9 +246,9 @@ class QwenClient(LLMClient):
                     return float(val) if val is not None else 0.0
                 except Exception:
                     return 0.0
-
+            new_route_id = str(uuid.uuid4())
             return Route(
-                ID=str(data.get("route_id", f"route-{int(time())}")),
+                ID=new_route_id,
                 name=f"Оптимизированный маршрут ({self.model_name})",
                 locations=original_locations,
                 total_distance_km=to_float(data.get("total_distance_km")),
@@ -247,6 +262,116 @@ class QwenClient(LLMClient):
                 f"Parsing error: {e}. Text: {text_content}",
             )
             raise QwenServerError(f"Route Validation Error: {str(e)}")
+
+    async def evaluate_variants(
+        self,
+        variants: List[Dict],
+    ) -> List[Dict]:
+        """
+        Просит LLM оценить варианты маршрута и сгенерировать pros/cons.
+        При ошибке возвращает пустой список (graceful fallback).
+        """
+        if not variants:
+            return []
+
+        prompt = self._construct_evaluation_prompt(variants)
+
+        try:
+            llm = self._get_generator()
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a logistics analyst. "
+                        "Output ONLY valid JSON array, no text."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ]
+
+            loop = asyncio.get_event_loop()
+            output = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: llm.create_chat_completion(
+                        messages=messages,
+                        max_tokens=512,
+                        temperature=0.3,
+                        stop=["<|im_end|>"],
+                    ),
+                ),
+                timeout=90,
+            )
+
+            content = output["choices"][0]["message"]["content"] or ""  # type: ignore[union-attr]
+            logger.debug("RAW EVALUATION RESPONSE:\n%s", content)
+            return self._parse_evaluation_response(content)
+
+        except Exception as e:
+            logger.warning("evaluate_variants failed: %s", e)
+            return []
+
+    def _construct_evaluation_prompt(self, variants: List[Dict]) -> str:
+        lines = []
+        for v in variants:
+            m = v.get("metrics", {})
+            lines.append(
+                f"Option {v['id']} ({v['name']}): "
+                f"distance={m.get('distance_km', 0):.1f}km, "
+                f"time={m.get('time_hours', 0):.1f}h, "
+                f"cost={m.get('cost_rub', 0):.0f}rub"
+            )
+        variants_text = "\n".join(lines)
+
+        # Строим пример JSON-ответа для модели
+        example_items = ",".join(
+            f'{{"id":{v["id"]},"pros":["text","text"],"cons":["text","text"]}}'
+            for v in variants
+        )
+
+        return (
+            f"Analyze {len(variants)} delivery route options. "
+            f"For each, provide exactly 2 advantages and 2 disadvantages "
+            f"in Russian (short phrases, max 8 words each).\n\n"
+            f"{variants_text}\n\n"
+            f"Return ONLY valid JSON array, no markdown:\n"
+            f"[{example_items}]"
+        )
+
+    def _parse_evaluation_response(self, text: str) -> List[Dict]:
+        try:
+            clean = text.strip()
+            # Убираем markdown блоки
+            if "```" in clean:
+                parts = clean.split("```")
+                for part in parts:
+                    if "[" in part:
+                        clean = part.lstrip("json").strip()
+                        break
+
+            arr_start = clean.find("[")
+            arr_end = clean.rfind("]") + 1
+            if arr_start == -1 or arr_end == 0:
+                return []
+
+            data = json.loads(clean[arr_start:arr_end])
+            if not isinstance(data, list):
+                return []
+
+            # Валидируем структуру
+            result = []
+            for item in data:
+                if isinstance(item, dict) and "id" in item:
+                    result.append({
+                        "id": item["id"],
+                        "pros": item.get("pros", []) if isinstance(item.get("pros"), list) else [],
+                        "cons": item.get("cons", []) if isinstance(item.get("cons"), list) else [],
+                    })
+            return result
+
+        except Exception as e:
+            logger.warning("Evaluation parse error: %s. Text: %s", e, text[:200])
+            return []
 
     async def analyze_metrics(self, data: Dict) -> str:
         return "Not implemented"

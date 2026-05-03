@@ -1,10 +1,532 @@
 <template>
-  <div class="py-6 md:py-8">
-    <!-- Page Header -->
-    <div class="mb-8">
-      <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Dashboard</h1>
+  <div class="space-y-6 py-6 md:py-8">
+    <PageHero
+      eyebrow="Обзор"
+      title="Дашборд"
+      description="Короткий срез по маршрутам, сервисам и моделям: сначала здоровье системы и главные цифры, потом уже детали маршрута и история метрик."
+    >
+      <template #meta>
+        <div class="flex flex-wrap gap-2">
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Маршруты</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Сервисы</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Модели</span>
+        </div>
+      </template>
+      <template #actions>
+        <button
+          @click="refreshAllData"
+          :disabled="isRefreshing"
+          class="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg
+            class="h-4 w-4 mr-2"
+            :class="{ 'animate-spin': isRefreshing }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          {{ isRefreshing ? 'Обновление...' : 'Обновить все' }}
+        </button>
+      </template>
+    </PageHero>
+
+    <!-- Error State -->
+    <div
+      v-if="error"
+      class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6"
+    >
+      <div class="flex">
+        <div class="flex-shrink-0">
+          <svg
+            class="h-5 w-5 text-red-400"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </div>
+        <div class="ml-3">
+          <h3 class="text-sm font-medium text-red-800">
+            Ошибка загрузки данных
+          </h3>
+          <div class="mt-2 text-sm text-red-700">
+            <p>{{ error }}</p>
+          </div>
+          <button
+            @click="loadDashboardData"
+            class="mt-3 text-sm font-medium text-red-800 hover:text-red-900"
+          >
+            Попробовать снова
+          </button>
+        </div>
+      </div>
     </div>
+
+    <!-- Main Dashboard Content (only shown when no error) -->
+    <template v-else>
+      <!-- Health Status -->
+      <div v-if="healthStatus" class="mb-6">
+        <HealthStatus :status="healthStatus" />
+      </div>
+
+      <!-- Route Statistics -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- Total Routes Card -->
+        <InfoStatCard
+          v-if="!isLoadingStats"
+          label="Всего маршрутов"
+          :value="routes.total || 0"
+          hint="Сколько маршрутов доступно для просмотра и анализа."
+          tone="blue"
+        />
+        <SkeletonLoader v-else height="120px" />
+
+        <!-- Average Time Card -->
+        <InfoStatCard
+          v-if="!isLoadingStats"
+          label="Среднее время"
+          :value="`${averageTime} ч`"
+          hint="Помогает быстро понять общий темп маршрутов."
+          tone="green"
+        />
+        <SkeletonLoader v-else height="120px" />
+
+        <!-- Average Cost Card -->
+        <InfoStatCard
+          v-if="!isLoadingStats"
+          label="Средняя стоимость"
+          :value="`${averageCost} ₽`"
+          hint="Средняя операционная стоимость по сохранённым маршрутам."
+          tone="amber"
+        />
+        <SkeletonLoader v-else height="120px" />
+      </div>
+
+      <!-- Main Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Routes List -->
+        <div class="lg:col-span-2">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+              <h3 class="text-lg font-semibold text-gray-900">
+                Оптимизированные маршруты
+              </h3>
+              <p class="mt-1 text-sm text-gray-600">
+                Список всех созданных маршрутов
+              </p>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+              <RouteList
+                :routes="routes.items"
+                :is-loading="isLoadingRoutes"
+                :selected-route-id="selectedRouteId"
+                :sortable="true"
+                :sort-field="routeSortField"
+                :sort-direction="routeSortDirection"
+                @select-route="handleRouteSelect"
+                @compare-route="openRouteComparison"
+                @sort="handleRouteSort"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Metrics and Comparison -->
+        <div class="space-y-6">
+          <!-- Route Metrics -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div class="px-6 py-5 sm:px-7 border-b border-gray-200">
+              <h3 class="text-lg font-semibold text-gray-900">
+                Метрики маршрута
+              </h3>
+              <p class="mt-1 text-sm text-gray-600">Детальная информация</p>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+              <RouteMetrics
+                :route="selectedRouteDetails"
+                :metrics="routeMetrics"
+                :is-loading="isLoadingRouteDetails"
+              />
+            </div>
+          </div>
+
+          <!-- Model Comparison -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+              <h3 class="text-lg font-semibold text-gray-900">
+                Сравнение моделей
+              </h3>
+              <p class="mt-1 text-sm text-gray-600">Производительность LLM</p>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+              <ModelComparison
+                :benchmark-results="modelComparison?.models || []"
+                :recommendations="modelComparison?.recommendations || []"
+                :is-loading="isLoadingComparison"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Metrics -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 mt-6">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">
+                Последние метрики
+              </h3>
+              <p class="mt-1 text-sm text-gray-600">
+                История выполнения оптимизаций
+              </p>
+            </div>
+            <button
+              @click="loadMetrics"
+              :disabled="isLoadingMetrics"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg
+                class="h-4 w-4 mr-2"
+                :class="{ 'animate-spin': isLoadingMetrics }"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              {{ isLoadingMetrics ? 'Загрузка...' : 'Обновить' }}
+            </button>
+          </div>
+        </div>
+        <div class="px-4 py-5 sm:p-6">
+          <MetricsTable
+            :metrics="allMetrics"
+            :is-loading="isLoadingMetrics"
+            :sortable="true"
+            :sort-field="metricsSortField"
+            :sort-direction="metricsSortDirection"
+            @sort="handleMetricsSort"
+          />
+        </div>
+      </div>
+
+      <RouteCompareModal
+        :open="isRouteComparisonOpen"
+        :comparison="routeComparison"
+        :route-name="comparisonRouteName"
+        :is-loading="isLoadingRouteComparison"
+        :error="routeComparisonError"
+        @close="closeRouteComparison"
+      />
+    </template>
   </div>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import RouteList from '@/components/dashboard/RouteList.vue'
+import RouteCompareModal from '@/components/dashboard/RouteCompareModal.vue'
+import RouteMetrics from '@/components/dashboard/RouteMetrics.vue'
+import ModelComparison from '@/components/dashboard/ModelComparison.vue'
+import MetricsTable from '@/components/dashboard/MetricsTable.vue'
+import HealthStatus from '@/components/dashboard/HealthStatus.vue'
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import InfoStatCard from '@/components/common/InfoStatCard.vue'
+import {
+  fetchRoutes,
+  fetchRouteDetails,
+  fetchRouteComparison,
+  getMetrics,
+  compareModels,
+  checkHealth,
+  getApiErrorMessage,
+  type Route,
+  type RouteDetails,
+  type RouteComparison,
+  type Metric,
+  type ModelComparison as ApiModelComparison,
+  type HealthStatus as HealthStatusType,
+  type PaginatedResponse
+} from '@/services/api'
+
+// Types
+type RouteSortField =
+  | 'created_at'
+  | 'total_distance_km'
+  | 'total_time_hours'
+  | 'total_cost_rub'
+  | 'model_used'
+  | 'name'
+type MetricsSortField =
+  | 'model'
+  | 'route_id'
+  | 'response_time_ms'
+  | 'quality_score'
+  | 'cost_rub'
+  | 'timestamp'
+type SortDirection = 'asc' | 'desc'
+
+// State
+const isLoadingStats = ref(true)
+const isLoadingRoutes = ref(true)
+const isLoadingRouteDetails = ref(false)
+const isLoadingMetrics = ref(false)
+const isLoadingComparison = ref(true)
+const isRefreshing = ref(false)
+
+const error = ref<string | null>(null)
+
+const routes = ref<PaginatedResponse<Route>>({ total: 0, items: [] })
+const selectedRouteId = ref<string | null>(null)
+const selectedRouteDetails = ref<RouteDetails | null>(null)
+const routeMetrics = ref<Metric[]>([])
+const allMetrics = ref<Metric[]>([])
+const modelComparison = ref<ApiModelComparison | null>(null)
+const healthStatus = ref<HealthStatusType | null>(null)
+const isRouteComparisonOpen = ref(false)
+const isLoadingRouteComparison = ref(false)
+const routeComparison = ref<RouteComparison | null>(null)
+const routeComparisonError = ref<string | null>(null)
+const comparisonRouteId = ref<string | null>(null)
+
+// Sort state
+const routeSortField = ref<RouteSortField>('created_at')
+const routeSortDirection = ref<SortDirection>('desc')
+const metricsSortField = ref<MetricsSortField>('timestamp')
+const metricsSortDirection = ref<SortDirection>('desc')
+
+// Computed
+const averageTime = computed(() => {
+  if (!routes.value.items.length) return '0.0'
+  const sum = routes.value.items.reduce(
+    (acc, route) => acc + (route.total_time_hours ?? 0),
+    0
+  )
+  return (sum / routes.value.items.length).toFixed(1)
+})
+
+const averageCost = computed(() => {
+  if (!routes.value.items.length) return 0
+  const sum = routes.value.items.reduce(
+    (acc, route) => acc + (route.total_cost_rub ?? 0),
+    0
+  )
+  return Math.round(sum / routes.value.items.length)
+})
+
+const comparisonRouteName = computed(() => {
+  if (!comparisonRouteId.value) return null
+  return routes.value.items.find((route) => route.id === comparisonRouteId.value)?.name ?? null
+})
+
+// Sort functions
+const sortRoutes = (routes: Route[]): Route[] => {
+  return [...routes].sort((a, b) => {
+    let aValue: any = a[routeSortField.value]
+    let bValue: any = b[routeSortField.value]
+
+    if (routeSortField.value === 'created_at') {
+      aValue = new Date(aValue).getTime()
+      bValue = new Date(bValue).getTime()
+    }
+
+    if (aValue < bValue) return routeSortDirection.value === 'asc' ? -1 : 1
+    if (aValue > bValue) return routeSortDirection.value === 'asc' ? 1 : -1
+    return 0
+  })
+}
+
+const sortMetrics = (metrics: Metric[]): Metric[] => {
+  return [...metrics].sort((a, b) => {
+    if (metricsSortField.value === 'timestamp') {
+      const aTime = new Date(a.timestamp).getTime()
+      const bTime = new Date(b.timestamp).getTime()
+      return metricsSortDirection.value === 'asc'
+        ? aTime - bTime
+        : bTime - aTime
+    }
+
+    if (
+      metricsSortField.value === 'model' ||
+      metricsSortField.value === 'route_id'
+    ) {
+      const aValue = a[metricsSortField.value]
+      const bValue = b[metricsSortField.value]
+
+      if (aValue < bValue) return metricsSortDirection.value === 'asc' ? -1 : 1
+      if (aValue > bValue) return metricsSortDirection.value === 'asc' ? 1 : -1
+      return 0
+    }
+
+    const aValue = a[metricsSortField.value] as number
+    const bValue = b[metricsSortField.value] as number
+
+    if (aValue < bValue) return metricsSortDirection.value === 'asc' ? -1 : 1
+    if (aValue > bValue) return metricsSortDirection.value === 'asc' ? 1 : -1
+    return 0
+  })
+}
+
+// Handlers
+const handleRouteSort = (field: RouteSortField, direction: SortDirection) => {
+  routeSortField.value = field
+  routeSortDirection.value = direction
+  routes.value = {
+    total: routes.value.total,
+    items: sortRoutes(routes.value.items)
+  }
+}
+
+const handleMetricsSort = (
+  field: MetricsSortField,
+  direction: SortDirection
+) => {
+  metricsSortField.value = field
+  metricsSortDirection.value = direction
+  allMetrics.value = sortMetrics(allMetrics.value)
+}
+
+const handleRouteSelect = async (routeId: string) => {
+  if (selectedRouteId.value === routeId) return
+
+  selectedRouteId.value = routeId
+  await loadRouteDetails(routeId)
+}
+
+const openRouteComparison = async (routeId: string) => {
+  comparisonRouteId.value = routeId
+  isRouteComparisonOpen.value = true
+  isLoadingRouteComparison.value = true
+  routeComparison.value = null
+  routeComparisonError.value = null
+
+  try {
+    routeComparison.value = await fetchRouteComparison(routeId)
+  } catch (err: any) {
+    routeComparisonError.value = getApiErrorMessage(
+      err,
+      'История сравнения для этого маршрута недоступна',
+    )
+  } finally {
+    isLoadingRouteComparison.value = false
+  }
+}
+
+const closeRouteComparison = () => {
+  isRouteComparisonOpen.value = false
+  isLoadingRouteComparison.value = false
+  routeComparison.value = null
+  routeComparisonError.value = null
+  comparisonRouteId.value = null
+}
+
+// Data loading functions
+const loadDashboardData = async () => {
+  isLoadingStats.value = true
+  isLoadingRoutes.value = true
+  isLoadingComparison.value = true
+  error.value = null
+
+  // Загружаем данные независимо — ошибка одного не блокирует остальные
+  const [routesResult, comparisonResult, healthResult] = await Promise.allSettled([
+    fetchRoutes(0, 100),
+    compareModels(),
+    checkHealth()
+  ])
+
+  if (routesResult.status === 'fulfilled') {
+    const routesData = routesResult.value
+    routes.value = {
+      total: routesData.total,
+      items: sortRoutes(routesData.items ?? [])
+    }
+    if ((routesData.items?.length ?? 0) > 0) {
+      selectedRouteId.value = routesData.items[0].id
+      await loadRouteDetails(routesData.items[0].id)
+    }
+  } else {
+    error.value = getApiErrorMessage(routesResult.reason, 'Не удалось загрузить данные')
+    console.error('Routes loading error:', routesResult.reason)
+  }
+
+  if (comparisonResult.status === 'fulfilled') {
+    modelComparison.value = comparisonResult.value
+  } else {
+    console.error('Comparison loading error:', comparisonResult.reason)
+  }
+
+  if (healthResult.status === 'fulfilled') {
+    healthStatus.value = healthResult.value
+  } else {
+    console.error('Health check error:', healthResult.reason)
+  }
+
+  isLoadingStats.value = false
+  isLoadingRoutes.value = false
+  isLoadingComparison.value = false
+}
+
+const loadRouteDetails = async (routeId: string) => {
+  if (!routeId) return
+
+  try {
+    isLoadingRouteDetails.value = true
+
+    const [details, metricsData] = await Promise.all([
+      fetchRouteDetails(routeId),
+      getMetrics()
+    ])
+
+    selectedRouteDetails.value = details
+    routeMetrics.value = (metricsData?.metrics ?? []).filter(
+      (m) => m.route_id === routeId
+    )
+  } catch (err: any) {
+    console.error(`Error loading route ${routeId} details:`, err)
+  } finally {
+    isLoadingRouteDetails.value = false
+  }
+}
+
+const loadMetrics = async () => {
+  try {
+    isLoadingMetrics.value = true
+    const metricsData = await getMetrics()
+    allMetrics.value = sortMetrics(metricsData?.metrics ?? [])
+  } catch (err: any) {
+    console.error('Metrics loading error:', err)
+  } finally {
+    isLoadingMetrics.value = false
+  }
+}
+
+const refreshAllData = async () => {
+  isRefreshing.value = true
+  await Promise.all([loadDashboardData(), loadMetrics()])
+  isRefreshing.value = false
+}
+
+// Lifecycle
+onMounted(() => {
+  loadDashboardData()
+  loadMetrics()
+})
+</script>

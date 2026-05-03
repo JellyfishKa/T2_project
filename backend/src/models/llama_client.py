@@ -1,24 +1,30 @@
 import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime
 from time import time
-from typing import (
-    Dict,
-    List,
-)
+from typing import Dict, List
 
 try:
     from llama_cpp import Llama
-except ImportError:
+except ImportError as exc:
     raise ImportError(
         "Please install llama-cpp-python: pip install llama-cpp-python",
-    )
+    ) from exc
 
 from src.config import settings
 from src.models.exceptions import (
     LlamaServerError,
     LlamaValidationError,
+)
+from src.models.geo_utils import (
+    build_constraints_text,
+    build_nearest_neighbors,
+    compute_distance_matrix,
+    detect_region_info,
+    format_locations_compact,
+    format_nearest_neighbors,
 )
 from src.models.llm_client import LLMClient
 from src.models.schemas import (
@@ -36,13 +42,15 @@ class LlamaClient(LLMClient):
         self.model_name = settings.llama_model_id
         self.timeout = 120
         try:
-            self.model_path = settings.get_model_path(settings.llama_model_id)
-        except FileNotFoundError as e:
-            logger.error(str(e))
+            self.model_path = settings.get_model_path(
+                settings.llama_model_id,
+            )
+        except FileNotFoundError as exc:
+            logger.error(str(exc))
             self.model_path = None
 
     def _get_generator(self):
-        """Lazy Loading модели через llama.cpp."""
+        """Lazy loading модели через llama.cpp."""
         if LlamaClient._llm is None:
             if not self.model_path:
                 raise LlamaServerError(
@@ -51,27 +59,35 @@ class LlamaClient(LLMClient):
                 )
 
             try:
-                logger.info(f"Loading GGUF model from {self.model_path}...")
+                logger.info(
+                    "Loading GGUF model from %s...",
+                    self.model_path,
+                )
                 LlamaClient._llm = Llama(
                     model_path=self.model_path,
                     n_threads=8,
                     n_threads_batch=8,
                     n_gpu_layers=-1,
-                    n_batch=256,
-                    n_ctx=4096,
+                    n_batch=512,
+                    n_ctx=49152,  # 48K — достаточно для 50 точек (~40K токенов)
                     verbose=True,
                 )
                 logger.info("Llama GGUF model loaded successfully.")
-            except Exception as e:
-                logger.error(f"Critical error loading GGUF model: {e}")
-                raise LlamaServerError(f"Failed to load GGUF model: {e}")
+            except Exception as exc:
+                logger.error(
+                    "Critical error loading GGUF model: %s",
+                    exc,
+                )
+                raise LlamaServerError(
+                    f"Failed to load GGUF model: {exc}",
+                ) from exc
 
         return LlamaClient._llm
 
     async def generate_route(
         self,
         locations: List[Location],
-        constraints: Dict = None,
+        constraints: Dict | None = None,
     ) -> Route:
         if not locations:
             raise LlamaValidationError("Locations list is empty")
@@ -87,30 +103,56 @@ class LlamaClient(LLMClient):
                     locations_data,
                     constraints,
                 )
-                logger.info(f"RAW MODEL RESPONSE (Attempt {attempt}):\n{response_text}")
-                result = self._parse_response(response_text, locations)
+
+                logger.info(
+                    "RAW MODEL RESPONSE (Attempt %s):\n%s",
+                    attempt,
+                    response_text,
+                )
+
+                result = self._parse_response(
+                    response_text,
+                    locations,
+                )
 
                 duration = time() - start_time
                 if duration > 5.0:
-                    logger.warning(f"Llama slow response: {duration:.2f}s")
+                    logger.warning(
+                        "Llama slow response: %.2fs",
+                        duration,
+                    )
 
                 return result
 
-            except Exception as e:
+            except Exception as exc:
                 if attempt <= max_retries:
                     logger.warning(
-                        f"Retry {attempt}/{max_retries} due to: {e}",
+                        "Retry %s/%s due to: %s",
+                        attempt,
+                        max_retries,
+                        exc,
                     )
                 else:
                     logger.error("All retries exhausted.")
-                    raise LlamaServerError(f"Generation failed: {e}")
+                    raise LlamaServerError(
+                        f"Generation failed: {exc}",
+                    ) from exc
 
-    async def _run_inference(self, locations_data: List[Dict],
-                             constraints: Dict) -> str:
+    async def _run_inference(
+        self,
+        locations_data: List[Dict],
+        constraints: Dict | None,
+    ) -> str:
         llm = self._get_generator()
 
-        system_prompt = "You are a logistics expert. Output ONLY JSON."
-        user_prompt = self._construct_prompt(locations_data, constraints)
+        system_prompt = (
+            "You are a route optimizer. "
+            "Output ONLY valid JSON, no text."
+        )
+        user_prompt = self._construct_prompt(
+            locations_data,
+            constraints,
+        )
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -133,44 +175,50 @@ class LlamaClient(LLMClient):
         )
 
         content = output["choices"][0]["message"]["content"]
+
         if not content.endswith("}") and "{" in content:
             content += "}"
+
         return content
 
     def _construct_prompt(
         self,
         locations: List[Dict],
-        constraints: Dict,
+        constraints: Dict | None,
     ) -> str:
-        locations_json = json.dumps(locations, ensure_ascii=False)
-        constraints_str = json.dumps(constraints) if constraints else "{}"
+        # Используем nearest-neighbors вместо всех пар:
+        # 50 точек × 3 соседа = 150 строк вместо 1225 (O(n²) → O(n·k))
+        region = detect_region_info(locations)
+        dm = compute_distance_matrix(locations)
+        nn = build_nearest_neighbors(dm, k=3)
 
-        return f"""
-        Role: You are a professional logistics expert specializing
-        in route optimization in Russia.
-        Task:
-        1. Optimize the route for the provided locations.
-        2. Prioritize high-priority points.
-        3. Estimate the total cost in RUB based on average petrol prices
-        for the region identified in the addresses.
+        locations_text = format_locations_compact(locations)
+        nn_text = format_nearest_neighbors(locations, nn)
+        constraints_text = build_constraints_text(constraints)
 
-        Input Data:
-        Locations: {locations_json}
-        Constraints: {constraints_str}
+        fuel_rate = (constraints or {}).get("fuel_rate", 7.0)
+        speed = 25 if region["classification"] == "urban" else 40
+        n = len(locations)
 
-        Output Format:
-        Return ONLY a valid JSON object matching exactly this schema
-        (no markdown, no comments):
-        {{
-            "route_id": "string",
-            "locations_sequence": ["id_from_input", ...],
-            "total_distance_km": float,
-            "total_time_hours": float,
-            "total_cost_rub": float,
-            "model_used": "{self.model_name}",
-            "created_at": "{datetime.now().isoformat()}"
-        }}
-        """
+        # Показываем первые 3 реальных ID без эллипсиса — модель копирует шаблон
+        # дословно, поэтому ",...," приводит к невалидному JSON
+        sample_ids = '","'.join(loc["ID"] for loc in locations[:min(3, n)])
+
+        return (
+            f"Optimize delivery route: {n} stops, "
+            f"{region['classification']} area ({region['area_km2']} km2).\n\n"
+            f"STOPS (ID|name|lat,lon|priority):\n{locations_text}\n\n"
+            f"NEAREST 3 NEIGHBORS per stop:\n{nn_text}\n\n"
+            f"RULES: {constraints_text} "
+            f"Speed={speed}km/h + 15min/stop. "
+            f"Cost=dist*{fuel_rate}rub/km. "
+            f"Priority A>B>C>D. Visit ALL stops once.\n\n"
+            f"Return ONLY valid JSON — reorder ALL {n} IDs optimally:\n"
+            f'{{"locations_sequence":["{sample_ids}"],'
+            f'"total_distance_km":0.0,'
+            f'"total_time_hours":0.0,'
+            f'"total_cost_rub":0.0}}'
+        )
 
     def _parse_response(
         self,
@@ -178,9 +226,9 @@ class LlamaClient(LLMClient):
         original_locations: List[Location],
     ) -> Route:
         try:
-            logger.info(f"content: {text_content}")
-            print(text_content)
+            logger.info("content: %s", text_content)
             text_content = text_content.strip()
+
             if text_content.startswith("```json"):
                 text_content = text_content[7:]
             if text_content.endswith("```"):
@@ -188,25 +236,149 @@ class LlamaClient(LLMClient):
 
             json_start = text_content.find("{")
             json_end = text_content.rfind("}") + 1
+
             if json_start == -1 or json_end == 0:
                 raise ValueError("No JSON brackets found")
 
             clean_json = text_content[json_start:json_end]
             data = json.loads(clean_json)
 
+            new_route_id = str(uuid.uuid4())
+
             return Route(
-                ID=str(data.get("route_id", f"llama-{int(time())}")),
+                ID=new_route_id,
                 name="Optimized Route (Llama GGUF)",
                 locations=original_locations,
-                total_distance_km=float(data.get("total_distance_km", 0)),
-                total_time_hours=float(data.get("total_time_hours", 0)),
-                total_cost_rub=float(data.get("total_cost_rub", 0)),
+                total_distance_km=float(
+                    data.get("total_distance_km", 0),
+                ),
+                total_time_hours=float(
+                    data.get("total_time_hours", 0),
+                ),
+                total_cost_rub=float(
+                    data.get("total_cost_rub", 0),
+                ),
                 model_used="llama-gguf-local",
                 created_at=datetime.now(),
             )
-        except Exception as e:
-            logger.error(f"JSON Parse Error. Raw text: {text_content}")
-            raise LlamaServerError(f"Failed to parse model response: {e}")
+
+        except Exception as exc:
+            logger.error(
+                "JSON Parse Error. Raw text: %s",
+                text_content,
+            )
+            raise LlamaServerError(
+                f"Failed to parse model response: {exc}",
+            ) from exc
+
+    async def evaluate_variants(
+        self,
+        variants: List[Dict],
+    ) -> List[Dict]:
+        """
+        Просит LLM оценить варианты маршрута и сгенерировать pros/cons.
+        При ошибке возвращает пустой список (graceful fallback).
+        """
+        if not variants:
+            return []
+
+        prompt = self._construct_evaluation_prompt(variants)
+
+        try:
+            llm = self._get_generator()
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a logistics analyst. "
+                        "Output ONLY valid JSON array, no text."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ]
+
+            loop = asyncio.get_event_loop()
+            output = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: llm.create_chat_completion(
+                        messages=messages,
+                        max_tokens=512,
+                        temperature=0.3,
+                        repeat_penalty=1.2,
+                    ),
+                ),
+                timeout=90,
+            )
+
+            content = output["choices"][0]["message"]["content"] or ""  # type: ignore[union-attr]
+            logger.info("RAW EVALUATION RESPONSE (Llama):\n%s", content)
+            return self._parse_evaluation_response(content)
+
+        except Exception as exc:
+            logger.warning("evaluate_variants (Llama) failed: %s", exc)
+            return []
+
+    def _construct_evaluation_prompt(self, variants: List[Dict]) -> str:
+        lines = []
+        for v in variants:
+            m = v.get("metrics", {})
+            lines.append(
+                f"Option {v['id']} ({v['name']}): "
+                f"distance={m.get('distance_km', 0):.1f}km, "
+                f"time={m.get('time_hours', 0):.1f}h, "
+                f"cost={m.get('cost_rub', 0):.0f}rub"
+            )
+        variants_text = "\n".join(lines)
+        example_items = ",".join(
+            f'{{"id":{v["id"]},"pros":["text","text"],"cons":["text","text"]}}'
+            for v in variants
+        )
+        return (
+            f"Analyze {len(variants)} delivery route options. "
+            f"For each, provide exactly 2 advantages and 2 disadvantages "
+            f"in Russian (short phrases, max 8 words each).\n\n"
+            f"{variants_text}\n\n"
+            f"Return ONLY valid JSON array, no markdown:\n"
+            f"[{example_items}]"
+        )
+
+    def _parse_evaluation_response(self, text: str) -> List[Dict]:
+        try:
+            clean = text.strip()
+            if "```" in clean:
+                parts = clean.split("```")
+                for part in parts:
+                    if "[" in part:
+                        clean = part.lstrip("json").strip()
+                        break
+
+            arr_start = clean.find("[")
+            arr_end = clean.rfind("]") + 1
+            if arr_start == -1 or arr_end == 0:
+                return []
+
+            data = json.loads(clean[arr_start:arr_end])
+            if not isinstance(data, list):
+                return []
+
+            result = []
+            for item in data:
+                if isinstance(item, dict) and "id" in item:
+                    result.append({
+                        "id": item["id"],
+                        "pros": item.get("pros", []) if isinstance(item.get("pros"), list) else [],
+                        "cons": item.get("cons", []) if isinstance(item.get("cons"), list) else [],
+                    })
+            return result
+
+        except Exception as exc:
+            logger.warning(
+                "Evaluation parse error: %s. Text: %s",
+                exc,
+                text[:200],
+            )
+            return []
 
     async def analyze_metrics(self, data: Dict) -> str:
         return "Not implemented"

@@ -1,0 +1,344 @@
+
+import logging
+import math
+from calendar import monthrange
+from collections import defaultdict
+from datetime import date, timedelta
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
+
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.database.models import Location, SalesRep, VisitSchedule
+from src.models.geo_utils import compute_distance_matrix, compute_route_metrics, infer_category
+
+from src.utils.timing import timed_log
+
+logger = logging.getLogger("schedule_planner")
+
+# ---------------------------------------------------------------------------
+# Константы
+# ---------------------------------------------------------------------------
+WORK_START_HOUR = 9
+WORK_END_HOUR = 18
+VISIT_DURATION_MIN = 15        # минут на одну ТТ
+AVG_TRAVEL_MIN_PER_TT = 20    # средние затраты времени на переезд к ТТ
+LUNCH_BREAK_MIN = 30           # обед
+WORK_MINUTES = (WORK_END_HOUR - WORK_START_HOUR) * 60   # 540 мин
+
+MAX_TT_PER_DAY = math.floor(
+    (WORK_MINUTES - LUNCH_BREAK_MIN) / (VISIT_DURATION_MIN + AVG_TRAVEL_MIN_PER_TT)
+)   # floor(510/35) = 14 ТТ/день
+MAX_ROUTE_HOURS_PER_DAY = (WORK_MINUTES - LUNCH_BREAK_MIN) / 60 - 0.5  # 0.5h buffer for road variability
+
+CATEGORY_PRIORITY = {"A": 1, "B": 2, "C": 3, "D": 4}
+
+# ---------------------------------------------------------------------------
+# Российские праздники 2026 (используются для сидирования БД)
+# ---------------------------------------------------------------------------
+HOLIDAYS_2026: List[Tuple[date, str]] = [
+    (date(2026, 1, 1),  "Новый год"),
+    (date(2026, 1, 2),  "Новогодние каникулы"),
+    (date(2026, 1, 3),  "Новогодние каникулы"),
+    (date(2026, 1, 4),  "Новогодние каникулы"),
+    (date(2026, 1, 5),  "Новогодние каникулы"),
+    (date(2026, 1, 6),  "Новогодние каникулы"),
+    (date(2026, 1, 7),  "Рождество Христово"),
+    (date(2026, 1, 8),  "Новогодние каникулы"),
+    (date(2026, 1, 9),  "Перенос (Новый год)"),
+    (date(2026, 2, 23), "День защитника Отечества"),
+    (date(2026, 3, 8),  "Международный женский день"),
+    (date(2026, 3, 9),  "Перенос (Женский день)"),
+    (date(2026, 5, 1),  "Праздник Весны и Труда"),
+    (date(2026, 5, 9),  "День Победы"),
+    (date(2026, 5, 11), "Перенос (День Победы)"),
+    (date(2026, 6, 12), "День России"),
+    (date(2026, 11, 4), "День народного единства"),
+]
+
+
+# ---------------------------------------------------------------------------
+# Вспомогательные функции
+# ---------------------------------------------------------------------------
+
+def _is_working_day(d: date, non_working: FrozenSet[date]) -> bool:
+    """Рабочий день: не выходной и не праздник."""
+    return d.weekday() < 5 and d not in non_working
+
+
+def _working_days(year: int, month: int, non_working: FrozenSet[date] = frozenset()) -> List[date]:
+    """Возвращает список рабочих дней месяца (пн–пт, без праздников)."""
+    _, last = monthrange(year, month)
+    return [
+        date(year, month, d)
+        for d in range(1, last + 1)
+        if _is_working_day(date(year, month, d), non_working)
+    ]
+
+
+def _week_groups(days: List[date]) -> List[List[date]]:
+    """Разбивает рабочие дни на рабочие недели (по ISO год+неделя)."""
+    groups: Dict[Tuple[int, int], List[date]] = defaultdict(list)
+    for d in days:
+        iso = d.isocalendar()
+        groups[(iso[0], iso[1])].append(d)
+    return [v for v in groups.values()]
+
+
+def _visit_dates(
+    category: str,
+    work_weeks: List[List[date]],
+    all_days: List[date],
+    quarter_month: int,   # номер первого месяца квартала (1, 4, 7, 10)
+    current_month: int,
+) -> List[date]:
+    """Вычисляет плановые даты визитов для ТТ с данной категорией."""
+    if not work_weeks or not all_days:
+        return []
+
+    def _first_day(week_idx: int) -> Optional[date]:
+        if week_idx < len(work_weeks):
+            return work_weeks[week_idx][0]
+        return None
+
+    if category == "A":
+        # 3 визита: 1-я, 2-я, 3-я рабочие недели
+        dates = [_first_day(i) for i in [0, 1, 2]]
+        return [d for d in dates if d]
+
+    elif category == "B":
+        # 2 визита: 1-я и 3-я (или 2-я если нет 3-й) рабочие недели
+        d1 = _first_day(0)
+        d2 = _first_day(2) or _first_day(1)
+        return [d for d in [d1, d2] if d]
+
+    elif category == "C":
+        # 1 визит: середина месяца
+        mid = all_days[len(all_days) // 2]
+        return [mid]
+
+    elif category == "D":
+        # 1 визит в квартал: только если текущий месяц = первый в квартале
+        if current_month == quarter_month:
+            return [all_days[0]]
+        return []
+
+    return []
+
+
+def _next_working_day(d: date, non_working: FrozenSet[date] = frozenset()) -> date:
+    """Следующий рабочий день после d (не выходной и не праздник)."""
+    nxt = d + timedelta(days=1)
+    while not _is_working_day(nxt, non_working):
+        nxt += timedelta(days=1)
+    return nxt
+
+
+def _estimate_route_hours(locations: List[Location]) -> float:
+    """Оценка длительности дневного маршрута с учётом переездов между ТТ."""
+    if not locations:
+        return 0.0
+    if len(locations) == 1:
+        return round(VISIT_DURATION_MIN / 60, 2)
+
+    points = [
+        {
+            "ID": location.id,
+            "name": location.name,
+            "lat": location.lat,
+            "lon": location.lon,
+            "priority": infer_category(location.category or "C"),
+        }
+        for location in locations
+    ]
+    matrix = compute_distance_matrix(points)
+    priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+    start_idx = min(
+        range(len(points)),
+        key=lambda idx: priority_rank.get(points[idx]["priority"], 3),
+    )
+
+    visited = [False] * len(points)
+    order = [start_idx]
+    visited[start_idx] = True
+
+    for _ in range(len(points) - 1):
+        current_idx = order[-1]
+        next_idx = min(
+            (idx for idx in range(len(points)) if not visited[idx]),
+            key=lambda idx: matrix[current_idx][idx],
+        )
+        order.append(next_idx)
+        visited[next_idx] = True
+
+    ordered_ids = [points[idx]["ID"] for idx in order]
+    _, total_time_hours, _ = compute_route_metrics(points, ordered_ids)
+    return total_time_hours
+
+
+# ---------------------------------------------------------------------------
+# Основной планировщик
+# ---------------------------------------------------------------------------
+
+class SchedulePlanner:
+    def __init__(self, db: AsyncSession, non_working_dates: Optional[Set[date]] = None):
+        self.db = db
+        self.non_working: FrozenSet[date] = (
+            frozenset(non_working_dates) if non_working_dates is not None
+            else frozenset(d for d, _ in HOLIDAYS_2026)
+        )
+
+    @timed_log("schedule_gen")
+    async def build_monthly_plan(
+        self,
+        month_str: str,
+        rep_ids: Optional[List[str]] = None,
+        overwrite: bool = True,
+    ) -> dict:
+        """
+        Генерирует план визитов на месяц и сохраняет его в БД.
+
+        :param month_str: Строка вида "YYYY-MM"
+        :param rep_ids:   Список ID сотрудников. None → все активные.
+        :param overwrite: Если True — удаляет старый план на этот месяц.
+        :return: Словарь со статистикой.
+        """
+        year, month = map(int, month_str.split("-"))
+
+        # --- Загрузка данных ---
+        locations = await self._load_locations()
+        reps = await self._load_reps(rep_ids)
+        if not reps:
+            return {"error": "Нет активных сотрудников"}
+        if not locations:
+            return {"error": "Нет торговых точек с категорией A/B/C/D в базе"}
+
+        # --- Рабочие дни и недели ---
+        all_days = _working_days(year, month, self.non_working)
+        work_weeks = _week_groups(all_days)
+
+        # Первый месяц текущего квартала
+        quarter_start_month = ((month - 1) // 3) * 3 + 1
+
+        # --- Строим пул задач: [(location_id, date, category), ...] ---
+        task_pool: List[Tuple[str, date, str]] = []
+        for loc in locations:
+            cat = loc.category  # уже отфильтровано до A/B/C/D
+            dates = _visit_dates(cat, work_weeks, all_days, quarter_start_month, month)
+            for d in dates:
+                task_pool.append((loc.id, d, cat))
+
+        # --- Удаляем старый план если нужно ---
+        if overwrite:
+            month_start = date(year, month, 1)
+            _, last_day = monthrange(year, month)
+            month_end = date(year, month, last_day)
+            await self.db.execute(
+                delete(VisitSchedule).where(
+                    VisitSchedule.planned_date >= month_start,
+                    VisitSchedule.planned_date <= month_end,
+                )
+            )
+            await self.db.flush()
+
+        # --- Распределение по сотрудникам ---
+        # Сортируем задачи по (целевая дата, приоритет категории)
+        sorted_tasks = sorted(
+            task_pool,
+            key=lambda t: (t[1], CATEGORY_PRIORITY.get(t[2], 4))
+        )
+
+        logger.info(
+            "build_monthly_plan %s: %d ТТ, %d сотрудников, %d задач",
+            month_str, len(locations), len(reps), len(task_pool),
+        )
+        locations_by_id = {location.id: location for location in locations}
+        rep_day_locations: Dict[Tuple[str, date], List[Location]] = defaultdict(list)
+        schedule_rows: List[VisitSchedule] = []
+
+        for (loc_id, target_d, cat) in sorted_tasks:
+            check_date = target_d
+            assigned = False
+            location = locations_by_id.get(loc_id)
+            if location is None:
+                continue
+
+            # Ограниченный lookahead: не дальше ~2 месяца
+            for _ in range(60):  # hard limit ~2 months lookahead
+                # Пропускаем выходные и праздники
+                if not _is_working_day(check_date, self.non_working):
+                    check_date = _next_working_day(check_date, self.non_working)
+                    continue
+
+                candidates = []
+                for rep in reps:
+                    day_key = (rep.id, check_date)
+                    current_locations = rep_day_locations[day_key]
+                    projected_locations = current_locations + [location]
+                    if len(projected_locations) > MAX_TT_PER_DAY:
+                        continue
+
+                    projected_hours = _estimate_route_hours(projected_locations)
+                    if projected_hours <= MAX_ROUTE_HOURS_PER_DAY:
+                        candidates.append((projected_hours, len(current_locations), rep))
+
+                if candidates:
+                    projected_hours, _, best_rep = min(
+                        candidates,
+                        key=lambda item: (item[0], item[1], item[2].id),
+                    )
+                    schedule_rows.append(VisitSchedule(
+                        location_id=loc_id,
+                        rep_id=best_rep.id,
+                        planned_date=check_date,
+                        status="planned",
+                    ))
+                    rep_day_locations[(best_rep.id, check_date)].append(location)
+                    assigned = True
+                    break
+
+                check_date = _next_working_day(check_date, self.non_working)
+
+            if not assigned:
+                logger.warning(
+                    "Не удалось запланировать ТТ %s в месяце %s", loc_id, month_str
+                )
+
+        # --- Batch insert ---
+        for row in schedule_rows:
+            self.db.add(row)
+        await self.db.commit()
+
+        # --- Статистика ---
+        total_locations = len(locations)
+        planned_locs = {row.location_id for row in schedule_rows}
+        coverage_pct = (
+            round(len(planned_locs) / total_locations * 100, 1) if total_locations else 0
+        )
+
+        logger.info(
+            "Месячный план %s: %d визитов, %d ТТ охвачено (%.1f%%), max %d ТТ/день/сотрудник",
+            month_str, len(schedule_rows), len(planned_locs), coverage_pct, MAX_TT_PER_DAY,
+        )
+        return {
+            "month": month_str,
+            "total_visits_planned": len(schedule_rows),
+            "total_tt_planned": len(planned_locs),
+            "total_locations": total_locations,
+            "coverage_pct": coverage_pct,
+            "reps_count": len(reps),
+        }
+
+    async def _load_locations(self) -> List[Location]:
+        """Загружает только ТТ с категорией A/B/C/D (исключает данные без категории)."""
+        result = await self.db.execute(
+            select(Location).where(Location.category.in_(["A", "B", "C", "D"]))
+        )
+        return result.scalars().all()
+
+    async def _load_reps(self, rep_ids: Optional[List[str]]) -> List[SalesRep]:
+        stmt = select(SalesRep).where(SalesRep.status == "active")
+        if rep_ids:
+            stmt = stmt.where(SalesRep.id.in_(rep_ids))
+        result = await self.db.execute(stmt)
+        return result.scalars().all()

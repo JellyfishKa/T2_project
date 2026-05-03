@@ -14,9 +14,11 @@ router = APIRouter(prefix="/qwen", tags=["Qwen LLM"])
 async def optimize_route(
     locations: List[Location],
     constraints: Dict = None,
-    # ML-6: опционально вернуть рекомендацию селектора (какую модель лучше использовать)
-    include_recommendation: bool = Query(False, description="Добавить в ответ recommendation (model + reason)"),
-    time_constraint: Optional[str] = Query(None, description="urgent | quality | reliability"),
+    include_recommendation: bool = Query(False, description="Добавить в ответ"
+                                         "recommendation (model + reason)"),
+    time_constraint: Optional[str] = Query(None,
+                                           description="urgent |"
+                                           "quality | reliability"),
 ):
     client = QwenClient()
     try:

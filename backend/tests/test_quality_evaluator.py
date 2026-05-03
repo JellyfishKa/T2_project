@@ -1,7 +1,7 @@
 """
 Unit-тесты для оценки качества оптимизации маршрута (ML-4).
 Проверяют evaluate_route_quality и get_route_quality_metrics для контракта,
-общего для всех трёх моделей (GigaChat, Cotype, T-Pro).
+общего для двух моделей (Qwen, Llama) + Greedy.
 """
 
 import pytest
@@ -16,7 +16,7 @@ from src.services.quality_evaluator import (
 
 
 def _route(distance_km: float, time_minutes: float, cost_rub: float, constraints_satisfied: bool):
-    """Хелпер: маршрут в формате, ожидаемом evaluator (подходит для любой из 3 моделей)."""
+    """Хелпер: маршрут в формате, ожидаемом evaluator (подходит для любой модели)."""
     return {
         "distance_km": distance_km,
         "time_minutes": time_minutes,
@@ -41,7 +41,6 @@ class TestEvaluateRouteQuality:
         original = _route(100.0, 60.0, 100.0, False)
         optimized = _route(0.0, 0.0, 0.0, True)
         score = evaluate_route_quality(original, optimized)
-        # 40%*100 + 30%*100 + 20%*100 + 10%*100 = 100
         assert score == 100.0
 
     def test_no_improvement_zero_constraints(self):
@@ -53,7 +52,6 @@ class TestEvaluateRouteQuality:
 
     def test_weighted_average(self):
         """Итоговая оценка — взвешенное среднее 40/30/20/10."""
-        # 20% снижение расстояния, 0% времени и стоимости, ограничения да
         original = _route(100.0, 10.0, 10.0, False)
         optimized = _route(80.0, 10.0, 10.0, True)
         score = evaluate_route_quality(original, optimized)
@@ -70,27 +68,27 @@ class TestEvaluateRouteQuality:
     def test_partial_improvement(self):
         """Частичное улучшение: только расстояние и ограничения."""
         original = _route(100.0, 60.0, 50.0, False)
-        optimized = _route(70.0, 60.0, 50.0, True)  # -30% distance, constraints ok
+        optimized = _route(70.0, 60.0, 50.0, True)
         score = evaluate_route_quality(original, optimized)
         expected = WEIGHT_DISTANCE * 30 + WEIGHT_TIME * 0 + WEIGHT_COST * 0 + WEIGHT_CONSTRAINTS * 100
         assert abs(score - round(expected, 2)) < 0.01
 
-    def test_works_with_gigachat_style_output(self):
-        """Контракт маршрута совместим с выходом «модели» GigaChat (словарь с полями)."""
+    def test_works_with_qwen_style_output(self):
+        """Контракт маршрута совместим с выходом модели Qwen."""
         original = _route(10.5, 15.0, 100.0, True)
         optimized = _route(8.0, 12.0, 80.0, True)
         score = evaluate_route_quality(original, optimized)
         assert isinstance(score, float) and 0 <= score <= 100
 
-    def test_works_with_cotype_style_output(self):
-        """Контракт маршрута совместим с выходом «модели» Cotype."""
+    def test_works_with_llama_style_output(self):
+        """Контракт маршрута совместим с выходом модели Llama."""
         original = _route(20.0, 30.0, 200.0, False)
         optimized = _route(14.0, 21.0, 140.0, True)
         score = evaluate_route_quality(original, optimized)
         assert isinstance(score, float) and 0 <= score <= 100
 
-    def test_works_with_tpro_style_output(self):
-        """Контракт маршрута совместим с выходом «модели» T-Pro."""
+    def test_works_with_greedy_style_output(self):
+        """Контракт маршрута совместим с выходом Greedy algorithm."""
         original = _route(5.0, 10.0, 50.0, True)
         optimized = _route(4.0, 8.0, 40.0, True)
         score = evaluate_route_quality(original, optimized)
@@ -99,7 +97,7 @@ class TestEvaluateRouteQuality:
     def test_missing_keys_use_zero_or_false(self):
         """Отсутствующие ключи обрабатываются: числа как 0, constraints_satisfied как False."""
         original = _route(100.0, 50.0, 25.0, True)
-        optimized = {}  # пустой — нет улучшений
+        optimized = {}
         score = evaluate_route_quality(original, optimized)
         assert score == 0.0
 

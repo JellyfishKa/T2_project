@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 class LLMStatus(Enum):
@@ -54,6 +54,21 @@ class LLMClient(ABC):
 
         :param data: Произвольные метрики / Arbitrary metrics data
         :return: Результат анализа / Analysis result
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def evaluate_variants(
+        self,
+        variants: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Оценка готовых вариантов маршрута: генерация pros/cons для каждого.
+
+        Evaluate pre-computed route variants and generate pros/cons for each.
+
+        :param variants: Список вариантов с метриками / List of variants with metrics
+        :return: Список [{id, pros: [], cons: []}] / List of evaluations
         """
         raise NotImplementedError
 

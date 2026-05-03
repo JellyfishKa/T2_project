@@ -23,7 +23,8 @@ KEY_CONSTRAINTS_SATISFIED = "constraints_satisfied"
 
 
 def _reduction_pct(original: float, optimized: float) -> float:
-    """Процент снижения: (original - optimized) / original * 100. При original <= 0 возвращаем 0."""
+    """Процент снижения: (original - optimized) / original * 100.
+    При original <= 0 возвращаем 0."""
     if original is None or original <= 0:
         return 0.0
     opt = optimized if optimized is not None else original
@@ -32,7 +33,8 @@ def _reduction_pct(original: float, optimized: float) -> float:
 
 
 def _component_score(reduction_pct: float) -> float:
-    """Оценка компоненты по проценту снижения: 0–100, отрицательное снижение даёт 0."""
+    """Оценка компоненты по проценту снижения: 0–100,
+    отрицательное снижение даёт 0."""
     return max(0.0, min(100.0, reduction_pct))
 
 
@@ -49,14 +51,18 @@ def get_route_quality_metrics(
     - constraints_satisfied (bool): соблюдены ли ограничения
 
     Returns:
-        Словарь: distance_reduction_pct, time_reduction_pct, cost_reduction_pct,
-        constraints_satisfied, distance_score, time_score, cost_score, constraints_score.
+        Словарь: distance_reduction_pct,
+        time_reduction_pct, cost_reduction_pct,
+        constraints_satisfied, distance_score,
+        time_score, cost_score, constraints_score.
     """
     o_d = original.get(KEY_DISTANCE_KM) or 0.0
     o_t = original.get(KEY_TIME_MINUTES) or 0.0
     o_c = original.get(KEY_COST_RUB) or 0.0
-    opt_d = optimized.get(KEY_DISTANCE_KM) if KEY_DISTANCE_KM in optimized else o_d
-    opt_t = optimized.get(KEY_TIME_MINUTES) if KEY_TIME_MINUTES in optimized else o_t
+    opt_d = (optimized.get(KEY_DISTANCE_KM)
+             if KEY_DISTANCE_KM in optimized else o_d)
+    opt_t = (optimized.get(KEY_TIME_MINUTES)
+             if KEY_TIME_MINUTES in optimized else o_t)
     opt_c = optimized.get(KEY_COST_RUB) if KEY_COST_RUB in optimized else o_c
     if opt_d is None:
         opt_d = o_d
@@ -82,7 +88,8 @@ def get_route_quality_metrics(
     }
 
 
-def evaluate_route_quality(original: Dict[str, Any], optimized: Dict[str, Any]) -> float:
+def evaluate_route_quality(original: Dict[str, Any],
+                           optimized: Dict[str, Any]) -> float:
     """
     Оценка качества оптимизации маршрута: 0–100.
 
@@ -92,12 +99,13 @@ def evaluate_route_quality(original: Dict[str, Any], optimized: Dict[str, Any]) 
     - 20% — снижение стоимости (%);
     - 10% — соблюдение ограничений (да = 100, нет = 0).
 
-    Подходит для результатов любой из трёх моделей (GigaChat, Cotype, T-Pro):
+    Подходит для результатов любой из двух моделей (Qwen, Llama):
     на вход ожидаются словари с полями distance_km, time_minutes, cost_rub,
     constraints_satisfied.
 
     Args:
-        original: исходный маршрут (distance_km, time_minutes, cost_rub, constraints_satisfied).
+        original: исходный маршрут (distance_km, time_minutes,
+        cost_rub, constraints_satisfied).
         optimized: оптимизированный маршрут (те же поля).
 
     Returns:

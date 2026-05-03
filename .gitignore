@@ -1,6 +1,3 @@
-# Node
-node_modules/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -58,3 +55,25 @@ Thumbs.db
 /PM_files
 /frontend/node_modules
 *.pyc
+backend/src/models/qwen2-0_5b-instruct-q4_k_m.gguf
+backend/src/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf
+
+# Coverage artifacts
+htmlcov/
+coverage.xml
+.coverage
+
+# repowise API keys (local)
+.repowise/.env
+/.claude
+.mcp.json
+/.omc
+/.repowise
+/e2e/.omc
+/frontend/.omc
+/frontend/coverage
+backend/coverage.xml
+backend/.coverage
+/backend/.venv
+/backend/.omc
+/backend/test_tmp_outputs/
