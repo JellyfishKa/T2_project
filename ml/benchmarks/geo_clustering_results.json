@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-05-03T15:32:41",
+  "dataset": "C:\\Users\\drifl\\Documents\\GitHub\\T2_project\\ml\\data\\tt_250.csv",
+  "trade_points": 250,
+  "reps": [
+    "tp-1",
+    "tp-2",
+    "tp-3",
+    "tp-4",
+    "tp-5"
+  ],
+  "baseline": {
+    "algo": "category-only",
+    "elapsed_ms": 2.4,
+    "distance": {
+      "sum_km": 1244.43,
+      "avg_km": 35.56,
+      "p95_km": 49.51
+    },
+    "load": {
+      "tp-1": 75,
+      "tp-2": 75,
+      "tp-3": 75,
+      "tp-4": 75,
+      "tp-5": 75
+    },
+    "balance_score": 1.0
+  },
+  "candidates": {
+    "kmeans+balance": {
+      "elapsed_ms": 3357.39,
+      "distance": {
+        "sum_km": 375.95,
+        "avg_km": 10.74,
+        "p95_km": 17.24
+      },
+      "load": {
+        "tp-1": 75,
+        "tp-2": 75,
+        "tp-3": 75,
+        "tp-4": 75,
+        "tp-5": 75
+      },
+      "balance_score": 1.0,
+      "improvement_vs_baseline_pct": 69.79
+    },
+    "dbscan+pack": {
+      "elapsed_ms": 93.64,
+      "distance": {
+        "sum_km": 872.89,
+        "avg_km": 24.94,
+        "p95_km": 34.83
+      },
+      "load": {
+        "tp-1": 362,
+        "tp-2": 10,
+        "tp-3": 1,
+        "tp-4": 1,
+        "tp-5": 1
+      },
+      "balance_score": 0.0028,
+      "improvement_vs_baseline_pct": 29.86
+    },
+    "greedy-geo": {
+      "elapsed_ms": 12.35,
+      "distance": {
+        "sum_km": 479.76,
+        "avg_km": 14.54,
+        "p95_km": 23.15
+      },
+      "load": {
+        "tp-1": 22,
+        "tp-2": 84,
+        "tp-3": 104,
+        "tp-4": 79,
+        "tp-5": 86
+      },
+      "balance_score": 0.2115,
+      "improvement_vs_baseline_pct": 61.45
+    }
+  }
+}

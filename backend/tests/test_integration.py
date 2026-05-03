@@ -58,3 +58,18 @@ class TestIntegration:
         assert route.ID == "test_route"
         assert route.total_distance_km == 12.5
         assert route.model_used == "TestModel"
+
+    def test_geo_aware_planner_improves_distance(self):
+        """
+        TC-INT-GEO-001: geo-aware распределение снижает суммарную дистанцию >= 15% vs baseline
+        на тестовом датасете 250 ТТ.
+        """
+        from pathlib import Path
+
+        from ml.benchmarks.geo_clustering_benchmark import run_benchmark
+
+        res = run_benchmark(Path("ml/data/tt_250.csv"), month=(2026, 5, 1))
+        baseline = res["baseline"]["distance"]["sum_km"]
+        final = res["candidates"]["final-schedule-planner"]["distance"]["sum_km"]
+        assert baseline > 0
+        assert ((baseline - final) / baseline) >= 0.15
