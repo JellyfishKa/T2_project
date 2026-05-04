@@ -51,6 +51,8 @@ export interface SalesRep {
   status: 'active' | 'sick' | 'vacation' | 'unavailable'
   vehicle_id: string | null
   vehicle_name: string | null
+  home_lat: number
+  home_lon: number
   created_at: string
 }
 

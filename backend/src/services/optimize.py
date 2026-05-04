@@ -349,38 +349,32 @@ class Optimizer:
             return list(locations)
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
-        matrix = compute_distance_matrix(loc_dicts)
-        n = len(locations)
+        depot = {"lat": 54.1871, "lon": 45.1749}
+        all_dicts = [depot] + loc_dicts
+        matrix = compute_distance_matrix(all_dicts)
+        n = len(all_dicts)
 
         priority_penalty_km = {"A": 0.0, "B": 3.0, "C": 8.0, "D": 15.0}
-        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-
-        start = min(
-            range(n),
-            key=lambda i: priority_rank.get(
-                infer_category(getattr(locations[i], "priority", "C")), 3
-            ),
-        )
 
         visited = [False] * n
-        order = [start]
-        visited[start] = True
+        order = [0] # start from depot
+        visited[0] = True
 
         for _ in range(n - 1):
             cur = order[-1]
             nearest = min(
-                (j for j in range(n) if not visited[j]),
+                (j for j in range(1, n) if not visited[j]),
                 key=lambda j: (
                     0.6 * matrix[cur][j]
                     + 0.4 * priority_penalty_km.get(
-                        infer_category(getattr(locations[j], "priority", "C")), 8.0
+                        infer_category(getattr(locations[j - 1], "priority", "C")), 8.0
                     )
                 ),
             )
             order.append(nearest)
             visited[nearest] = True
 
-        return [locations[i] for i in order]
+        return [locations[i - 1] for i in order if i != 0]
 
     # ─── Генерация вариантов маршрута (без сохранения в БД) ──────────────────────
 
@@ -630,32 +624,27 @@ class Optimizer:
             return locations
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
-        matrix = compute_distance_matrix(loc_dicts)
-        n = len(locations)
-
-        # Старт — точка с наивысшим приоритетом
-        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-        start = min(
-            range(n),
-            key=lambda i: priority_rank.get(
-                infer_category(getattr(locations[i], "priority", "C")), 3
-            ),
-        )
+        # Добавляем depot как первую точку для матрицы расстояний
+        depot = {"lat": 54.1871, "lon": 45.1749}
+        all_dicts = [depot] + loc_dicts
+        matrix = compute_distance_matrix(all_dicts)
+        n = len(all_dicts)
 
         visited = [False] * n
-        order = [start]
-        visited[start] = True
+        order = [0] # start from depot
+        visited[0] = True
 
         for _ in range(n - 1):
             cur = order[-1]
             nearest = min(
-                (j for j in range(n) if not visited[j]),
+                (j for j in range(1, n) if not visited[j]),
                 key=lambda j: matrix[cur][j],
             )
             order.append(nearest)
             visited[nearest] = True
 
-        return [locations[i] for i in order]
+        # Убираем depot
+        return [locations[i - 1] for i in order if i != 0]
 
     async def _generate_with_fallback(
         self,

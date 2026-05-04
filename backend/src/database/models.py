@@ -62,6 +62,8 @@ class SalesRep(Base):
     status = Column(String, nullable=False, default="active")
     # active | sick | vacation | unavailable
     vehicle_id = Column(String, ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True, index=True)
+    home_lat = Column(Float, nullable=False, default=54.1871)   # Стартовая точка (широта), по умолчанию — Саранск
+    home_lon = Column(Float, nullable=False, default=45.1749)   # Стартовая точка (долгота)
     created_at = Column(DateTime(timezone=True),
                         default=lambda: datetime.now(timezone.utc))
 

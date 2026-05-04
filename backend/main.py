@@ -100,6 +100,17 @@ async def lifespan(app: FastAPI):
                 ))
             except Exception as e:
                 logger.warning(f"Could not add column locations.{col_name}: {e}")
+        for col_def in [
+            "home_lat FLOAT NOT NULL DEFAULT 54.1871",
+            "home_lon FLOAT NOT NULL DEFAULT 45.1749",
+        ]:
+            col_name = col_def.split()[0]
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE sales_reps ADD COLUMN IF NOT EXISTS {col_def}"
+                ))
+            except Exception as e:
+                logger.warning(f"Could not add column sales_reps.{col_name}: {e}")
     # Сидирование праздников 2026 (если таблица пуста)
     try:
         from sqlalchemy import text as sql_text
