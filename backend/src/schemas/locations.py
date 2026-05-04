@@ -49,6 +49,7 @@ class UploadLocationsResponse(BaseModel):
 
     created: list[LocationResponse] = []
     errors: list[dict] = []
+    skipped: list[str] = []
     total_processed: int = 0
 
 

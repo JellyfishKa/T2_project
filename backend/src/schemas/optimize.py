@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class OptimizeRequest(BaseModel):
     location_ids: List[str]
-    model: str = "auto"
+    model: str = "none"
     constraints: Optional[Dict] = Field(default_factory=lambda: {
         "max_stops_per_route": 50,
         "time_window_minutes": 480,

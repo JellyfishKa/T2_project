@@ -81,7 +81,7 @@ class QwenClient(LLMClient):
     async def generate_route(
         self,
         locations: List[Location],
-        constraints: Dict = None,
+        constraints: Dict | None = None,
     ) -> Route:
         if not locations:
             logger.error("Validation failed: locations list is empty")
@@ -138,11 +138,12 @@ class QwenClient(LLMClient):
                     raise QwenServerError(
                         f"Local generation failed: {e}",
                     )
+        raise QwenServerError("generate_route exhausted retries without result")
 
     async def _run_inference(
         self,
         locations_data: List[Dict],
-        constraints: Dict,
+        constraints: Dict | None,
     ) -> str:
         """Запуск инференса в отдельном потоке."""
         llm = self._get_generator()

@@ -51,6 +51,8 @@ export interface SalesRep {
   status: 'active' | 'sick' | 'vacation' | 'unavailable'
   vehicle_id: string | null
   vehicle_name: string | null
+  home_lat: number
+  home_lon: number
   created_at: string
 }
 
@@ -89,6 +91,45 @@ export interface MonthlyPlan {
   routes: DailyRoute[]
   total_tt_planned: number
   coverage_pct: number
+}
+
+export interface TradePointParams {
+  id: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface GenerateOptimizedScheduleRequest {
+  month: string;
+  reps: string[];
+  trade_points: TradePointParams[];
+  max_visits_per_day?: number;
+  async_mode?: boolean;
+  force?: boolean;
+  osrm_url?: string;
+}
+
+export interface GenerateOptimizedScheduleAccepted {
+  status: string;
+  job_id: string;
+}
+
+export interface GenerateOptimizedScheduleResult {
+  status: string;
+  month: string;
+  reps: string[];
+  created_at: string;
+  total_distance_km: number;
+  days: any[];
+  meta: any;
+}
+
+export interface GenerateOptimizedScheduleJobStatus {
+  status: string;
+  job_id: string;
+  result?: GenerateOptimizedScheduleResult;
+  error?: string;
 }
 
 // ─── Force Majeure ──────────────────────────────────────────────────────────

@@ -134,14 +134,25 @@ def _next_working_day(d: date, non_working: FrozenSet[date] = frozenset()) -> da
     return nxt
 
 
-def _estimate_route_hours(locations: List[Location]) -> float:
-    """Оценка длительности дневного маршрута с учётом переездов между ТТ."""
+def _estimate_route_hours(locations: List[Location], depot_lat: float = 54.1871, depot_lon: float = 45.1749) -> float:
+    """Оценка длительности дневного маршрута с учётом переездов между ТТ.
+    
+    Маршрут начинается из depot (стартовая точка ТП).
+    """
     if not locations:
         return 0.0
     if len(locations) == 1:
         return round(VISIT_DURATION_MIN / 60, 2)
 
-    points = [
+    # Depot — первая точка маршрута (не ТТ, только для расчёта расстояния старта)
+    depot_point = {
+        "ID": "__depot__",
+        "name": "Depot",
+        "lat": depot_lat,
+        "lon": depot_lon,
+        "priority": "A",
+    }
+    points = [depot_point] + [
         {
             "ID": location.id,
             "name": location.name,
@@ -152,15 +163,11 @@ def _estimate_route_hours(locations: List[Location]) -> float:
         for location in locations
     ]
     matrix = compute_distance_matrix(points)
-    priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-    start_idx = min(
-        range(len(points)),
-        key=lambda idx: priority_rank.get(points[idx]["priority"], 3),
-    )
 
+    # Greedy NN, стартуя из depot (idx=0)
     visited = [False] * len(points)
-    order = [start_idx]
-    visited[start_idx] = True
+    order = [0]  # начинаем с depot
+    visited[0] = True
 
     for _ in range(len(points) - 1):
         current_idx = order[-1]
@@ -171,8 +178,11 @@ def _estimate_route_hours(locations: List[Location]) -> float:
         order.append(next_idx)
         visited[next_idx] = True
 
-    ordered_ids = [points[idx]["ID"] for idx in order]
-    _, total_time_hours, _ = compute_route_metrics(points, ordered_ids)
+    # Убираем depot из ordered_ids для compute_route_metrics
+    ordered_ids = [points[idx]["ID"] for idx in order if points[idx]["ID"] != "__depot__"]
+    _, total_time_hours, _ = compute_route_metrics(
+        [p for p in points if p["ID"] != "__depot__"], ordered_ids
+    )
     return total_time_hours
 
 
@@ -194,6 +204,7 @@ class SchedulePlanner:
         month_str: str,
         rep_ids: Optional[List[str]] = None,
         overwrite: bool = True,
+        completed_visits: Dict[str, int] = {},
     ) -> dict:
         """
         Генерирует план визитов на месяц и сохраняет его в БД.
@@ -225,14 +236,19 @@ class SchedulePlanner:
         for loc in locations:
             cat = loc.category  # уже отфильтровано до A/B/C/D
             dates = _visit_dates(cat, work_weeks, all_days, quarter_start_month, month)
-            for d in dates:
+            already_done = completed_visits.get(loc.id, 0)
+            remaining = max(0, len(dates) - already_done)
+            if remaining == 0:
+                continue
+            for d in dates[:remaining]:
                 task_pool.append((loc.id, d, cat))
 
         # --- Удаляем старый план если нужно ---
+        month_start = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        month_end = date(year, month, last_day)
+        
         if overwrite:
-            month_start = date(year, month, 1)
-            _, last_day = monthrange(year, month)
-            month_end = date(year, month, last_day)
             await self.db.execute(
                 delete(VisitSchedule).where(
                     VisitSchedule.planned_date >= month_start,
@@ -263,8 +279,11 @@ class SchedulePlanner:
             if location is None:
                 continue
 
-            # Ограниченный lookahead: не дальше ~2 месяца
-            for _ in range(60):  # hard limit ~2 months lookahead
+            # Ограниченный lookahead: не дальше конца месяца
+            for _ in range(31):  # hard limit within the month
+                if check_date > month_end:
+                    break
+
                 # Пропускаем выходные и праздники
                 if not _is_working_day(check_date, self.non_working):
                     check_date = _next_working_day(check_date, self.non_working)
@@ -278,7 +297,11 @@ class SchedulePlanner:
                     if len(projected_locations) > MAX_TT_PER_DAY:
                         continue
 
-                    projected_hours = _estimate_route_hours(projected_locations)
+                    projected_hours = _estimate_route_hours(
+                        projected_locations,
+                        depot_lat=getattr(rep, 'home_lat', 54.1871),
+                        depot_lon=getattr(rep, 'home_lon', 45.1749)
+                    )
                     if projected_hours <= MAX_ROUTE_HOURS_PER_DAY:
                         candidates.append((projected_hours, len(current_locations), rep))
 

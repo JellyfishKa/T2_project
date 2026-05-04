@@ -372,13 +372,18 @@ const handleConstraintsUpdate = (updatedConstraints: Constraints) => {
 }
 
 const handleAddLocationsFromFile = async (locations: Location[]) => {
-  if (optimizationForm.value && locations.length > 0) {
-    optimizationForm.value.clearAllLocations()
-    await nextTick()
-    locations.forEach((location) => {
-      optimizationForm.value?.addLocationFromImport(location)
-    })
-    console.log(`Добавлено ${locations.length} магазинов из файла`)
+  if (!optimizationForm.value || locations.length === 0) return
+  // Merge: skip locations already in form (dedup by id)
+  const existing = new Set(
+    (optimizationForm.value.getFormData()?.locations ?? []).map((l: any) => l.id)
+  )
+  const toAdd = locations.filter((l) => !existing.has(l.id))
+  await nextTick()
+  toAdd.forEach((location) => {
+    optimizationForm.value?.addLocationFromImport(location)
+  })
+  if (toAdd.length < locations.length) {
+    console.log(`Merge: добавлено ${toAdd.length}, пропущено дублей: ${locations.length - toAdd.length}`)
   }
 }
 

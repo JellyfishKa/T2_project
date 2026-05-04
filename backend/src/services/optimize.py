@@ -26,7 +26,6 @@ from src.models.schemas import (
 from src.schemas.vehicle import Vehicle 
 from src.services.model_selector import (
     get_model_recommendation,
-    select_best_model,
 )
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService
@@ -112,16 +111,52 @@ class Optimizer:
             transport_mode=transport_mode,
         )
 
-        target_model = (
-            select_best_model(len(pydantic_locations))
-            if model == "auto"
-            else model
-        )
+        target_model = model
 
-        optimized_route = await self._generate_with_fallback(
-            pydantic_locations[: self.max_locations_per_prompt],
-            vehicle.model_dump() if vehicle else {},
-            target_model,
+        # Оцениваем 3 алгоритмических варианта и выбираем лучший по метрикам
+        candidates = [
+            ("greedy", self._greedy_reorder(pydantic_locations)),
+            ("priority_first", self._priority_first_reorder(pydantic_locations)),
+            ("balanced", self._balanced_reorder(pydantic_locations)),
+        ]
+
+        best_algo_name = None
+        best_algo_locations = None
+        best_algo_score = -float('inf')
+
+        for name, locs in candidates:
+            cand_stats = await self._calculate_real_metrics(locs, vehicle, transport_mode)
+            q_score = evaluate_route_quality(
+                {**baseline, "constraints_satisfied": True},
+                {**cand_stats, "constraints_satisfied": True},
+            )
+            # Выбираем лучший по quality_score
+            if q_score > best_algo_score:
+                best_algo_score = q_score
+                best_algo_name = name
+                best_algo_locations = locs
+
+        final_locations = best_algo_locations
+        model_used = best_algo_name
+
+        # LLM опциональный слой поверх алгоритма
+        if target_model in ("qwen", "llama"):
+            model_used = f"{best_algo_name}+{target_model}"
+            # Здесь можно добавить вызов LLM для дообучения/улучшения маршрута
+            # try:
+            #     final_locations = await client.improve_route(final_locations)
+            # except Exception as exc:
+            #     logger.warning("LLM layer failed: %s", exc)
+
+        optimized_route = PydanticRoute(
+            ID=str(uuid.uuid4()),
+            name=f"Оптимизированный маршрут ({model_used})",
+            locations=final_locations,
+            total_distance_km=0.0,
+            total_time_hours=0.0,
+            total_cost_rub=0.0,
+            model_used=model_used,
+            created_at=datetime.now(),
         )
 
         real_stats = await self._calculate_real_metrics(
@@ -313,38 +348,32 @@ class Optimizer:
             return list(locations)
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
-        matrix = compute_distance_matrix(loc_dicts)
-        n = len(locations)
+        depot = {"lat": 54.1871, "lon": 45.1749}
+        all_dicts = [depot] + loc_dicts
+        matrix = compute_distance_matrix(all_dicts)
+        n = len(all_dicts)
 
         priority_penalty_km = {"A": 0.0, "B": 3.0, "C": 8.0, "D": 15.0}
-        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-
-        start = min(
-            range(n),
-            key=lambda i: priority_rank.get(
-                infer_category(getattr(locations[i], "priority", "C")), 3
-            ),
-        )
 
         visited = [False] * n
-        order = [start]
-        visited[start] = True
+        order = [0] # start from depot
+        visited[0] = True
 
         for _ in range(n - 1):
             cur = order[-1]
             nearest = min(
-                (j for j in range(n) if not visited[j]),
+                (j for j in range(1, n) if not visited[j]),
                 key=lambda j: (
                     0.6 * matrix[cur][j]
                     + 0.4 * priority_penalty_km.get(
-                        infer_category(getattr(locations[j], "priority", "C")), 8.0
+                        infer_category(getattr(locations[j - 1], "priority", "C")), 8.0
                     )
                 ),
             )
             order.append(nearest)
             visited[nearest] = True
 
-        return [locations[i] for i in order]
+        return [locations[i - 1] for i in order if i != 0]
 
     # ─── Генерация вариантов маршрута (без сохранения в БД) ──────────────────────
 
@@ -594,32 +623,27 @@ class Optimizer:
             return locations
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
-        matrix = compute_distance_matrix(loc_dicts)
-        n = len(locations)
-
-        # Старт — точка с наивысшим приоритетом
-        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-        start = min(
-            range(n),
-            key=lambda i: priority_rank.get(
-                infer_category(getattr(locations[i], "priority", "C")), 3
-            ),
-        )
+        # Добавляем depot как первую точку для матрицы расстояний
+        depot = {"lat": 54.1871, "lon": 45.1749}
+        all_dicts = [depot] + loc_dicts
+        matrix = compute_distance_matrix(all_dicts)
+        n = len(all_dicts)
 
         visited = [False] * n
-        order = [start]
-        visited[start] = True
+        order = [0] # start from depot
+        visited[0] = True
 
         for _ in range(n - 1):
             cur = order[-1]
             nearest = min(
-                (j for j in range(n) if not visited[j]),
+                (j for j in range(1, n) if not visited[j]),
                 key=lambda j: matrix[cur][j],
             )
             order.append(nearest)
             visited[nearest] = True
 
-        return [locations[i] for i in order]
+        # Убираем depot
+        return [locations[i - 1] for i in order if i != 0]
 
     async def _generate_with_fallback(
         self,

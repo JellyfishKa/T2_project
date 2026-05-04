@@ -77,3 +77,4 @@ backend/.coverage
 /backend/.venv
 /backend/.omc
 /backend/test_tmp_outputs/
+/.claude

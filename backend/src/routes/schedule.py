@@ -4,7 +4,9 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -32,6 +34,13 @@ from src.schemas.schedule import (
     VisitStatusUpdate,
 )
 from src.models.geo_utils import compute_distance_matrix, compute_route_metrics, infer_category
+from src.models.schedule_schemas import (
+    GenerateOptimizedScheduleAccepted,
+    GenerateOptimizedScheduleJobStatus,
+    GenerateOptimizedScheduleRequest,
+    GenerateOptimizedScheduleResult,
+)
+from src.services.osrm_service import osrm_trip_order
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
     MAX_TT_PER_DAY,
@@ -40,6 +49,137 @@ from src.services.schedule_planner import (
 )
 
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
+
+# ---------------------------------------------------------------------------
+# T2-7: generate optimized month in one call (in-memory async jobs)
+# ---------------------------------------------------------------------------
+
+_GEN_OPT_JOBS: Dict[str, Dict] = {}
+_GEN_OPT_KEYS: Dict[str, str] = {}
+
+
+def _gen_opt_key(req: GenerateOptimizedScheduleRequest) -> str:
+    return f"{req.month.isoformat()}|{','.join(req.reps)}|tp={len(req.trade_points)}"
+
+
+def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedScheduleResult:
+    from schedule_planner import SchedulePlanner as SimplePlanner, TradePoint, VisitTask, route_distance_km
+
+    reps = list(req.reps)
+    trade_points = [
+        TradePoint(
+            id=tp.id,
+            category=tp.category,
+            latitude=tp.latitude,
+            longitude=tp.longitude,
+        )
+        for tp in req.trade_points
+    ]
+
+    planner = SimplePlanner(
+        rep_ids=reps,
+        max_visits_per_day=req.max_visits_per_day,
+        geo_clusterer=SimplePlanner.make_default_geo_clusterer(reps),
+    )
+    routes = planner.plan_month(trade_points, req.month, use_geo=True)
+
+    days = []
+    total_km = 0.0
+    for r in routes:
+        ids = [v.trade_point_id for v in r.visits]
+        coords = [(v.latitude, v.longitude) for v in r.visits]
+        order = osrm_trip_order(coords, osrm_url=req.osrm_url)
+        if order is not None:
+            routing_method = "osrm-trip"
+            ids = [ids[i] for i in order]
+            visits = tuple(
+                VisitTask(
+                    trade_point_id=r.visits[i].trade_point_id,
+                    category=r.visits[i].category,
+                    latitude=r.visits[i].latitude,
+                    longitude=r.visits[i].longitude,
+                )
+                for i in order
+            )
+            dist_km = route_distance_km(visits)
+        else:
+            routing_method = "heuristic-nn"
+            dist_km = route_distance_km(r.visits)
+
+        total_km += dist_km
+        days.append(
+            {
+                "rep_id": r.rep_id,
+                "day": r.day,
+                "trade_point_ids": ids,
+                "total_distance_km": round(dist_km, 2),
+                "routing_method": routing_method,
+            }
+        )
+
+    return GenerateOptimizedScheduleResult(
+        status="completed",
+        month=req.month,
+        reps=reps,
+        created_at=datetime.now(timezone.utc),
+        total_distance_km=round(total_km, 2),
+        days=days,
+        meta={
+            "geo_clustering": "kmeans+balance (no-sklearn backend impl)",
+            "max_visits_per_day": req.max_visits_per_day,
+        },
+    )
+
+
+def _gen_opt_run_job(job_id: str, req: GenerateOptimizedScheduleRequest) -> None:
+    try:
+        _GEN_OPT_JOBS[job_id]["status"] = "in_progress"
+        result = _gen_opt_build(req)
+        _GEN_OPT_JOBS[job_id]["status"] = "completed"
+        _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
+    except Exception as e:
+        _GEN_OPT_JOBS[job_id]["status"] = "failed"
+        _GEN_OPT_JOBS[job_id]["error"] = str(e)
+
+
+@router.post(
+    "/generate-optimized",
+    response_model=GenerateOptimizedScheduleAccepted | GenerateOptimizedScheduleResult,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_optimized_month(req: GenerateOptimizedScheduleRequest, bg: BackgroundTasks):
+    key = _gen_opt_key(req)
+    if not req.force and key in _GEN_OPT_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Schedule already generated. Use force=true to regenerate.",
+        )
+
+    job_id = str(uuid.uuid4())
+    _GEN_OPT_JOBS[job_id] = {"status": "in_progress", "result": None, "error": None, "key": key}
+    _GEN_OPT_KEYS[key] = job_id
+
+    if not req.async_mode or len(req.trade_points) <= 25:
+        result = _gen_opt_build(req)
+        _GEN_OPT_JOBS[job_id]["status"] = "completed"
+        _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
+        return result
+
+    bg.add_task(_gen_opt_run_job, job_id, req)
+    return GenerateOptimizedScheduleAccepted(status="accepted", job_id=job_id)
+
+
+@router.get("/jobs/{job_id}", response_model=GenerateOptimizedScheduleJobStatus)
+async def get_generate_optimized_job(job_id: str):
+    row = _GEN_OPT_JOBS.get(job_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
+    return GenerateOptimizedScheduleJobStatus(
+        status=row["status"],
+        job_id=job_id,
+        result=row["result"],
+        error=row["error"],
+    )
 
 # ── Машина состояний визита ──────────────────────────────────────────────────
 VALID_TRANSITIONS: Dict[str, set] = {
@@ -73,6 +213,8 @@ def _estimated_duration(visit_count: int) -> float:
 def _estimate_duration_hours_from_route(
     schedules: List[VisitSchedule],
     preview_cache: Dict[tuple[str, ...], float],
+    depot_lat: float = 54.1871,
+    depot_lon: float = 45.1749,
 ) -> float:
     visit_count = len(schedules)
     if visit_count == 0:
@@ -106,24 +248,32 @@ def _estimate_duration_hours_from_route(
     try:
         # Apply nearest-neighbour ordering (same as schedule_planner) so
         # displayed time matches the planner's budget estimate.
-        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-        matrix = compute_distance_matrix(route_points)
-        start_idx = min(
-            range(len(route_points)),
-            key=lambda i: priority_rank.get(route_points[i]["priority"], 3),
-        )
-        visited = [False] * len(route_points)
-        nn_order = [start_idx]
-        visited[start_idx] = True
-        for _ in range(len(route_points) - 1):
+        # Depot is the first point of the route
+        depot_point = {
+            "ID": "__depot__",
+            "name": "Depot",
+            "lat": depot_lat,
+            "lon": depot_lon,
+            "priority": "A",
+        }
+        all_points = [depot_point] + route_points
+        matrix = compute_distance_matrix(all_points)
+
+        visited = [False] * len(all_points)
+        nn_order = [0]  # Start from depot (index 0)
+        visited[0] = True
+
+        for _ in range(len(all_points) - 1):
             cur = nn_order[-1]
             nxt = min(
-                (i for i in range(len(route_points)) if not visited[i]),
+                (i for i in range(len(all_points)) if not visited[i]),
                 key=lambda i: matrix[cur][i],
             )
             nn_order.append(nxt)
             visited[nxt] = True
-        ordered_ids = [route_points[i]["ID"] for i in nn_order]
+
+        # Remove depot from ordered_ids for metrics calculation
+        ordered_ids = [all_points[i]["ID"] for i in nn_order if all_points[i]["ID"] != "__depot__"]
         _, total_time_hours, _ = compute_route_metrics(route_points, ordered_ids)
         duration_hours = round(total_time_hours, 1)
     except Exception:
@@ -216,9 +366,31 @@ async def generate_schedule(
     )
     non_working = set(holidays_q.scalars().all())
 
+    # Collect completed visits for this month so planner can skip already-done locations
+    month_num = m
+    completed_q = await session.execute(
+        select(VisitSchedule.location_id, func.count().label("cnt"))
+        .where(
+            VisitSchedule.planned_date >= month_start,
+            VisitSchedule.planned_date <= month_end,
+            VisitSchedule.status == "completed",
+            *(
+                [VisitSchedule.rep_id.in_(req.rep_ids)]
+                if req.rep_ids
+                else []
+            ),
+        )
+        .group_by(VisitSchedule.location_id)
+    )
+    completed_visits: Dict[str, int] = {
+        row.location_id: row.cnt for row in completed_q.all()
+    }
+
     planner = SchedulePlanner(session, non_working_dates=non_working)
     # Route already deleted planned/rescheduled/skipped above; skip planner's delete pass
-    result = await planner.build_monthly_plan(req.month, req.rep_ids, overwrite=False)
+    result = await planner.build_monthly_plan(
+        req.month, req.rep_ids, overwrite=False, completed_visits=completed_visits
+    )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
 
@@ -1018,6 +1190,8 @@ async def _build_daily_route(
     route_duration_hours = _estimate_duration_hours_from_route(
         sorted_schedules,
         preview_cache if preview_cache is not None else {},
+        depot_lat=getattr(rep, 'home_lat', 54.1871),
+        depot_lon=getattr(rep, 'home_lon', 45.1749),
     )
 
     return DailyRoute(

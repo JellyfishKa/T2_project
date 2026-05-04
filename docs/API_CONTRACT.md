@@ -338,6 +338,75 @@ Production:  http://<server-ip>/api/v1
 
 ---
 
+#### `POST /schedule/generate-optimized`
+
+Сгенерировать и оптимизировать **месячный** план одним запросом (асинхронно или синхронно при малом объёме).
+
+**Request**:
+```json
+{
+  "month": "2026-05-01",
+  "reps": ["tp-1", "tp-2", "tp-3"],
+  "trade_points": [
+    { "id": "tt-1", "category": "A", "latitude": 55.7558, "longitude": 37.6173 },
+    { "id": "tt-2", "category": "D", "latitude": 55.7489, "longitude": 37.6160 }
+  ],
+  "force": false,
+  "async_mode": true,
+  "max_visits_per_day": 12,
+  "osrm_url": "http://localhost:5000"
+}
+```
+
+**Response** `202` (async):
+```json
+{
+  "status": "accepted",
+  "job_id": "uuid"
+}
+```
+
+**Response** `200` (sync при `async_mode=false` или малом объёме):
+```json
+{
+  "status": "completed",
+  "month": "2026-05-01",
+  "reps": ["tp-1", "tp-2", "tp-3"],
+  "created_at": "2026-01-06T10:30:00Z",
+  "total_distance_km": 123.45,
+  "days": [
+    {
+      "rep_id": "tp-1",
+      "day": "2026-05-05",
+      "trade_point_ids": ["tt-1", "tt-2"],
+      "total_distance_km": 12.34,
+      "routing_method": "osrm-trip"
+    }
+  ],
+  "meta": {}
+}
+```
+
+**Errors**: `409` — уже сгенерировано и `force=false`
+
+---
+
+#### `GET /schedule/jobs/{job_id}`
+
+Получить статус/результат генерации месячного плана.
+
+**Response** `200`:
+```json
+{ "status": "completed", "job_id": "uuid", "result": { } }
+```
+
+**Response** `202`:
+```json
+{ "status": "in_progress", "job_id": "uuid" }
+```
+
+---
+
 #### `POST /optimize/variants`
 
 Генерация 3 вариантов маршрута без сохранения.

@@ -42,6 +42,18 @@ except ImportError:
 router = APIRouter(prefix="/export", tags=["Export"])
 logger = logging.getLogger("export")
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "|", "\t", "\r")
+
+
+def _safe_cell(value) -> str | None:
+    """Prevent Excel formula injection by prefixing dangerous values."""
+    if value is None:
+        return None
+    s = str(value)
+    if s and s[0] in _FORMULA_PREFIXES:
+        return "'" + s
+    return s
+
 # ─── Цвета заголовков по категориям ─────────────────────────────────────────
 CAT_COLORS = {
     "A": "FFEF4444",  # красный
@@ -210,9 +222,9 @@ async def export_schedule(
 
         row_data = [
             s.planned_date.strftime("%d.%m.%Y") if s.planned_date else "",
-            rep_map.get(s.rep_id, s.rep_id),
-            loc.name if loc else s.location_id,
-            getattr(loc, "address", "") or "",
+            _safe_cell(rep_map.get(s.rep_id, s.rep_id)),
+            _safe_cell(loc.name if loc else s.location_id),
+            _safe_cell(getattr(loc, "address", "") or ""),
             cat,
             _status_label(s.status),
             lg.time_in.strftime("%H:%M") if lg and lg.time_in else "",
@@ -255,8 +267,8 @@ async def export_schedule(
         duration = _calc_duration(lg)
         row_data = [
             s.planned_date.strftime("%d.%m.%Y") if s.planned_date else "",
-            rep_map.get(s.rep_id, s.rep_id),
-            loc.name if loc else s.location_id,
+            _safe_cell(rep_map.get(s.rep_id, s.rep_id)),
+            _safe_cell(loc.name if loc else s.location_id),
             loc.category if loc else "?",
             lg.time_in.strftime("%H:%M") if lg and lg.time_in else "—",
             lg.time_out.strftime("%H:%M") if lg and lg.time_out else "—",
@@ -305,9 +317,9 @@ async def export_schedule(
         start=3,
     ):
         pct = round(st["completed"] / st["planned"] * 100, 1) if st["planned"] else 0
-        ws3.cell(row=i, column=1, value=st["name"])
+        ws3.cell(row=i, column=1, value=_safe_cell(st["name"]))
         ws3.cell(row=i, column=2, value=st["category"])
-        ws3.cell(row=i, column=3, value=st["district"])
+        ws3.cell(row=i, column=3, value=_safe_cell(st["district"]))
         ws3.cell(row=i, column=4, value=st["planned"])
         ws3.cell(row=i, column=5, value=st["completed"])
         ws3.cell(row=i, column=6, value=st["skipped"])
@@ -357,7 +369,7 @@ async def export_schedule(
         start=3,
     ):
         pct = round(rs["completed"] / rs["planned"] * 100, 1) if rs["planned"] else 0
-        ws4.cell(row=i, column=1, value=rs["name"])
+        ws4.cell(row=i, column=1, value=_safe_cell(rs["name"]))
         ws4.cell(row=i, column=2, value=len(rs["outings"]))  # уникальные дни с визитами
         ws4.cell(row=i, column=3, value=rs["planned"])
         ws4.cell(row=i, column=4, value=rs["completed"])
