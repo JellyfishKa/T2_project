@@ -37,6 +37,18 @@ def kmeans_geo_then_balance_by_category(
     rep_ids = list(rep_ids)
     k = len(rep_ids)
     x = _coords(tasks)
+
+    if len(tasks) < k:
+        buckets_fallback: Dict[str, List[VisitTask]] = {r: [] for r in rep_ids}
+        for i, t in enumerate(tasks):
+            buckets_fallback[rep_ids[i]].append(t)
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        return GeoClusteringResult(
+            algo="kmeans+balance",
+            elapsed_ms=round(elapsed_ms, 2),
+            assignments=buckets_fallback,
+        )
+
     km = KMeans(n_clusters=k, random_state=random_state, n_init="auto")
     labels = km.fit_predict(x)
 
@@ -138,13 +150,25 @@ def dbscan_then_pack_clusters(
 
     buckets: Dict[str, List[VisitTask]] = {r: [] for r in rep_ids}
     sizes = {r: 0 for r in rep_ids}
+    centers: Dict[str, Optional[Tuple[float, float]]] = {r: None for r in rep_ids}
 
-    # greedy bin packing: кладём кластер в наименее загруженного rep
+    def dist_to_center(cluster_idxs: List[int], rep: str) -> float:
+        c = centers[rep]
+        if c is None:
+            return 0.0
+        clat = float(np.mean([tasks[i].latitude for i in cluster_idxs]))
+        clon = float(np.mean([tasks[i].longitude for i in cluster_idxs]))
+        return haversine_km(clat, clon, c[0], c[1])
+
+    # greedy geo packing: кладём кластер с учетом расстояния до уже назначенных точек
     for idxs in packed_clusters:
-        r = min(rep_ids, key=lambda rr: sizes[rr])
+        r = min(rep_ids, key=lambda rr: (dist_to_center(idxs, rr), sizes[rr]))
         for i in idxs:
             buckets[r].append(tasks[i])
-            sizes[r] += 1
+        sizes[r] += len(idxs)
+        lat = float(np.mean([x.latitude for x in buckets[r]]))
+        lon = float(np.mean([x.longitude for x in buckets[r]]))
+        centers[r] = (lat, lon)
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     return GeoClusteringResult(

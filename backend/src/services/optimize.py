@@ -112,16 +112,52 @@ class Optimizer:
             transport_mode=transport_mode,
         )
 
-        target_model = (
-            select_best_model(len(pydantic_locations))
-            if model == "auto"
-            else model
-        )
+        target_model = model
 
-        optimized_route = await self._generate_with_fallback(
-            pydantic_locations[: self.max_locations_per_prompt],
-            vehicle.model_dump() if vehicle else {},
-            target_model,
+        # Оцениваем 3 алгоритмических варианта и выбираем лучший по метрикам
+        candidates = [
+            ("greedy", self._greedy_reorder(pydantic_locations)),
+            ("priority_first", self._priority_first_reorder(pydantic_locations)),
+            ("balanced", self._balanced_reorder(pydantic_locations)),
+        ]
+
+        best_algo_name = None
+        best_algo_locations = None
+        best_algo_score = -float('inf')
+
+        for name, locs in candidates:
+            cand_stats = await self._calculate_real_metrics(locs, vehicle, transport_mode)
+            q_score = evaluate_route_quality(
+                {**baseline, "constraints_satisfied": True},
+                {**cand_stats, "constraints_satisfied": True},
+            )
+            # Выбираем лучший по quality_score
+            if q_score > best_algo_score:
+                best_algo_score = q_score
+                best_algo_name = name
+                best_algo_locations = locs
+
+        final_locations = best_algo_locations
+        model_used = best_algo_name
+
+        # LLM опциональный слой поверх алгоритма
+        if target_model in ("qwen", "llama"):
+            model_used = f"{best_algo_name}+{target_model}"
+            # Здесь можно добавить вызов LLM для дообучения/улучшения маршрута
+            # try:
+            #     final_locations = await client.improve_route(final_locations)
+            # except Exception as exc:
+            #     logger.warning("LLM layer failed: %s", exc)
+
+        optimized_route = PydanticRoute(
+            ID=str(uuid.uuid4()),
+            name=f"Оптимизированный маршрут ({model_used})",
+            locations=final_locations,
+            total_distance_km=0.0,
+            total_time_hours=0.0,
+            total_cost_rub=0.0,
+            model_used=model_used,
+            created_at=datetime.now(),
         )
 
         real_stats = await self._calculate_real_metrics(

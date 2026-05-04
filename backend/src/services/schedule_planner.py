@@ -229,10 +229,11 @@ class SchedulePlanner:
                 task_pool.append((loc.id, d, cat))
 
         # --- Удаляем старый план если нужно ---
+        month_start = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        month_end = date(year, month, last_day)
+        
         if overwrite:
-            month_start = date(year, month, 1)
-            _, last_day = monthrange(year, month)
-            month_end = date(year, month, last_day)
             await self.db.execute(
                 delete(VisitSchedule).where(
                     VisitSchedule.planned_date >= month_start,
@@ -263,8 +264,11 @@ class SchedulePlanner:
             if location is None:
                 continue
 
-            # Ограниченный lookahead: не дальше ~2 месяца
-            for _ in range(60):  # hard limit ~2 months lookahead
+            # Ограниченный lookahead: не дальше конца месяца
+            for _ in range(31):  # hard limit within the month
+                if check_date > month_end:
+                    break
+
                 # Пропускаем выходные и праздники
                 if not _is_working_day(check_date, self.non_working):
                     check_date = _next_working_day(check_date, self.non_working)

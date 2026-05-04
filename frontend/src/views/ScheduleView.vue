@@ -13,6 +13,7 @@
         </div>
       </template>
       <template #actions>
+        <button class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" @click="openOptimizeMonthModal">Оптимизировать месяц</button>
         <button class="btn-primary" @click="openGenerateModal">Сгенерировать план</button>
         <button class="btn-secondary" @click="showHolidays = true">Праздники</button>
         <button class="btn-secondary" @click="showFM = true">Форс-мажор</button>
@@ -217,6 +218,47 @@
           </p>
           <button class="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded font-medium" :disabled="generating" @click="generatePlan(true)">
             {{ generating ? 'Генерация…' : 'Перегенерировать план' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Модал: Оптимизировать месяц -->
+    <div v-if="showOptimizeMonthModal" class="modal-overlay" @click.self="!optimizingMonth && (showOptimizeMonthModal = false)">
+      <div class="modal">
+        <h2 class="font-semibold text-lg mb-4 text-gray-900">Оптимизировать месяц</h2>
+        <p class="text-sm text-gray-600 mb-4">
+          Месяц: <strong>{{ currentMonth }}</strong><br>
+          Будет рассчитан оптимальный порядок объезда точек для всех сотрудников с балансировкой нагрузки (ML алгоритмы).
+        </p>
+
+        <!-- Прогресс -->
+        <div v-if="optimizingMonth" class="mb-4">
+          <div class="relative w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-2">
+            <div class="absolute top-0 left-0 h-2 bg-indigo-500 rounded-full animate-pulse w-full"></div>
+          </div>
+          <p class="text-xs text-gray-500 text-center animate-pulse">
+            {{ optimizeProgressMessage || 'Запуск оптимизации...' }}
+          </p>
+        </div>
+
+        <div v-if="optimizeError" class="mb-4 text-sm text-red-600">
+          {{ optimizeError }}
+        </div>
+
+        <div v-if="optimizeCanForce && !optimizingMonth" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-xs text-red-700 mb-2">
+            План за этот месяц уже существует. Перегенерация удалит все запланированные, перенесённые и пропущенные визиты.
+          </p>
+        </div>
+
+        <div class="flex gap-3 justify-end" v-if="!optimizingMonth">
+          <button class="btn-secondary" @click="showOptimizeMonthModal = false">Отмена</button>
+          <button v-if="optimizeCanForce" class="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded font-medium" @click="startMonthOptimization(true)">
+            Перегенерировать
+          </button>
+          <button v-else class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white border-none" @click="startMonthOptimization(false)">
+            Запустить оптимизацию
           </button>
         </div>
       </div>
@@ -790,6 +832,18 @@
         <div v-if="visitError" class="mt-2 text-sm text-red-600">{{ visitError }}</div>
       </div>
     </div>
+
+    <!-- Toast Уведомление -->
+    <transition name="fade">
+      <div v-if="toastMessage" 
+           class="fixed bottom-6 right-6 z-50 p-4 rounded-xl shadow-lg border text-sm max-w-sm flex items-start gap-3"
+           :class="toastType === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'">
+        <span class="text-xl" v-if="toastType === 'error'">⚠️</span>
+        <span class="text-xl" v-else>✅</span>
+        <div class="flex-1 whitespace-pre-line">{{ toastMessage }}</div>
+        <button class="opacity-50 hover:opacity-100" @click="toastMessage = null">✕</button>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -832,6 +886,8 @@ import {
   discardStashEntry,
   fetchVehicles,
   getApiErrorMessage,
+  generateOptimizedSchedule,
+  getOptimizedScheduleJob,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -853,6 +909,27 @@ const genResult = ref<string | null>(null)
 const genCanForce = ref(false)
 const submittingFM = ref(false)
 const fmResult = ref<string | null>(null)
+
+// ─── Optimize Month state ─────────────────────────────────────────────────────
+const showOptimizeMonthModal = ref(false)
+const optimizingMonth = ref(false)
+const optimizeProgressMessage = ref('')
+const optimizeError = ref<string | null>(null)
+const optimizeCanForce = ref(false)
+
+// Toast state
+const toastMessage = ref<string | null>(null)
+const toastType = ref<'success' | 'error'>('success')
+let toastTimeout: ReturnType<typeof setTimeout> | null = null
+
+function showToast(message: string, type: 'success' | 'error' = 'success', duration = 5000) {
+  toastMessage.value = message
+  toastType.value = type
+  if (toastTimeout) clearTimeout(toastTimeout)
+  toastTimeout = setTimeout(() => {
+    toastMessage.value = null
+  }, duration)
+}
 
 // ─── Holidays state ───────────────────────────────────────────────────────────
 const monthHolidays = ref<Holiday[]>([])
@@ -1437,6 +1514,94 @@ async function toggleHoliday(h: Holiday) {
   } catch (e: any) {
     holidayToggleMsg.value = `Ошибка: ${getApiErrorMessage(e, 'не удалось обновить праздник')}`
     holidayToggleMsgError.value = true
+  }
+}
+
+function openOptimizeMonthModal() {
+  const existingCount = routes.value.reduce((acc, r) => acc + r.visits.length, 0)
+  optimizeCanForce.value = existingCount > 0
+  optimizeError.value = null
+  showOptimizeMonthModal.value = true
+}
+
+async function startMonthOptimization(force = false) {
+  optimizingMonth.value = true
+  optimizeProgressMessage.value = 'Сбор данных для оптимизации...'
+  optimizeError.value = null
+  
+  try {
+    const activeReps = reps.value.filter(r => r.status === 'active').map(r => r.id)
+    if (!activeReps.length) {
+      throw new Error('Нет активных торговых представителей.')
+    }
+    
+    const trade_points = Array.from(locationsById.value.values()).map(loc => ({
+      id: loc.id,
+      category: loc.category || 'C',
+      latitude: loc.lat,
+      longitude: loc.lon
+    }))
+
+    if (!trade_points.length) {
+      throw new Error('Нет доступных торговых точек для распределения.')
+    }
+
+    optimizeProgressMessage.value = 'Запрос на запуск процесса...'
+    
+    const res = await generateOptimizedSchedule({
+      month: currentMonth.value,
+      reps: activeReps,
+      trade_points,
+      async_mode: true,
+      force,
+      max_visits_per_day: 15,
+    })
+
+    if (res.status === 'accepted' && 'job_id' in res) {
+      const jobId = res.job_id
+      optimizeProgressMessage.value = 'Оптимизация в процессе. Это может занять пару минут...'
+      
+      let completed = false
+      while (!completed) {
+        await new Promise(r => setTimeout(r, 2500))
+        const jobStatus = await getOptimizedScheduleJob(jobId)
+        
+        if (jobStatus.status === 'completed' && jobStatus.result) {
+          completed = true
+          showOptimizeMonthModal.value = false
+          showToast(
+            `Оптимизация завершена!\nДней маршрутов: ${jobStatus.result.days.length}\nСуммарная дистанция: ${jobStatus.result.total_distance_km} км`, 
+            'success'
+          )
+          await loadSchedule()
+        } else if (jobStatus.status === 'failed') {
+          throw new Error(jobStatus.error || 'Произошла ошибка при оптимизации.')
+        } else {
+          optimizeProgressMessage.value = 'Рассчитываем маршруты и балансируем нагрузку...'
+        }
+      }
+    } else if (res.status === 'completed' && 'days' in res) {
+      showOptimizeMonthModal.value = false
+      showToast(
+        `Оптимизация завершена!\nДней маршрутов: ${res.days.length}\nСуммарная дистанция: ${res.total_distance_km} км`, 
+        'success'
+      )
+      await loadSchedule()
+    }
+    
+  } catch (err: any) {
+    if (err?.response?.status === 409 || err?.status === 409) {
+      optimizeCanForce.value = true
+      optimizingMonth.value = false
+      return
+    }
+    const msg = getApiErrorMessage(err, 'Не удалось запустить оптимизацию.')
+    optimizeError.value = msg
+    showToast(`Ошибка:\n${msg}`, 'error')
+  } finally {
+    if (!optimizeCanForce.value || optimizeError.value) {
+      optimizingMonth.value = false
+    }
   }
 }
 

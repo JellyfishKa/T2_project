@@ -91,6 +91,45 @@ export interface MonthlyPlan {
   coverage_pct: number
 }
 
+export interface TradePointParams {
+  id: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface GenerateOptimizedScheduleRequest {
+  month: string;
+  reps: string[];
+  trade_points: TradePointParams[];
+  max_visits_per_day?: number;
+  async_mode?: boolean;
+  force?: boolean;
+  osrm_url?: string;
+}
+
+export interface GenerateOptimizedScheduleAccepted {
+  status: string;
+  job_id: string;
+}
+
+export interface GenerateOptimizedScheduleResult {
+  status: string;
+  month: string;
+  reps: string[];
+  created_at: string;
+  total_distance_km: number;
+  days: any[];
+  meta: any;
+}
+
+export interface GenerateOptimizedScheduleJobStatus {
+  status: string;
+  job_id: string;
+  result?: GenerateOptimizedScheduleResult;
+  error?: string;
+}
+
 // ─── Force Majeure ──────────────────────────────────────────────────────────
 export interface ForceMajeureEvent {
   id: string

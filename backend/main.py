@@ -217,8 +217,8 @@ async def _health_response(session: AsyncSession):
             "database": "connected",
             "services": {
                 "database": "connected",
-                "qwen": "loaded" if qwen_loaded else "not_loaded",
-                "llama": "loaded" if llama_loaded else "not_loaded",
+                "qwen": {"status": "loaded" if qwen_loaded else "not_loaded", "optional": True},
+                "llama": {"status": "loaded" if llama_loaded else "not_loaded", "optional": True},
             },
             "disk_free_mb": disk_free_mb,
             "visits_today": visits_today,
@@ -234,8 +234,8 @@ async def _health_response(session: AsyncSession):
                 "status": "unhealthy",
                 "services": {
                     "database": "disconnected",
-                    "qwen": "error",
-                    "llama": "error",
+                    "qwen": {"status": "error", "optional": True},
+                    "llama": {"status": "error", "optional": True},
                 },
             },
         )

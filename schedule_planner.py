@@ -189,6 +189,13 @@ class SchedulePlanner:
             if n == 0:
                 return {r: [] for r in rep_ids}
 
+            if n < k:
+                # Fallback: distribute tasks round-robin if fewer tasks than reps
+                buckets: Dict[str, List[VisitTask]] = {r: [] for r in rep_ids}
+                for i, task in enumerate(tasks):
+                    buckets[rep_ids[i]].append(task)
+                return buckets
+
             # init центроидов: равномерные точки по индексу (детерминированно)
             init_idx = np.linspace(0, n - 1, num=k).round().astype(int)
             centroids = x[init_idx].copy()
