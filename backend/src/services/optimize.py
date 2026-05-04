@@ -26,7 +26,6 @@ from src.models.schemas import (
 from src.schemas.vehicle import Vehicle 
 from src.services.model_selector import (
     get_model_recommendation,
-    select_best_model,
 )
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService

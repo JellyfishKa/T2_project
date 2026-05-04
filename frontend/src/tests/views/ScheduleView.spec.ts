@@ -235,4 +235,24 @@ describe('ScheduleView.vue', () => {
       expect(localStore['t2_month_offset']).toBe('1')
     }
   })
+
+  it('showDownloadDropdown defaults to false', async () => {
+    const wrapper = mount(ScheduleView)
+    await flushPromises()
+    expect((wrapper.vm as any).showDownloadDropdown).toBe(false)
+  })
+
+  it('монтируется без ошибок с mock downloadScheduleExcel', async () => {
+    ;(api.downloadScheduleExcel as any).mockResolvedValue(new Blob(['test'], { type: 'application/vnd.ms-excel' }))
+    const wrapper = mount(ScheduleView)
+    await flushPromises()
+    expect(wrapper.exists()).toBe(true)
+    expect(api.fetchMonthlySchedule).toHaveBeenCalled()
+  })
+
+  it('downloadDayRoute существует как функция на компоненте', async () => {
+    const wrapper = mount(ScheduleView)
+    await flushPromises()
+    expect(typeof (wrapper.vm as any).downloadDayRoute).toBe('function')
+  })
 })
