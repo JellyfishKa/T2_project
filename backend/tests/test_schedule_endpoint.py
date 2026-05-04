@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 
 def _load_trade_points(n: int = 10):
-    path = Path("ml/data/tt_250.csv")
+    path = Path(__file__).resolve().parents[2] / "ml/data/tt_250.csv"
     out = []
     with open(path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)

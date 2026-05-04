@@ -68,7 +68,7 @@ class TestIntegration:
 
         from ml.benchmarks.geo_clustering_benchmark import run_benchmark
 
-        res = run_benchmark(Path("ml/data/tt_250.csv"), month=(2026, 5, 1))
+        res = run_benchmark(Path(__file__).resolve().parents[2] / "ml/data/tt_250.csv", month=(2026, 5, 1))
         baseline = res["baseline"]["distance"]["sum_km"]
         final = res["candidates"]["final-schedule-planner"]["distance"]["sum_km"]
         assert baseline > 0
