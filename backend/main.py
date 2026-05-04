@@ -144,8 +144,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
 
 api_v1_router = APIRouter(prefix="/api/v1")
@@ -196,7 +196,7 @@ async def _health_response(session: AsyncSession):
 
         # Disk free (в MB)
         try:
-            disk = shutil.disk_usage("/")
+            disk = shutil.disk_usage(Path(__file__).resolve().root)
             disk_free_mb = round(disk.free / 1024 / 1024)
         except Exception:
             disk_free_mb = None

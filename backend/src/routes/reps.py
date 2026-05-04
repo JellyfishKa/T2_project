@@ -1,5 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select
@@ -96,7 +97,7 @@ async def update_rep(
     warning: str | None = None
     pending_count = 0
     if data.status in ("sick", "vacation"):
-        today = date.today()
+        today = datetime.now(ZoneInfo("Europe/Moscow")).date()
         cnt_result = await session.execute(
             select(func.count()).where(
                 VisitSchedule.rep_id == rep_id,

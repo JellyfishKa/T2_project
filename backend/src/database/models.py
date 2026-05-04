@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from sqlalchemy import (
     Boolean, Column, Date, DateTime, Float,
-    ForeignKey, Integer, JSON, String, Text, Time, UniqueConstraint)
+    ForeignKey, Index, Integer, JSON, String, Text, Time, UniqueConstraint)
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -78,6 +78,9 @@ class SalesRep(Base):
 class VisitSchedule(Base):
     """Плановый визит торгового представителя к ТТ."""
     __tablename__ = "visit_schedule"
+    __table_args__ = (
+        Index("ix_visit_schedule_rep_date_status", "rep_id", "planned_date", "status"),
+    )
 
     id = Column(String, primary_key=True, index=True,
                 default=lambda: str(uuid.uuid4()))

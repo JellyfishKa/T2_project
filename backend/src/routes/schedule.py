@@ -121,7 +121,7 @@ def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedSc
         status="completed",
         month=req.month,
         reps=reps,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         total_distance_km=round(total_km, 2),
         days=days,
         meta={

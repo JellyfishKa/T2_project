@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SalesRepCreate(BaseModel):
-    name: str = Field(..., example="Иванов Иван Иванович")
+    name: str = Field(..., examples=["Иванов Иван Иванович"])
     status: Literal["active", "sick", "vacation", "unavailable"] = "active"
     vehicle_id: Optional[str] = None
 

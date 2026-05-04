@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import List, Optional, Tuple
 
 import requests
+
+logger = logging.getLogger("osrm_service")
 
 
 def osrm_trip_order(
@@ -43,6 +46,7 @@ def osrm_trip_order(
         if set(order) != set(range(len(coords))):
             return None
         return order
-    except Exception:
+    except Exception as exc:
+        logger.debug("OSRM waypoint order parse failed: %s", exc)
         return None
 

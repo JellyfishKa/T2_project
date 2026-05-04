@@ -134,10 +134,10 @@ class RoutingService:
             if not route:
                 return None
 
-            coordinates = route.get("geometry", {}).get("coordinates") or []
+            coord_pairs = route.get("geometry", {}).get("coordinates") or []
             geometry = [
                 (float(lat), float(lon))
-                for lon, lat in coordinates
+                for lon, lat in coord_pairs
             ]
             distance_km = round(float(route.get("distance", 0.0)) / 1000, 2)
             base_time_minutes = float(route.get("duration", 0.0)) / 60
