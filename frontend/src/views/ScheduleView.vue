@@ -343,7 +343,7 @@
     </div>
 
     <!-- Модал: детальный просмотр дня + LLM оптимизация -->
-    <div v-if="showDayModal && selectedDayRoute" class="modal-overlay" @click.self="showDayModal = false">
+    <div v-if="showDayModal && selectedDayRoute" class="modal-overlay" @click.self="showDayModal = false" @click="showDownloadDropdown = false">
       <div class="planner-modal">
         <div class="planner-modal__header">
           <div class="min-w-0">
@@ -402,6 +402,38 @@
             >
               {{ comparisonExpanded ? 'Скрыть сравнение' : 'Показать сравнение' }}
             </button>
+
+            <!-- Кнопка скачать маршрут -->
+            <div class="relative" @click.stop>
+              <button
+                class="btn-secondary text-xs flex items-center gap-1"
+                :disabled="currentDayVisits.length === 0"
+                :title="currentDayVisits.length === 0 ? 'Нет визитов для скачивания' : 'Скачать маршрут'"
+                @click="showDownloadDropdown = !showDownloadDropdown"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Скачать
+                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div
+                v-if="showDownloadDropdown"
+                class="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden"
+              >
+                <button
+                  v-for="fmt in [{ id: 'excel', label: 'Excel (.xls)' }, { id: 'csv', label: 'CSV' }, { id: 'json', label: 'JSON' }]"
+                  :key="fmt.id"
+                  class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                  @click="downloadDayRoute(fmt.id as 'excel'|'csv'|'json')"
+                >
+                  {{ fmt.label }}
+                </button>
+              </div>
+            </div>
+
             <button class="btn-icon text-xs" @click="showDayModal = false">✕</button>
           </div>
         </div>
@@ -958,6 +990,7 @@ const statusOptions = [
 
 // ─── Day detail modal state ───────────────────────────────────────────────────
 const showDayModal = ref(false)
+const showDownloadDropdown = ref(false)
 const selectedDayRoute = ref<DailyRoute | null>(null)
 const dayOptResult = ref<OptimizeVariantsResponse | null>(null)
 const dayOptLoading = ref(false)
@@ -1711,6 +1744,88 @@ async function handleExport() {
   }
 }
 
+// ─── Download day route ───────────────────────────────────────────────────────
+function escXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function downloadBlob(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadDayRoute(format: 'excel' | 'csv' | 'json') {
+  showDownloadDropdown.value = false
+  const visits = currentDayVisits.value
+  const repName = (selectedDayRoute.value?.rep_name ?? 'rep').replace(/\s+/g, '_')
+  const date = selectedDayRoute.value?.date ?? 'date'
+  const filename = `route_${repName}_${date}`
+
+  if (format === 'json') {
+    const data = visits.map((v, i) => ({
+      order: i + 1,
+      location_name: v.location_name,
+      category: v.location_category ?? '',
+      status: v.status,
+      time_in: v.time_in ?? '',
+      time_out: v.time_out ?? '',
+    }))
+    downloadBlob(JSON.stringify(data, null, 2), `${filename}.json`, 'application/json')
+
+  } else if (format === 'csv') {
+    const rows = [
+      ['#', 'Название ТТ', 'Категория', 'Статус', 'Приход', 'Уход'],
+      ...visits.map((v, i) => [
+        i + 1,
+        v.location_name,
+        v.location_category ?? '',
+        v.status,
+        v.time_in ?? '',
+        v.time_out ?? '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    downloadBlob('﻿' + csv, `${filename}.csv`, 'text/csv;charset=utf-8')
+
+  } else {
+    // Excel 2003 SpreadsheetML — no library needed, supported by all Excel versions
+    const xmlRows = visits.map((v, i) => `
+      <Row>
+        <Cell><Data ss:Type="Number">${i + 1}</Data></Cell>
+        <Cell><Data ss:Type="String">${escXml(v.location_name)}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.location_category ?? ''}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.status}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.time_in ?? ''}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.time_out ?? ''}</Data></Cell>
+      </Row>`).join('')
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Маршрут">
+    <Table>
+      <Row ss:StyleID="header">
+        <Cell><Data ss:Type="String">#</Data></Cell>
+        <Cell><Data ss:Type="String">Название ТТ</Data></Cell>
+        <Cell><Data ss:Type="String">Категория</Data></Cell>
+        <Cell><Data ss:Type="String">Статус</Data></Cell>
+        <Cell><Data ss:Type="String">Приход</Data></Cell>
+        <Cell><Data ss:Type="String">Уход</Data></Cell>
+      </Row>
+      ${xmlRows}
+    </Table>
+  </Worksheet>
+</Workbook>`
+    downloadBlob(xml, `${filename}.xls`, 'application/vnd.ms-excel')
+  }
+}
+
 // ─── Day modal ────────────────────────────────────────────────────────────────
 function openDayModal(route: DailyRoute) {
   selectedDayRoute.value = route
@@ -1718,6 +1833,7 @@ function openDayModal(route: DailyRoute) {
   const repData = reps.value.find(r => r.id === route.rep_id)
   dayVehicleId.value = repData?.vehicle_id ?? null
   dayTransportMode.value = dayVehicleId.value ? 'car' : 'taxi'
+  showDownloadDropdown.value = false
   dayOptResult.value = null
   dayOptError.value = null
   selectedVariantId.value = null
