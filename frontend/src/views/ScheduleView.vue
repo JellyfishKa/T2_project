@@ -13,6 +13,7 @@
         </div>
       </template>
       <template #actions>
+        <button class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" @click="openOptimizeMonthModal">Оптимизировать месяц</button>
         <button class="btn-primary" @click="openGenerateModal">Сгенерировать план</button>
         <button class="btn-secondary" @click="showHolidays = true">Праздники</button>
         <button class="btn-secondary" @click="showFM = true">Форс-мажор</button>
@@ -222,6 +223,47 @@
       </div>
     </div>
 
+    <!-- Модал: Оптимизировать месяц -->
+    <div v-if="showOptimizeMonthModal" class="modal-overlay" @click.self="!optimizingMonth && (showOptimizeMonthModal = false)">
+      <div class="modal">
+        <h2 class="font-semibold text-lg mb-4 text-gray-900">Оптимизировать месяц</h2>
+        <p class="text-sm text-gray-600 mb-4">
+          Месяц: <strong>{{ currentMonth }}</strong><br>
+          Будет рассчитан оптимальный порядок объезда точек для всех сотрудников с балансировкой нагрузки (ML алгоритмы).
+        </p>
+
+        <!-- Прогресс -->
+        <div v-if="optimizingMonth" class="mb-4">
+          <div class="relative w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-2">
+            <div class="absolute top-0 left-0 h-2 bg-indigo-500 rounded-full animate-pulse w-full"></div>
+          </div>
+          <p class="text-xs text-gray-500 text-center animate-pulse">
+            {{ optimizeProgressMessage || 'Запуск оптимизации...' }}
+          </p>
+        </div>
+
+        <div v-if="optimizeError" class="mb-4 text-sm text-red-600">
+          {{ optimizeError }}
+        </div>
+
+        <div v-if="optimizeCanForce && !optimizingMonth" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-xs text-red-700 mb-2">
+            План за этот месяц уже существует. Перегенерация удалит все запланированные, перенесённые и пропущенные визиты.
+          </p>
+        </div>
+
+        <div class="flex gap-3 justify-end" v-if="!optimizingMonth">
+          <button class="btn-secondary" @click="showOptimizeMonthModal = false">Отмена</button>
+          <button v-if="optimizeCanForce" class="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded font-medium" @click="startMonthOptimization(true)">
+            Перегенерировать
+          </button>
+          <button v-else class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white border-none" @click="startMonthOptimization(false)">
+            Запустить оптимизацию
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Модал: праздники года -->
     <div v-if="showHolidays" class="modal-overlay" @click.self="showHolidays = false">
       <div class="modal" style="max-width:480px">
@@ -301,7 +343,7 @@
     </div>
 
     <!-- Модал: детальный просмотр дня + LLM оптимизация -->
-    <div v-if="showDayModal && selectedDayRoute" class="modal-overlay" @click.self="showDayModal = false">
+    <div v-if="showDayModal && selectedDayRoute" class="modal-overlay" @click.self="showDayModal = false" @click="showDownloadDropdown = false">
       <div class="planner-modal">
         <div class="planner-modal__header">
           <div class="min-w-0">
@@ -360,6 +402,38 @@
             >
               {{ comparisonExpanded ? 'Скрыть сравнение' : 'Показать сравнение' }}
             </button>
+
+            <!-- Кнопка скачать маршрут -->
+            <div class="relative" @click.stop>
+              <button
+                class="btn-secondary text-xs flex items-center gap-1"
+                :disabled="currentDayVisits.length === 0"
+                :title="currentDayVisits.length === 0 ? 'Нет визитов для скачивания' : 'Скачать маршрут'"
+                @click="showDownloadDropdown = !showDownloadDropdown"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Скачать
+                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div
+                v-if="showDownloadDropdown"
+                class="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden"
+              >
+                <button
+                  v-for="fmt in [{ id: 'excel', label: 'Excel (.xls)' }, { id: 'csv', label: 'CSV' }, { id: 'json', label: 'JSON' }]"
+                  :key="fmt.id"
+                  class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                  @click="downloadDayRoute(fmt.id as 'excel'|'csv'|'json')"
+                >
+                  {{ fmt.label }}
+                </button>
+              </div>
+            </div>
+
             <button class="btn-icon text-xs" @click="showDayModal = false">✕</button>
           </div>
         </div>
@@ -790,6 +864,18 @@
         <div v-if="visitError" class="mt-2 text-sm text-red-600">{{ visitError }}</div>
       </div>
     </div>
+
+    <!-- Toast Уведомление -->
+    <transition name="fade">
+      <div v-if="toastMessage" 
+           class="fixed bottom-6 right-6 z-50 p-4 rounded-xl shadow-lg border text-sm max-w-sm flex items-start gap-3"
+           :class="toastType === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'">
+        <span class="text-xl" v-if="toastType === 'error'">⚠️</span>
+        <span class="text-xl" v-else>✅</span>
+        <div class="flex-1 whitespace-pre-line">{{ toastMessage }}</div>
+        <button class="opacity-50 hover:opacity-100" @click="toastMessage = null">✕</button>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -832,6 +918,8 @@ import {
   discardStashEntry,
   fetchVehicles,
   getApiErrorMessage,
+  generateOptimizedSchedule,
+  getOptimizedScheduleJob,
 } from '@/services/api'
 import RouteMap, { type RoutePoint } from '@/components/RouteMap.vue'
 
@@ -853,6 +941,27 @@ const genResult = ref<string | null>(null)
 const genCanForce = ref(false)
 const submittingFM = ref(false)
 const fmResult = ref<string | null>(null)
+
+// ─── Optimize Month state ─────────────────────────────────────────────────────
+const showOptimizeMonthModal = ref(false)
+const optimizingMonth = ref(false)
+const optimizeProgressMessage = ref('')
+const optimizeError = ref<string | null>(null)
+const optimizeCanForce = ref(false)
+
+// Toast state
+const toastMessage = ref<string | null>(null)
+const toastType = ref<'success' | 'error'>('success')
+let toastTimeout: ReturnType<typeof setTimeout> | null = null
+
+function showToast(message: string, type: 'success' | 'error' = 'success', duration = 5000) {
+  toastMessage.value = message
+  toastType.value = type
+  if (toastTimeout) clearTimeout(toastTimeout)
+  toastTimeout = setTimeout(() => {
+    toastMessage.value = null
+  }, duration)
+}
 
 // ─── Holidays state ───────────────────────────────────────────────────────────
 const monthHolidays = ref<Holiday[]>([])
@@ -881,6 +990,7 @@ const statusOptions = [
 
 // ─── Day detail modal state ───────────────────────────────────────────────────
 const showDayModal = ref(false)
+const showDownloadDropdown = ref(false)
 const selectedDayRoute = ref<DailyRoute | null>(null)
 const dayOptResult = ref<OptimizeVariantsResponse | null>(null)
 const dayOptLoading = ref(false)
@@ -1440,6 +1550,94 @@ async function toggleHoliday(h: Holiday) {
   }
 }
 
+function openOptimizeMonthModal() {
+  const existingCount = routes.value.reduce((acc, r) => acc + r.visits.length, 0)
+  optimizeCanForce.value = existingCount > 0
+  optimizeError.value = null
+  showOptimizeMonthModal.value = true
+}
+
+async function startMonthOptimization(force = false) {
+  optimizingMonth.value = true
+  optimizeProgressMessage.value = 'Сбор данных для оптимизации...'
+  optimizeError.value = null
+  
+  try {
+    const activeReps = reps.value.filter(r => r.status === 'active').map(r => r.id)
+    if (!activeReps.length) {
+      throw new Error('Нет активных торговых представителей.')
+    }
+    
+    const trade_points = Array.from(locationsById.value.values()).map(loc => ({
+      id: loc.id,
+      category: loc.category || 'C',
+      latitude: loc.lat,
+      longitude: loc.lon
+    }))
+
+    if (!trade_points.length) {
+      throw new Error('Нет доступных торговых точек для распределения.')
+    }
+
+    optimizeProgressMessage.value = 'Запрос на запуск процесса...'
+    
+    const res = await generateOptimizedSchedule({
+      month: currentMonth.value,
+      reps: activeReps,
+      trade_points,
+      async_mode: true,
+      force,
+      max_visits_per_day: 15,
+    })
+
+    if (res.status === 'accepted' && 'job_id' in res) {
+      const jobId = res.job_id
+      optimizeProgressMessage.value = 'Оптимизация в процессе. Это может занять пару минут...'
+      
+      let completed = false
+      while (!completed) {
+        await new Promise(r => setTimeout(r, 2500))
+        const jobStatus = await getOptimizedScheduleJob(jobId)
+        
+        if (jobStatus.status === 'completed' && jobStatus.result) {
+          completed = true
+          showOptimizeMonthModal.value = false
+          showToast(
+            `Оптимизация завершена!\nДней маршрутов: ${jobStatus.result.days.length}\nСуммарная дистанция: ${jobStatus.result.total_distance_km} км`, 
+            'success'
+          )
+          await loadSchedule()
+        } else if (jobStatus.status === 'failed') {
+          throw new Error(jobStatus.error || 'Произошла ошибка при оптимизации.')
+        } else {
+          optimizeProgressMessage.value = 'Рассчитываем маршруты и балансируем нагрузку...'
+        }
+      }
+    } else if (res.status === 'completed' && 'days' in res) {
+      showOptimizeMonthModal.value = false
+      showToast(
+        `Оптимизация завершена!\nДней маршрутов: ${res.days.length}\nСуммарная дистанция: ${res.total_distance_km} км`, 
+        'success'
+      )
+      await loadSchedule()
+    }
+    
+  } catch (err: any) {
+    if (err?.response?.status === 409 || err?.status === 409) {
+      optimizeCanForce.value = true
+      optimizingMonth.value = false
+      return
+    }
+    const msg = getApiErrorMessage(err, 'Не удалось запустить оптимизацию.')
+    optimizeError.value = msg
+    showToast(`Ошибка:\n${msg}`, 'error')
+  } finally {
+    if (!optimizeCanForce.value || optimizeError.value) {
+      optimizingMonth.value = false
+    }
+  }
+}
+
 async function generatePlan(force = false) {
   generating.value = true
   genResult.value = null
@@ -1546,6 +1744,88 @@ async function handleExport() {
   }
 }
 
+// ─── Download day route ───────────────────────────────────────────────────────
+function escXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function downloadBlob(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadDayRoute(format: 'excel' | 'csv' | 'json') {
+  showDownloadDropdown.value = false
+  const visits = currentDayVisits.value
+  const repName = (selectedDayRoute.value?.rep_name ?? 'rep').replace(/\s+/g, '_')
+  const date = selectedDayRoute.value?.date ?? 'date'
+  const filename = `route_${repName}_${date}`
+
+  if (format === 'json') {
+    const data = visits.map((v, i) => ({
+      order: i + 1,
+      location_name: v.location_name,
+      category: v.location_category ?? '',
+      status: v.status,
+      time_in: v.time_in ?? '',
+      time_out: v.time_out ?? '',
+    }))
+    downloadBlob(JSON.stringify(data, null, 2), `${filename}.json`, 'application/json')
+
+  } else if (format === 'csv') {
+    const rows = [
+      ['#', 'Название ТТ', 'Категория', 'Статус', 'Приход', 'Уход'],
+      ...visits.map((v, i) => [
+        i + 1,
+        v.location_name,
+        v.location_category ?? '',
+        v.status,
+        v.time_in ?? '',
+        v.time_out ?? '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    downloadBlob('﻿' + csv, `${filename}.csv`, 'text/csv;charset=utf-8')
+
+  } else {
+    // Excel 2003 SpreadsheetML — no library needed, supported by all Excel versions
+    const xmlRows = visits.map((v, i) => `
+      <Row>
+        <Cell><Data ss:Type="Number">${i + 1}</Data></Cell>
+        <Cell><Data ss:Type="String">${escXml(v.location_name)}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.location_category ?? ''}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.status}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.time_in ?? ''}</Data></Cell>
+        <Cell><Data ss:Type="String">${v.time_out ?? ''}</Data></Cell>
+      </Row>`).join('')
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Маршрут">
+    <Table>
+      <Row ss:StyleID="header">
+        <Cell><Data ss:Type="String">#</Data></Cell>
+        <Cell><Data ss:Type="String">Название ТТ</Data></Cell>
+        <Cell><Data ss:Type="String">Категория</Data></Cell>
+        <Cell><Data ss:Type="String">Статус</Data></Cell>
+        <Cell><Data ss:Type="String">Приход</Data></Cell>
+        <Cell><Data ss:Type="String">Уход</Data></Cell>
+      </Row>
+      ${xmlRows}
+    </Table>
+  </Worksheet>
+</Workbook>`
+    downloadBlob(xml, `${filename}.xls`, 'application/vnd.ms-excel')
+  }
+}
+
 // ─── Day modal ────────────────────────────────────────────────────────────────
 function openDayModal(route: DailyRoute) {
   selectedDayRoute.value = route
@@ -1553,6 +1833,7 @@ function openDayModal(route: DailyRoute) {
   const repData = reps.value.find(r => r.id === route.rep_id)
   dayVehicleId.value = repData?.vehicle_id ?? null
   dayTransportMode.value = dayVehicleId.value ? 'car' : 'taxi'
+  showDownloadDropdown.value = false
   dayOptResult.value = null
   dayOptError.value = null
   selectedVariantId.value = null

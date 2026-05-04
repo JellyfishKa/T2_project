@@ -181,11 +181,30 @@ async def upload_locations(
 
     created: list[Location] = []
     errors: list[dict] = []
+    skipped: list[str] = []
 
     for idx, row in enumerate(rows):
         try:
             loc_data = LocationCreate(**row)
-            new_location = Location(**loc_data.model_dump())
+            data = loc_data.model_dump()
+
+            # Duplicate check: same name + coords within ±0.0001 + same category + same time windows
+            dup_q = await session.execute(
+                select(Location).where(
+                    Location.name == data["name"],
+                    Location.lat.between(data["lat"] - 0.0001, data["lat"] + 0.0001),
+                    Location.lon.between(data["lon"] - 0.0001, data["lon"] + 0.0001),
+                    Location.category == data.get("category"),
+                    Location.time_window_start == data.get("time_window_start"),
+                    Location.time_window_end == data.get("time_window_end"),
+                )
+            )
+            existing = dup_q.scalar_one_or_none()
+            if existing:
+                skipped.append(data.get("name", "unknown"))
+                continue
+
+            new_location = Location(**data)
             session.add(new_location)
             await session.flush()
             created.append(new_location)
@@ -200,6 +219,7 @@ async def upload_locations(
     return UploadLocationsResponse(
         created=[LocationResponse.model_validate(loc) for loc in created],
         errors=errors,
+        skipped=skipped,
         total_processed=len(rows),
     )
 

@@ -526,4 +526,36 @@ describe('FileUpload.vue', () => {
 
     expect(clickSpy).toHaveBeenCalled()
   })
+
+  it('показывает количество дублей при наличии skipped в ответе', async () => {
+    vi.mocked(uploadLocations).mockResolvedValue({
+      created: [
+        {
+          id: 'loc-1',
+          name: 'Магазин 1',
+          city: 'Саранск',
+          lat: 54.1871,
+          lon: 45.1749,
+          time_window_start: '09:00',
+          time_window_end: '18:00',
+          category: 'B'
+        }
+      ],
+      skipped: ['Дубль 1'],
+      errors: [],
+      total_processed: 2
+    } as any)
+
+    wrapper.vm.selectedFile = new File(['[]'], 'locations.json', {
+      type: 'application/json'
+    })
+    wrapper.vm.allFileData = [{ name: 'Магазин 1' }]
+    wrapper.vm.validationErrors = []
+
+    await wrapper.vm.uploadToServer()
+    await nextTick()
+
+    const successText = wrapper.vm.successMessage as string
+    expect(successText).toContain('Дублей пропущено: 1')
+  })
 })

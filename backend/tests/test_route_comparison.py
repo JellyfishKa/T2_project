@@ -131,6 +131,9 @@ async def test_optimize_saves_comparison_snapshot_metrics():
         side_effect=[
             {"distance_km": 24.2, "time_minutes": 180.0, "cost_rub": 1400.0},
             {"distance_km": 18.1, "time_minutes": 132.0, "cost_rub": 1010.0},
+            {"distance_km": 19.5, "time_minutes": 140.0, "cost_rub": 1100.0},
+            {"distance_km": 20.0, "time_minutes": 145.0, "cost_rub": 1150.0},
+            {"distance_km": 18.1, "time_minutes": 132.0, "cost_rub": 1010.0},
         ]
     )
     optimizer._generate_with_fallback = AsyncMock(

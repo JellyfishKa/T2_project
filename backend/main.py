@@ -100,6 +100,17 @@ async def lifespan(app: FastAPI):
                 ))
             except Exception as e:
                 logger.warning(f"Could not add column locations.{col_name}: {e}")
+        for col_def in [
+            "home_lat FLOAT NOT NULL DEFAULT 54.1871",
+            "home_lon FLOAT NOT NULL DEFAULT 45.1749",
+        ]:
+            col_name = col_def.split()[0]
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE sales_reps ADD COLUMN IF NOT EXISTS {col_def}"
+                ))
+            except Exception as e:
+                logger.warning(f"Could not add column sales_reps.{col_name}: {e}")
     # Сидирование праздников 2026 (если таблица пуста)
     try:
         from sqlalchemy import text as sql_text
@@ -144,8 +155,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
 
 api_v1_router = APIRouter(prefix="/api/v1")
@@ -196,7 +207,7 @@ async def _health_response(session: AsyncSession):
 
         # Disk free (в MB)
         try:
-            disk = shutil.disk_usage("/")
+            disk = shutil.disk_usage(Path(__file__).resolve().root)
             disk_free_mb = round(disk.free / 1024 / 1024)
         except Exception:
             disk_free_mb = None
@@ -217,8 +228,8 @@ async def _health_response(session: AsyncSession):
             "database": "connected",
             "services": {
                 "database": "connected",
-                "qwen": "loaded" if qwen_loaded else "not_loaded",
-                "llama": "loaded" if llama_loaded else "not_loaded",
+                "qwen": {"status": "loaded" if qwen_loaded else "not_loaded", "optional": True},
+                "llama": {"status": "loaded" if llama_loaded else "not_loaded", "optional": True},
             },
             "disk_free_mb": disk_free_mb,
             "visits_today": visits_today,
@@ -234,8 +245,8 @@ async def _health_response(session: AsyncSession):
                 "status": "unhealthy",
                 "services": {
                     "database": "disconnected",
-                    "qwen": "error",
-                    "llama": "error",
+                    "qwen": {"status": "error", "optional": True},
+                    "llama": {"status": "error", "optional": True},
                 },
             },
         )

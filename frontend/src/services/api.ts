@@ -11,6 +11,10 @@ import type {
   OptimizeRequest,
   OptimizeVariantsResponse,
   ConfirmVariantRequest,
+  GenerateOptimizedScheduleRequest,
+  GenerateOptimizedScheduleAccepted,
+  GenerateOptimizedScheduleResult,
+  GenerateOptimizedScheduleJobStatus,
   RoutePreviewPoint,
   RoutePreviewResponse,
   PaginatedResponse,
@@ -576,6 +580,20 @@ export const generateSchedule = async (
   return response.data
 }
 
+export const generateOptimizedSchedule = async (
+  payload: GenerateOptimizedScheduleRequest
+): Promise<GenerateOptimizedScheduleAccepted | GenerateOptimizedScheduleResult> => {
+  const response = await api.post('/schedule/generate-optimized', payload)
+  return response.data
+}
+
+export const getOptimizedScheduleJob = async (
+  jobId: string
+): Promise<GenerateOptimizedScheduleJobStatus> => {
+  const response = await api.get(`/schedule/jobs/${jobId}`)
+  return response.data
+}
+
 export const fetchMonthlySchedule = async (
   month: string
 ): Promise<MonthlyPlan> => {
@@ -799,5 +817,9 @@ export type {
   MonthlyPlan,
   ForceMajeureEvent,
   VisitScheduleItem,
-  VisitLog
+  VisitLog,
+  GenerateOptimizedScheduleRequest,
+  GenerateOptimizedScheduleAccepted,
+  GenerateOptimizedScheduleResult,
+  GenerateOptimizedScheduleJobStatus,
 }

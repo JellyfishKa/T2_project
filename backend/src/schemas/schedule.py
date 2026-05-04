@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class GenerateScheduleRequest(BaseModel):
-    month: str = Field(..., example="2026-03",
+    month: str = Field(..., examples=["2026-03"],
                        description="Месяц для генерации плана (YYYY-MM)")
     rep_ids: Optional[List[str]] = Field(
         None, description="Список ID сотрудников. Если пусто — все активные"

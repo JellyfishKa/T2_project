@@ -520,11 +520,14 @@ const uploadToServer = async () => {
     // Бэкенд возвращает {created: Location[], errors: [], total_processed: N}
     const created = (result as any).created ?? result.locations ?? []
     const errors = (result as any).errors ?? []
+    const skipped: string[] = (result as any).skipped ?? []
 
     if (created.length > 0) {
       successMessage.value = `Загружено ${created.length} магазинов.`
+      if (skipped.length > 0)
+        successMessage.value += ` Дублей пропущено: ${skipped.length}.`
       if (errors.length > 0)
-        successMessage.value += ` Пропущено строк с ошибками: ${errors.length}.`
+        successMessage.value += ` Ошибок: ${errors.length}.`
 
       // Конвертируем формат бэкенда → формат фронтенда.
       // city: берём из данных файла если есть, иначе извлекаем из name.

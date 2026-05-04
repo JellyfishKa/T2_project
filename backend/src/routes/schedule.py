@@ -121,7 +121,7 @@ def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedSc
         status="completed",
         month=req.month,
         reps=reps,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         total_distance_km=round(total_km, 2),
         days=days,
         meta={
@@ -213,6 +213,8 @@ def _estimated_duration(visit_count: int) -> float:
 def _estimate_duration_hours_from_route(
     schedules: List[VisitSchedule],
     preview_cache: Dict[tuple[str, ...], float],
+    depot_lat: float = 54.1871,
+    depot_lon: float = 45.1749,
 ) -> float:
     visit_count = len(schedules)
     if visit_count == 0:
@@ -246,24 +248,32 @@ def _estimate_duration_hours_from_route(
     try:
         # Apply nearest-neighbour ordering (same as schedule_planner) so
         # displayed time matches the planner's budget estimate.
-        priority_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-        matrix = compute_distance_matrix(route_points)
-        start_idx = min(
-            range(len(route_points)),
-            key=lambda i: priority_rank.get(route_points[i]["priority"], 3),
-        )
-        visited = [False] * len(route_points)
-        nn_order = [start_idx]
-        visited[start_idx] = True
-        for _ in range(len(route_points) - 1):
+        # Depot is the first point of the route
+        depot_point = {
+            "ID": "__depot__",
+            "name": "Depot",
+            "lat": depot_lat,
+            "lon": depot_lon,
+            "priority": "A",
+        }
+        all_points = [depot_point] + route_points
+        matrix = compute_distance_matrix(all_points)
+
+        visited = [False] * len(all_points)
+        nn_order = [0]  # Start from depot (index 0)
+        visited[0] = True
+
+        for _ in range(len(all_points) - 1):
             cur = nn_order[-1]
             nxt = min(
-                (i for i in range(len(route_points)) if not visited[i]),
+                (i for i in range(len(all_points)) if not visited[i]),
                 key=lambda i: matrix[cur][i],
             )
             nn_order.append(nxt)
             visited[nxt] = True
-        ordered_ids = [route_points[i]["ID"] for i in nn_order]
+
+        # Remove depot from ordered_ids for metrics calculation
+        ordered_ids = [all_points[i]["ID"] for i in nn_order if all_points[i]["ID"] != "__depot__"]
         _, total_time_hours, _ = compute_route_metrics(route_points, ordered_ids)
         duration_hours = round(total_time_hours, 1)
     except Exception:
@@ -356,9 +366,31 @@ async def generate_schedule(
     )
     non_working = set(holidays_q.scalars().all())
 
+    # Collect completed visits for this month so planner can skip already-done locations
+    month_num = m
+    completed_q = await session.execute(
+        select(VisitSchedule.location_id, func.count().label("cnt"))
+        .where(
+            VisitSchedule.planned_date >= month_start,
+            VisitSchedule.planned_date <= month_end,
+            VisitSchedule.status == "completed",
+            *(
+                [VisitSchedule.rep_id.in_(req.rep_ids)]
+                if req.rep_ids
+                else []
+            ),
+        )
+        .group_by(VisitSchedule.location_id)
+    )
+    completed_visits: Dict[str, int] = {
+        row.location_id: row.cnt for row in completed_q.all()
+    }
+
     planner = SchedulePlanner(session, non_working_dates=non_working)
     # Route already deleted planned/rescheduled/skipped above; skip planner's delete pass
-    result = await planner.build_monthly_plan(req.month, req.rep_ids, overwrite=False)
+    result = await planner.build_monthly_plan(
+        req.month, req.rep_ids, overwrite=False, completed_visits=completed_visits
+    )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
 
@@ -1163,6 +1195,8 @@ async def _build_daily_route(
     route_duration_hours = _estimate_duration_hours_from_route(
         sorted_schedules,
         preview_cache if preview_cache is not None else {},
+        depot_lat=getattr(rep, 'home_lat', 54.1871),
+        depot_lon=getattr(rep, 'home_lon', 45.1749),
     )
 
     return DailyRoute(

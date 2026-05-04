@@ -13,7 +13,7 @@ router = APIRouter(prefix="/qwen", tags=["Qwen LLM"])
 @router.post("/optimize", response_model=Route)
 async def optimize_route(
     locations: List[Location],
-    constraints: Dict = None,
+    constraints: Dict | None = None,
     include_recommendation: bool = Query(False, description="Добавить в ответ"
                                          "recommendation (model + reason)"),
     time_constraint: Optional[str] = Query(None,
