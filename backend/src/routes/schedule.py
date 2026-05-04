@@ -4,7 +4,9 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -32,6 +34,13 @@ from src.schemas.schedule import (
     VisitStatusUpdate,
 )
 from src.models.geo_utils import compute_distance_matrix, compute_route_metrics, infer_category
+from src.models.schedule_schemas import (
+    GenerateOptimizedScheduleAccepted,
+    GenerateOptimizedScheduleJobStatus,
+    GenerateOptimizedScheduleRequest,
+    GenerateOptimizedScheduleResult,
+)
+from src.services.osrm_service import osrm_trip_order
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
     MAX_TT_PER_DAY,
@@ -40,6 +49,137 @@ from src.services.schedule_planner import (
 )
 
 router = APIRouter(prefix="/schedule", tags=["Schedule"])
+
+# ---------------------------------------------------------------------------
+# T2-7: generate optimized month in one call (in-memory async jobs)
+# ---------------------------------------------------------------------------
+
+_GEN_OPT_JOBS: Dict[str, Dict] = {}
+_GEN_OPT_KEYS: Dict[str, str] = {}
+
+
+def _gen_opt_key(req: GenerateOptimizedScheduleRequest) -> str:
+    return f"{req.month.isoformat()}|{','.join(req.reps)}|tp={len(req.trade_points)}"
+
+
+def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedScheduleResult:
+    from schedule_planner import SchedulePlanner as SimplePlanner, TradePoint, VisitTask, route_distance_km
+
+    reps = list(req.reps)
+    trade_points = [
+        TradePoint(
+            id=tp.id,
+            category=tp.category,
+            latitude=tp.latitude,
+            longitude=tp.longitude,
+        )
+        for tp in req.trade_points
+    ]
+
+    planner = SimplePlanner(
+        rep_ids=reps,
+        max_visits_per_day=req.max_visits_per_day,
+        geo_clusterer=SimplePlanner.make_default_geo_clusterer(reps),
+    )
+    routes = planner.plan_month(trade_points, req.month, use_geo=True)
+
+    days = []
+    total_km = 0.0
+    for r in routes:
+        ids = [v.trade_point_id for v in r.visits]
+        coords = [(v.latitude, v.longitude) for v in r.visits]
+        order = osrm_trip_order(coords, osrm_url=req.osrm_url)
+        if order is not None:
+            routing_method = "osrm-trip"
+            ids = [ids[i] for i in order]
+            visits = tuple(
+                VisitTask(
+                    trade_point_id=r.visits[i].trade_point_id,
+                    category=r.visits[i].category,
+                    latitude=r.visits[i].latitude,
+                    longitude=r.visits[i].longitude,
+                )
+                for i in order
+            )
+            dist_km = route_distance_km(visits)
+        else:
+            routing_method = "heuristic-nn"
+            dist_km = route_distance_km(r.visits)
+
+        total_km += dist_km
+        days.append(
+            {
+                "rep_id": r.rep_id,
+                "day": r.day,
+                "trade_point_ids": ids,
+                "total_distance_km": round(dist_km, 2),
+                "routing_method": routing_method,
+            }
+        )
+
+    return GenerateOptimizedScheduleResult(
+        status="completed",
+        month=req.month,
+        reps=reps,
+        created_at=datetime.utcnow(),
+        total_distance_km=round(total_km, 2),
+        days=days,
+        meta={
+            "geo_clustering": "kmeans+balance (no-sklearn backend impl)",
+            "max_visits_per_day": req.max_visits_per_day,
+        },
+    )
+
+
+def _gen_opt_run_job(job_id: str, req: GenerateOptimizedScheduleRequest) -> None:
+    try:
+        _GEN_OPT_JOBS[job_id]["status"] = "in_progress"
+        result = _gen_opt_build(req)
+        _GEN_OPT_JOBS[job_id]["status"] = "completed"
+        _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
+    except Exception as e:
+        _GEN_OPT_JOBS[job_id]["status"] = "failed"
+        _GEN_OPT_JOBS[job_id]["error"] = str(e)
+
+
+@router.post(
+    "/generate-optimized",
+    response_model=GenerateOptimizedScheduleAccepted | GenerateOptimizedScheduleResult,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_optimized_month(req: GenerateOptimizedScheduleRequest, bg: BackgroundTasks):
+    key = _gen_opt_key(req)
+    if not req.force and key in _GEN_OPT_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Schedule already generated. Use force=true to regenerate.",
+        )
+
+    job_id = str(uuid.uuid4())
+    _GEN_OPT_JOBS[job_id] = {"status": "in_progress", "result": None, "error": None, "key": key}
+    _GEN_OPT_KEYS[key] = job_id
+
+    if not req.async_mode or len(req.trade_points) <= 25:
+        result = _gen_opt_build(req)
+        _GEN_OPT_JOBS[job_id]["status"] = "completed"
+        _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
+        return result
+
+    bg.add_task(_gen_opt_run_job, job_id, req)
+    return GenerateOptimizedScheduleAccepted(status="accepted", job_id=job_id)
+
+
+@router.get("/jobs/{job_id}", response_model=GenerateOptimizedScheduleJobStatus)
+async def get_generate_optimized_job(job_id: str):
+    row = _GEN_OPT_JOBS.get(job_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
+    return GenerateOptimizedScheduleJobStatus(
+        status=row["status"],
+        job_id=job_id,
+        result=row["result"],
+        error=row["error"],
+    )
 
 # ── Машина состояний визита ──────────────────────────────────────────────────
 VALID_TRANSITIONS: Dict[str, set] = {
