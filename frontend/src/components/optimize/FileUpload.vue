@@ -338,12 +338,102 @@
         </div>
       </div>
     </div>
+
+    <!-- ─── Из базы данных ─────────────────────────────────────────────── -->
+    <div class="border-t border-gray-200 px-6 py-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900">Из базы данных</h3>
+          <p class="text-xs text-gray-500 mt-0.5">Выберите существующие торговые точки</p>
+        </div>
+        <button
+          @click="toggleDbPanel"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+        >
+          <svg v-if="!dbPanelOpen" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+          <svg v-else class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+          </svg>
+          {{ dbPanelOpen ? 'Скрыть' : 'Открыть список' }}
+        </button>
+      </div>
+
+      <div v-if="dbPanelOpen" class="mt-4 space-y-3">
+        <!-- Search -->
+        <input
+          v-model="dbSearch"
+          type="text"
+          placeholder="Поиск по названию..."
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+
+        <!-- Loading -->
+        <div v-if="dbLoading" class="text-sm text-gray-500 text-center py-4">Загрузка…</div>
+        <div v-else-if="dbError" class="text-sm text-red-600 py-2">{{ dbError }}</div>
+        <div v-else-if="dbLocations.length === 0" class="text-sm text-gray-400 text-center py-4">В базе нет точек</div>
+        <template v-else>
+          <!-- Select all / add selected -->
+          <div class="flex items-center justify-between gap-2">
+            <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input type="checkbox" :checked="dbAllSelected" @change="toggleDbAll" class="rounded" />
+              Выбрать все ({{ dbFiltered.length }})
+            </label>
+            <div class="flex gap-2">
+              <button
+                @click="addDbSelected"
+                :disabled="dbSelectedIds.size === 0"
+                class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Добавить выбранные ({{ dbSelectedIds.size }})
+              </button>
+            </div>
+          </div>
+
+          <!-- List -->
+          <div class="space-y-1 max-h-72 overflow-y-auto pr-1">
+            <div
+              v-for="loc in dbFiltered"
+              :key="loc.id"
+              @click="toggleDbSelect(loc.id)"
+              :class="[
+                'flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors text-sm',
+                dbSelectedIds.has(loc.id)
+                  ? 'bg-blue-50 border-blue-300'
+                  : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+              ]"
+            >
+              <input
+                type="checkbox"
+                :checked="dbSelectedIds.has(loc.id)"
+                @click.stop="toggleDbSelect(loc.id)"
+                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 flex-shrink-0"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-gray-900 truncate">{{ loc.name }}</p>
+                <p class="text-xs text-gray-500 truncate">{{ loc.city || '' }}<template v-if="loc.lat"> · {{ loc.lat?.toFixed(4) }}, {{ loc.lon?.toFixed(4) }}</template></p>
+              </div>
+              <span
+                v-if="loc.category"
+                :class="[
+                  'flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full font-medium',
+                  loc.category === 'A' ? 'bg-red-100 text-red-700' :
+                  loc.category === 'B' ? 'bg-yellow-100 text-yellow-700' :
+                  loc.category === 'C' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                ]"
+              >{{ loc.category }}</span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { uploadLocations, getApiErrorMessage } from '@/services/api'
+import { uploadLocations, getApiErrorMessage, fetchAllLocations } from '@/services/api'
 import type { Location } from './types'
 import {
   normalizeLocationCategory,
@@ -373,6 +463,14 @@ const validationErrors = ref<string[]>([])
 const uploadedLocations = ref<Location[]>([])
 // Множество выбранных id для чекбоксов
 const selectedIds = ref<Set<string>>(new Set())
+
+// ─── DB panel ────────────────────────────────────────────────────────────────
+const dbPanelOpen = ref(false)
+const dbLoading = ref(false)
+const dbError = ref('')
+const dbLocations = ref<any[]>([])
+const dbSearch = ref('')
+const dbSelectedIds = ref<Set<string>>(new Set())
 
 // Computed
 const canUpload = computed(
@@ -622,6 +720,82 @@ const resetState = () => {
   validationErrors.value = []
   uploadedLocations.value = []
   selectedIds.value = new Set()
+}
+
+// ─── DB panel computed + actions ─────────────────────────────────────────────
+const dbFiltered = computed(() => {
+  const q = dbSearch.value.trim().toLowerCase()
+  if (!q) return dbLocations.value
+  return dbLocations.value.filter(l => l.name?.toLowerCase().includes(q))
+})
+
+const dbAllSelected = computed(() =>
+  dbFiltered.value.length > 0 && dbFiltered.value.every(l => dbSelectedIds.value.has(l.id))
+)
+
+async function toggleDbPanel() {
+  dbPanelOpen.value = !dbPanelOpen.value
+  if (dbPanelOpen.value && dbLocations.value.length === 0) {
+    await loadDbLocations()
+  }
+}
+
+async function loadDbLocations() {
+  dbLoading.value = true
+  dbError.value = ''
+  try {
+    const raw = await fetchAllLocations()
+    dbLocations.value = Array.isArray(raw) ? raw : []
+  } catch (e: any) {
+    dbError.value = getApiErrorMessage(e, 'Не удалось загрузить точки из базы')
+  } finally {
+    dbLoading.value = false
+  }
+}
+
+function toggleDbSelect(id: string) {
+  const next = new Set(dbSelectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  dbSelectedIds.value = next
+}
+
+function toggleDbAll() {
+  if (dbAllSelected.value) {
+    dbSelectedIds.value = new Set()
+  } else {
+    dbSelectedIds.value = new Set(dbFiltered.value.map(l => l.id))
+  }
+}
+
+function addDbSelected() {
+  const toAdd = dbFiltered.value.filter(l => dbSelectedIds.value.has(l.id))
+  if (!toAdd.length) return
+
+  // Convert backend Location format → frontend Location format
+  const locations: Location[] = toAdd.map(loc => {
+    const category = normalizeLocationCategory(loc.category)
+    return {
+      id: loc.id,
+      name: loc.name ?? '',
+      city: loc.city ?? '',
+      street: loc.street ?? '',
+      houseNumber: loc.house_number ?? '',
+      address: loc.address ?? '',
+      latitude: loc.lat ?? 0,
+      longitude: loc.lon ?? 0,
+      timeWindowStart: loc.time_window_start ?? '09:00',
+      timeWindowEnd: loc.time_window_end ?? '18:00',
+      priority: resolveLocationPriority({ priority: loc.priority, category }),
+      category,
+    }
+  })
+
+  emit('add-locations', locations)
+  const names = locations.length === 1 ? locations[0].name : `${locations.length} точек`
+  successMessage.value = `Добавлено из БД: ${names}`
+  setTimeout(() => { successMessage.value = '' }, 3000)
+  dbSelectedIds.value = new Set()
 }
 
 // ─── Вспомогательная: угадать город из названия магазина ─────────────────────

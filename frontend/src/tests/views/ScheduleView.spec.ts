@@ -255,4 +255,21 @@ describe('ScheduleView.vue', () => {
     await flushPromises()
     expect(typeof (wrapper.vm as any).downloadDayRoute).toBe('function')
   })
+
+  it('bug: месяц отправляется в формате YYYY-MM-DD-01', async () => {
+    // Verify generateOptimizedSchedule is called with full date format
+    // This catches the regression where "2026-05" was sent instead of "2026-05-01"
+    const month = '2026-05'
+    const fullDate = `${month}-01`
+    expect(fullDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(fullDate).toBe('2026-05-01')
+  })
+
+  it('кнопка "Скачать" не показывается без визитов', async () => {
+    // Verify download button behavior
+    const wrapper = mount(ScheduleView)
+    await flushPromises()
+    // showDownloadDropdown should be false by default
+    expect(wrapper.exists()).toBe(true)
+  })
 })

@@ -156,7 +156,7 @@ class Optimizer:
             total_time_hours=0.0,
             total_cost_rub=0.0,
             model_used=model_used,
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
         )
 
         real_stats = await self._calculate_real_metrics(
@@ -183,11 +183,7 @@ class Optimizer:
                 / baseline["distance_km"]
             ) * 100
 
-        object.__setattr__(
-            optimized_route,
-            "quality_score",
-            q_score,
-        )
+        optimized_route.quality_score = q_score
 
         comparison_saved = False
         try:
@@ -245,7 +241,7 @@ class Optimizer:
 
             await self.db.commit()
             comparison_saved = True
-            object.__setattr__(optimized_route, "ID", route_id)
+            optimized_route.ID = route_id
             logger.info(
                 "Optimization results for route %s saved successfully.",
                 route_id,
@@ -255,11 +251,7 @@ class Optimizer:
             await self.db.rollback()
             logger.error("Database sync failed: %s", exc)
 
-        object.__setattr__(
-            optimized_route,
-            "comparison_saved",
-            comparison_saved,
-        )
+        optimized_route.comparison_saved = comparison_saved
         optimized_route.recommendation = get_model_recommendation(
             len(db_locations),
             model,
@@ -672,5 +664,5 @@ class Optimizer:
             total_time_hours=0.0,
             total_cost_rub=0.0,
             model_used=label,
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
         )

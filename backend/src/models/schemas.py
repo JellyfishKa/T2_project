@@ -25,3 +25,5 @@ class Route(BaseModel):
     model_used: str
     created_at: datetime
     recommendation: Optional[dict] = None
+    quality_score: float = 0.0
+    comparison_saved: bool = False

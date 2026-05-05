@@ -79,7 +79,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="loc in locationsPreview" :key="loc.id" class="hover:bg-gray-50">
+            <tr v-for="loc in locPageItems" :key="loc.id" class="hover:bg-gray-50">
               <td class="px-4 py-2 text-gray-900 max-w-xs truncate">{{ loc.name }}</td>
               <td class="px-4 py-2 text-gray-600">{{ loc.city ?? '—' }}</td>
               <td class="px-4 py-2 text-gray-600">{{ loc.district ?? '—' }}</td>
@@ -97,8 +97,49 @@
             </tr>
           </tbody>
         </table>
-        <div v-if="locations.length > 50" class="px-4 py-2 text-xs text-gray-400 border-t">
-          Показано 50 из {{ locations.length }}
+        <!-- Pagination -->
+        <div v-if="locPageCount > 1" class="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+          <span class="text-sm text-gray-500">
+            {{ (locPage - 1) * 50 + 1 }}–{{ Math.min(locPage * 50, locations.length) }} из {{ locations.length }}
+          </span>
+          <div class="flex items-center gap-1">
+            <button
+              @click="locPage = 1"
+              :disabled="locPage === 1"
+              class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >«</button>
+            <button
+              @click="locPage--"
+              :disabled="locPage === 1"
+              class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >‹</button>
+            <span
+              v-for="p in pagesToShow"
+              :key="p"
+            >
+              <button
+                v-if="p !== '...'"
+                @click="locPage = Number(p)"
+                :class="[
+                  'px-2.5 py-1 text-xs border rounded',
+                  locPage === Number(p)
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'border-gray-300 hover:bg-gray-50'
+                ]"
+              >{{ p }}</button>
+              <span v-else class="px-1 text-xs text-gray-400">…</span>
+            </span>
+            <button
+              @click="locPage++"
+              :disabled="locPage === locPageCount"
+              class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >›</button>
+            <button
+              @click="locPage = locPageCount"
+              :disabled="locPage === locPageCount"
+              class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >»</button>
+          </div>
         </div>
       </div>
 
@@ -547,7 +588,30 @@ const clearPreview = ref<{ locations: number; visit_schedule: number; visit_log:
 const clearConfirmText = ref('')
 const clearing = ref(false)
 
-const locationsPreview = computed(() => locations.value.slice(0, 50))
+// Pagination for locations
+const locPage = ref(1)
+const locPageSize = 50
+
+const locPageCount = computed(() => Math.max(1, Math.ceil(locations.value.length / locPageSize)))
+const locPageItems = computed(() => {
+  const start = (locPage.value - 1) * locPageSize
+  return locations.value.slice(start, start + locPageSize)
+})
+
+const pagesToShow = computed(() => {
+  const total = locPageCount.value
+  const current = locPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | '...')[] = [1]
+  if (current > 3) pages.push('...')
+  for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) pages.push(p)
+  if (current < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+})
+
+// Reset page when locations reload
+watch(locations, () => { locPage.value = 1 })
 
 function locCatCount(cat: string) {
   return locations.value.filter(l => l.category === cat).length

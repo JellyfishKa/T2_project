@@ -54,8 +54,11 @@ router = APIRouter(prefix="/schedule", tags=["Schedule"])
 # T2-7: generate optimized month in one call (in-memory async jobs)
 # ---------------------------------------------------------------------------
 
+import threading
+
 _GEN_OPT_JOBS: Dict[str, Dict] = {}
 _GEN_OPT_KEYS: Dict[str, str] = {}
+_GEN_OPT_LOCK = threading.Lock()
 
 
 def _gen_opt_key(req: GenerateOptimizedScheduleRequest) -> str:
@@ -63,59 +66,76 @@ def _gen_opt_key(req: GenerateOptimizedScheduleRequest) -> str:
 
 
 def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedScheduleResult:
-    from schedule_planner import SchedulePlanner as SimplePlanner, TradePoint, VisitTask, route_distance_km
+    """
+    Heuristic round-robin scheduler: distributes trade_points across reps by day
+    using nearest-neighbour ordering within each day-batch.
+    """
+    from src.models.geo_utils import haversine
 
     reps = list(req.reps)
-    trade_points = [
-        TradePoint(
-            id=tp.id,
-            category=tp.category,
-            latitude=tp.latitude,
-            longitude=tp.longitude,
-        )
-        for tp in req.trade_points
-    ]
+    tps = list(req.trade_points)
+    max_per_day = req.max_visits_per_day
+    n_reps = len(reps)
 
-    planner = SimplePlanner(
-        rep_ids=reps,
-        max_visits_per_day=req.max_visits_per_day,
-        geo_clusterer=SimplePlanner.make_default_geo_clusterer(reps),
-    )
-    routes = planner.plan_month(trade_points, req.month, use_geo=True)
+    # Simple round-robin: assign trade_points to reps evenly
+    rep_tps: Dict[str, list] = {r: [] for r in reps}
+    for i, tp in enumerate(tps):
+        rep_tps[reps[i % n_reps]].append(tp)
 
     days = []
     total_km = 0.0
-    for r in routes:
-        ids = [v.trade_point_id for v in r.visits]
-        coords = [(v.latitude, v.longitude) for v in r.visits]
-        order = osrm_trip_order(coords, osrm_url=req.osrm_url)
-        if order is not None:
-            routing_method = "osrm-trip"
-            ids = [ids[i] for i in order]
-            visits = tuple(
-                VisitTask(
-                    trade_point_id=r.visits[i].trade_point_id,
-                    category=r.visits[i].category,
-                    latitude=r.visits[i].latitude,
-                    longitude=r.visits[i].longitude,
-                )
-                for i in order
-            )
-            dist_km = route_distance_km(visits)
-        else:
-            routing_method = "heuristic-nn"
-            dist_km = route_distance_km(r.visits)
 
-        total_km += dist_km
-        days.append(
-            {
-                "rep_id": r.rep_id,
-                "day": r.day,
-                "trade_point_ids": ids,
-                "total_distance_km": round(dist_km, 2),
-                "routing_method": routing_method,
-            }
-        )
+    for rep_id, assigned_tps in rep_tps.items():
+        # Chunk into days of max_per_day each
+        for chunk_start in range(0, len(assigned_tps), max_per_day):
+            chunk = assigned_tps[chunk_start:chunk_start + max_per_day]
+            if not chunk:
+                continue
+
+            ids = [tp.id for tp in chunk]
+            coords = [(tp.latitude, tp.longitude) for tp in chunk]
+
+            # Try OSRM ordering; fall back to heuristic-NN
+            order = osrm_trip_order(coords, osrm_url=req.osrm_url)
+            if order is not None:
+                routing_method = "osrm-trip"
+                ids = [ids[i] for i in order]
+                ordered_coords = [coords[i] for i in order]
+            else:
+                routing_method = "heuristic-nn"
+                ordered_coords = coords
+
+            # Compute approximate distance (haversine sum)
+            dist_km = 0.0
+            for j in range(1, len(ordered_coords)):
+                dist_km += haversine(
+                    ordered_coords[j - 1][0], ordered_coords[j - 1][1],
+                    ordered_coords[j][0], ordered_coords[j][1],
+                )
+
+            total_km += dist_km
+            day_offset = chunk_start // max_per_day
+            # Assign sequential weekdays starting from month start
+            from calendar import monthrange as _mr
+            import datetime as _dt
+            month_date = req.month if isinstance(req.month, _dt.date) else _dt.date.fromisoformat(str(req.month))
+            candidate = _dt.date(month_date.year, month_date.month, 1)
+            weekdays_found = 0
+            while weekdays_found <= day_offset:
+                if candidate.weekday() < 5:
+                    weekdays_found += 1
+                if weekdays_found <= day_offset:
+                    candidate += _dt.timedelta(days=1)
+
+            days.append(
+                {
+                    "rep_id": rep_id,
+                    "day": candidate,
+                    "trade_point_ids": ids,
+                    "total_distance_km": round(dist_km, 2),
+                    "routing_method": routing_method,
+                }
+            )
 
     return GenerateOptimizedScheduleResult(
         status="completed",
@@ -125,21 +145,28 @@ def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedSc
         total_distance_km=round(total_km, 2),
         days=days,
         meta={
-            "geo_clustering": "kmeans+balance (no-sklearn backend impl)",
+            "algorithm": "round-robin + heuristic-nn",
             "max_visits_per_day": req.max_visits_per_day,
         },
     )
 
 
 def _gen_opt_run_job(job_id: str, req: GenerateOptimizedScheduleRequest) -> None:
-    try:
+    with _GEN_OPT_LOCK:
         _GEN_OPT_JOBS[job_id]["status"] = "in_progress"
+    try:
         result = _gen_opt_build(req)
-        _GEN_OPT_JOBS[job_id]["status"] = "completed"
-        _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
+        with _GEN_OPT_LOCK:
+            _GEN_OPT_JOBS[job_id]["status"] = "completed"
+            _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
     except Exception as e:
-        _GEN_OPT_JOBS[job_id]["status"] = "failed"
-        _GEN_OPT_JOBS[job_id]["error"] = str(e)
+        with _GEN_OPT_LOCK:
+            _GEN_OPT_JOBS[job_id]["status"] = "failed"
+            _GEN_OPT_JOBS[job_id]["error"] = str(e)
+            # Remove key so user can retry without force=true (BUG-4)
+            failed_key = next((k for k, v in _GEN_OPT_KEYS.items() if v == job_id), None)
+            if failed_key:
+                del _GEN_OPT_KEYS[failed_key]
 
 
 @router.post(
@@ -149,20 +176,22 @@ def _gen_opt_run_job(job_id: str, req: GenerateOptimizedScheduleRequest) -> None
 )
 async def generate_optimized_month(req: GenerateOptimizedScheduleRequest, bg: BackgroundTasks):
     key = _gen_opt_key(req)
-    if not req.force and key in _GEN_OPT_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Schedule already generated. Use force=true to regenerate.",
-        )
+    with _GEN_OPT_LOCK:
+        if not req.force and key in _GEN_OPT_KEYS:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Schedule already generated. Use force=true to regenerate.",
+            )
 
-    job_id = str(uuid.uuid4())
-    _GEN_OPT_JOBS[job_id] = {"status": "in_progress", "result": None, "error": None, "key": key}
-    _GEN_OPT_KEYS[key] = job_id
+        job_id = str(uuid.uuid4())
+        _GEN_OPT_JOBS[job_id] = {"status": "in_progress", "result": None, "error": None, "key": key}
+        _GEN_OPT_KEYS[key] = job_id
 
     if not req.async_mode or len(req.trade_points) <= 25:
         result = _gen_opt_build(req)
-        _GEN_OPT_JOBS[job_id]["status"] = "completed"
-        _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
+        with _GEN_OPT_LOCK:
+            _GEN_OPT_JOBS[job_id]["status"] = "completed"
+            _GEN_OPT_JOBS[job_id]["result"] = result.model_dump()
         return result
 
     bg.add_task(_gen_opt_run_job, job_id, req)
@@ -676,7 +705,7 @@ async def resolve_stash_manual(
     entry.resolved_schedule_id = new_sched.id
 
     await session.commit()
-    await session.refresh(entry)
+    await session.refresh(entry, ["location", "rep"])
     return _stash_to_item(entry)
 
 
@@ -715,7 +744,7 @@ async def resolve_stash_carry_over(
     entry.resolved_schedule_id = new_schedule_id
 
     await session.commit()
-    await session.refresh(entry)
+    await session.refresh(entry, ["location", "rep"])
     return _stash_to_item(entry)
 
 

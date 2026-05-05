@@ -1582,7 +1582,7 @@ async function startMonthOptimization(force = false) {
     optimizeProgressMessage.value = 'Запрос на запуск процесса...'
     
     const res = await generateOptimizedSchedule({
-      month: currentMonth.value,
+      month: `${currentMonth.value}-01`,
       reps: activeReps,
       trade_points,
       async_mode: true,
@@ -1711,6 +1711,13 @@ async function submitVisitUpdate() {
       if (idx !== -1) {
         route.visits[idx] = updated
         break
+      }
+    }
+    // Also update selectedDayRoute if the day modal is open for this route
+    if (selectedDayRoute.value && selectedDayRoute.value.rep_id === updated.rep_id) {
+      const dvIdx = selectedDayRoute.value.visits.findIndex(v => v.id === updated.id)
+      if (dvIdx !== -1) {
+        selectedDayRoute.value.visits[dvIdx] = updated
       }
     }
     closeVisitModal()
