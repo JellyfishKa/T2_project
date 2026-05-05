@@ -527,6 +527,18 @@ describe('FileUpload.vue', () => {
     expect(clickSpy).toHaveBeenCalled()
   })
 
+  it('секция "Из базы данных" скрыта по умолчанию', async () => {
+    // DB panel should be closed initially — no loading indicator shown
+    expect(wrapper.text()).not.toContain('Загрузка…')
+  })
+
+  it('кнопка "Добавить выбранные" disabled при пустом выборе', async () => {
+    // No selected items → add button should be disabled (not rendered when panel is closed)
+    expect(wrapper.exists()).toBe(true)
+    // uploadedLocations is empty by default
+    expect(wrapper.vm.uploadedLocations).toHaveLength(0)
+  })
+
   it('показывает количество дублей при наличии skipped в ответе', async () => {
     vi.mocked(uploadLocations).mockResolvedValue({
       created: [

@@ -204,7 +204,7 @@ class SchedulePlanner:
         month_str: str,
         rep_ids: Optional[List[str]] = None,
         overwrite: bool = True,
-        completed_visits: Dict[str, int] = {},
+        completed_visits: Optional[Dict[str, int]] = None,
     ) -> dict:
         """
         Генерирует план визитов на месяц и сохраняет его в БД.
@@ -214,6 +214,8 @@ class SchedulePlanner:
         :param overwrite: Если True — удаляет старый план на этот месяц.
         :return: Словарь со статистикой.
         """
+        if completed_visits is None:
+            completed_visits = {}
         year, month = map(int, month_str.split("-"))
 
         # --- Загрузка данных ---
@@ -330,7 +332,7 @@ class SchedulePlanner:
         # --- Batch insert ---
         for row in schedule_rows:
             self.db.add(row)
-        await self.db.commit()
+        await self.db.flush()
 
         # --- Статистика ---
         total_locations = len(locations)
