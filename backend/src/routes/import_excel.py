@@ -230,6 +230,7 @@ async def import_schedule_excel(
         if loc is None:
             loc = await session.get(Location, sched.location_id)
 
+        # Administrative import: bypass VALID_TRANSITIONS intentionally (Excel data import = override)
         sched.status = internal_status
 
         # Создаём/обновляем VisitLog если визит выполнен и есть время
