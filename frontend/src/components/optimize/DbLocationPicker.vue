@@ -487,6 +487,7 @@ const isSaving = ref(false)
 const dedupWarning = ref('')
 
 let dedupTimer: ReturnType<typeof setTimeout> | null = null
+let successTimer: ReturnType<typeof setTimeout> | null = null
 
 function checkDedup() {
   if (dedupTimer) clearTimeout(dedupTimer)
@@ -560,7 +561,11 @@ async function saveAndAdd() {
     lastAdded.value += 1
 
     newSuccessMsg.value = `«${(saved as any).name}» сохранена в БД и добавлена в маршрут`
-    setTimeout(() => { newSuccessMsg.value = '' }, 4000)
+    if (successTimer) clearTimeout(successTimer)
+    successTimer = setTimeout(() => {
+      newSuccessMsg.value = ''
+      successTimer = null
+    }, 4000)
 
     // Reset only name/coords, keep city/category for quick repeat entry
     newLoc.value.name = ''
@@ -604,6 +609,7 @@ onMounted(() => document.addEventListener('keydown', onKeydown))
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   if (dedupTimer) clearTimeout(dedupTimer)
+  if (successTimer) clearTimeout(successTimer)
 })
 
 // ─── Style helpers ────────────────────────────────────────────────────────────

@@ -6,7 +6,8 @@ from typing import List
 from openpyxl import load_workbook
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Location, SkippedVisitStash, VisitLog, VisitSchedule, get_session
@@ -19,6 +20,8 @@ from src.schemas.locations import (
 
 
 router = APIRouter(prefix="/locations", tags=["Locations"])
+MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_UPLOAD_ROWS = 5000
 
 
 @router.get(
@@ -86,7 +89,17 @@ async def create_location(
 
     new_location = Location(**data)
     session.add(new_location)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Локация с такими параметрами уже существует",
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
     await session.refresh(new_location)
 
     return new_location
@@ -102,9 +115,22 @@ async def update_location(
     location = await session.get(Location, location_id)
     if not location:
         raise HTTPException(status_code=404, detail="Локация не найдена")
-    for field, value in data.model_dump(exclude_none=True).items():
+    updates = data.model_dump(exclude_none=True)
+    if "name" in updates and isinstance(updates["name"], str):
+        updates["name"] = updates["name"].strip()
+    for field, value in updates.items():
         setattr(location, field, value)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Локация с такими параметрами уже существует",
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
     await session.refresh(location)
     return LocationResponse.model_validate(location)
 
@@ -144,11 +170,15 @@ async def delete_location(
     ).scalar() or 0
 
     if force:
-        await session.execute(delete(VisitLog).where(VisitLog.location_id == location_id))
-        await session.execute(delete(SkippedVisitStash).where(SkippedVisitStash.location_id == location_id))
-        await session.execute(delete(VisitSchedule).where(VisitSchedule.location_id == location_id))
-        await session.delete(location)
-        await session.commit()
+        try:
+            await session.execute(delete(VisitLog).where(VisitLog.location_id == location_id))
+            await session.execute(delete(SkippedVisitStash).where(SkippedVisitStash.location_id == location_id))
+            await session.execute(delete(VisitSchedule).where(VisitSchedule.location_id == location_id))
+            await session.delete(location)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         return
 
     protected_records = schedules_count + visits_count + stash_count
@@ -161,8 +191,12 @@ async def delete_location(
             ),
         )
 
-    await session.delete(location)
-    await session.commit()
+    try:
+        await session.delete(location)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
 
 @router.post(
@@ -187,8 +221,7 @@ async def upload_locations(
     """
     filename = (file.filename or "").lower()
     content = await file.read()
-    max_upload_size = 10 * 1024 * 1024  # 10 MB
-    if len(content) > max_upload_size:
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Файл слишком большой. Максимальный размер: 10 MB",
@@ -213,6 +246,11 @@ async def upload_locations(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Не удалось прочитать файл: {exc}",
         ) from exc
+    if len(rows) > MAX_UPLOAD_ROWS:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Слишком много строк в файле. Максимум: {MAX_UPLOAD_ROWS}",
+        )
 
     created: list[Location] = []
     errors: list[dict] = []
@@ -247,9 +285,24 @@ async def upload_locations(
             errors.append({"row": idx + 1, "error": str(exc), "data": row})
 
     if created:
-        await session.commit()
-        for loc in created:
-            await session.refresh(loc)
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            errors.append(
+                {
+                    "row": None,
+                    "error": "Часть локаций не сохранена из-за конфликтов уникальности",
+                    "data": None,
+                }
+            )
+            created = []
+        except Exception:
+            await session.rollback()
+            raise
+        else:
+            for loc in created:
+                await session.refresh(loc)
 
     return UploadLocationsResponse(
         created=[LocationResponse.model_validate(loc) for loc in created],
@@ -276,15 +329,9 @@ async def clear_all_locations(
     loc_count = (await session.execute(select(func.count()).select_from(Location))).scalar() or 0
 
     if confirm.lower() != "true":
-        vs_count = (
-            await session.execute(text("SELECT COUNT(*) FROM visit_schedule"))
-        ).scalar() or 0
-        vl_count = (
-            await session.execute(text("SELECT COUNT(*) FROM visit_log"))
-        ).scalar() or 0
-        stash_count = (
-            await session.execute(text("SELECT COUNT(*) FROM skipped_visit_stash"))
-        ).scalar() or 0
+        vs_count = (await session.execute(select(func.count()).select_from(VisitSchedule))).scalar() or 0
+        vl_count = (await session.execute(select(func.count()).select_from(VisitLog))).scalar() or 0
+        stash_count = (await session.execute(select(func.count()).select_from(SkippedVisitStash))).scalar() or 0
         return {
             "preview": True,
             "locations": loc_count,
@@ -295,11 +342,15 @@ async def clear_all_locations(
         }
 
     # Каскадное удаление в правильном порядке зависимостей
-    await session.execute(text("DELETE FROM visit_log WHERE location_id IN (SELECT id FROM locations)"))
-    await session.execute(text("DELETE FROM skipped_visit_stash WHERE location_id IN (SELECT id FROM locations)"))
-    await session.execute(text("DELETE FROM visit_schedule WHERE location_id IN (SELECT id FROM locations)"))
-    await session.execute(text("DELETE FROM locations"))
-    await session.commit()
+    try:
+        await session.execute(delete(VisitLog))
+        await session.execute(delete(SkippedVisitStash))
+        await session.execute(delete(VisitSchedule))
+        await session.execute(delete(Location))
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
     return {
         "preview": False,
