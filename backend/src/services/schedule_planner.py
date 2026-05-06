@@ -301,8 +301,8 @@ class SchedulePlanner:
 
                     projected_hours = _estimate_route_hours(
                         projected_locations,
-                        depot_lat=getattr(rep, 'home_lat', 54.1871),
-                        depot_lon=getattr(rep, 'home_lon', 45.1749)
+                        depot_lat=(rep.home_lat or 54.1871),
+                        depot_lon=(rep.home_lon or 45.1749)
                     )
                     if projected_hours <= MAX_ROUTE_HOURS_PER_DAY:
                         candidates.append((projected_hours, len(current_locations), rep))

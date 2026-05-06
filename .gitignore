@@ -78,3 +78,4 @@ backend/.coverage
 /backend/.omc
 /backend/test_tmp_outputs/
 /.claude
+data/stores.json

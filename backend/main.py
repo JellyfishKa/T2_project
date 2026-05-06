@@ -111,6 +111,17 @@ async def lifespan(app: FastAPI):
                 ))
             except Exception as e:
                 logger.warning(f"Could not add column sales_reps.{col_name}: {e}")
+        # Backfill NULL home coordinates for reps created before migration
+        try:
+            await conn.execute(text(
+                "UPDATE sales_reps SET home_lat = 54.1871 WHERE home_lat IS NULL"
+            ))
+            await conn.execute(text(
+                "UPDATE sales_reps SET home_lon = 45.1749 WHERE home_lon IS NULL"
+            ))
+            logger.info("Backfilled NULL home coordinates for existing sales_reps.")
+        except Exception as e:
+            logger.warning("Could not backfill home coordinates: %s", e)
     # Сидирование праздников 2026 (если таблица пуста)
     try:
         from sqlalchemy import text as sql_text

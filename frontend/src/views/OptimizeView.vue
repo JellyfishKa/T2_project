@@ -373,6 +373,8 @@ const handleConstraintsUpdate = (updatedConstraints: Constraints) => {
 
 const handleAddLocationsFromFile = async (locations: Location[]) => {
   if (!optimizationForm.value || locations.length === 0) return
+  // Clear unfilled placeholder rows before importing
+  optimizationForm.value.clearEmptyLocations()
   // Merge: skip locations already in form (dedup by id)
   const existing = new Set(
     (optimizationForm.value.getFormData()?.locations ?? []).map((l: any) => l.id)
