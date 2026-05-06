@@ -362,7 +362,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { fetchAllLocations, createLocation, getApiErrorMessage } from '@/services/api'
 import { normalizeLocationCategory, resolveLocationPriority } from './locationPriority'
 import type { Location } from './types'

@@ -80,8 +80,8 @@
             </div>
           </div>
 
-          <!-- Загрузка файла -->
-          <FileUpload @add-locations="handleAddLocationsFromFile" />
+          <!-- Выбор точек из БД / добавление новой -->
+          <DbLocationPicker @add-locations="handleAddLocationsFromFile" />
 
           <!-- Ограничения -->
           <ConstraintsPanel
@@ -221,7 +221,7 @@ import OptimizationResult from '@/components/optimize/OptimizationResult.vue'
 import OptimizationProgress from '@/components/optimize/OptimizationProgress.vue'
 import OptimizationVariants from '@/components/optimize/OptimizationVariants.vue'
 import ConstraintsPanel from '@/components/optimize/ConstraintsPanel.vue'
-import FileUpload from '@/components/optimize/FileUpload.vue'
+import DbLocationPicker from '@/components/optimize/DbLocationPicker.vue'
 import PageHero from '@/components/common/PageHero.vue'
 import InfoStatCard from '@/components/common/InfoStatCard.vue'
 import { buildLocationAddress } from '@/components/optimize/address'
