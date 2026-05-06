@@ -347,11 +347,19 @@ const clearAllLocations = () => {
   validateForm()
 }
 
+const clearEmptyLocations = () => {
+  formData.locations = formData.locations.filter(
+    (loc) => loc.name && loc.name.trim() !== ''
+  )
+  validateForm()
+}
+
 defineExpose({
   resetForm,
   getFormData,
   validateForm,
   addLocationFromImport,
-  clearAllLocations
+  clearAllLocations,
+  clearEmptyLocations
 })
 </script>

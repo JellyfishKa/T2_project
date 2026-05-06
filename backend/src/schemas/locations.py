@@ -8,6 +8,8 @@ class LocationCreate(BaseModel):
 
     name: str = Field(
         ...,
+        min_length=1,
+        max_length=255,
         json_schema_extra={"example": "Магазин Саранск-1"},
     )
     lat: float = Field(..., ge=-90.0, le=90.0)
@@ -25,14 +27,17 @@ class LocationCreate(BaseModel):
     )
     city: Optional[str] = Field(
         None,
+        max_length=255,
         json_schema_extra={"example": "Саранск"},
     )
     district: Optional[str] = Field(
         None,
+        max_length=255,
         json_schema_extra={"example": "г.о. Саранск"},
     )
     address: Optional[str] = Field(
         None,
+        max_length=500,
         json_schema_extra={"example": "ул. Советская, 35"},
     )
 

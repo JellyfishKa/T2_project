@@ -63,7 +63,28 @@ async def create_location(
     session: AsyncSession = Depends(get_session),
 ):
     """Create a new location in the database."""
-    new_location = Location(**location_data.model_dump())
+    data = location_data.model_dump()
+    normalized_name = data["name"].strip()
+    data["name"] = normalized_name
+
+    duplicate_query = await session.execute(
+        select(Location).where(
+            func.lower(func.trim(Location.name)) == normalized_name.lower(),
+            Location.lat.between(data["lat"] - 0.0001, data["lat"] + 0.0001),
+            Location.lon.between(data["lon"] - 0.0001, data["lon"] + 0.0001),
+            Location.category == data.get("category"),
+            Location.time_window_start == data.get("time_window_start"),
+            Location.time_window_end == data.get("time_window_end"),
+        )
+    )
+    existing = duplicate_query.scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Локация с таким названием, координатами и временным окном уже существует",
+        )
+
+    new_location = Location(**data)
     session.add(new_location)
     await session.commit()
     await session.refresh(new_location)
@@ -166,18 +187,32 @@ async def upload_locations(
     """
     filename = (file.filename or "").lower()
     content = await file.read()
+    max_upload_size = 10 * 1024 * 1024  # 10 MB
+    if len(content) > max_upload_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Файл слишком большой. Максимальный размер: 10 MB",
+        )
 
-    if filename.endswith(".json"):
-        rows = _parse_json(content)
-    elif filename.endswith(".csv"):
-        rows = _parse_csv(content)
-    elif filename.endswith(".xlsx"):
-        rows = _parse_xlsx(content)
-    else:
+    try:
+        if filename.endswith(".json"):
+            rows = _parse_json(content)
+        elif filename.endswith(".csv"):
+            rows = _parse_csv(content)
+        elif filename.endswith(".xlsx"):
+            rows = _parse_xlsx(content)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported file format. Use .csv, .json, or .xlsx",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported file format. Use .csv, .json, or .xlsx",
-        )
+            detail=f"Не удалось прочитать файл: {exc}",
+        ) from exc
 
     created: list[Location] = []
     errors: list[dict] = []

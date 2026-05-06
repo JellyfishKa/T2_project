@@ -1224,8 +1224,8 @@ async def _build_daily_route(
     route_duration_hours = _estimate_duration_hours_from_route(
         sorted_schedules,
         preview_cache if preview_cache is not None else {},
-        depot_lat=getattr(rep, 'home_lat', 54.1871),
-        depot_lon=getattr(rep, 'home_lon', 45.1749),
+        depot_lat=(rep.home_lat or 54.1871),
+        depot_lon=(rep.home_lon or 45.1749),
     )
 
     return DailyRoute(
