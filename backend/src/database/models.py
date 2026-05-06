@@ -34,6 +34,17 @@ async def get_session():
 class Location(Base):
     """SQLAlchemy model for store locations."""
     __tablename__ = "locations"
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            "lat",
+            "lon",
+            "time_window_start",
+            "time_window_end",
+            "category",
+            name="uq_locations_identity",
+        ),
+    )
 
     id = Column(String, primary_key=True, index=True,
                 default=lambda: str(uuid.uuid4()))
