@@ -30,9 +30,9 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY . .
-
-RUN mkdir -p /app/models && chmod 755 /app/models
+COPY main.py .
+COPY src ./src
+COPY entrypoint.sh .
 
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
@@ -46,4 +46,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["./entrypoint.sh"]

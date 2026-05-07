@@ -34,6 +34,7 @@ from src.routes.audit_log import router as audit_log_router
 from src.routes.holidays import router as holidays_router
 from src.routes.visits import router as visits_router
 from src.routes.cruddata import (
+    locations_router_crud,
     sales_rep_router_crud,
     visit_schedule_router_crud,
     daily_route_router_crud,
@@ -69,10 +70,6 @@ def _run_alembic_migrations() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up: applying database migrations...")
-    await asyncio.to_thread(_run_alembic_migrations)
-    logger.info("Database migrations are up to date.")
-
     logger.info("Starting up: ensuring database tables and compatibility columns...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -178,6 +175,7 @@ api_v1_router.include_router(import_router)
 api_v1_router.include_router(holidays_router)
 api_v1_router.include_router(audit_log_router)
 # crud
+api_v1_router.include_router(locations_router_crud)
 api_v1_router.include_router(sales_rep_router_crud)
 api_v1_router.include_router(visit_schedule_router_crud)
 api_v1_router.include_router(daily_route_router_crud)
