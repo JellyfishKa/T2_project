@@ -39,6 +39,8 @@ import type {
 
 // Конфигурация API
 const API_CONFIG = {
+  // USE IN PROD: 
+  // baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
   timeout: 30000, // 30 секунд
   headers: {
