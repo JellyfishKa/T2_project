@@ -464,7 +464,22 @@ export const updateLocation = async (
 }
 
 export const deleteLocation = async (id: string, force = false): Promise<void> => {
-  await withRetry(() => api.delete(`/locations/${id}`, force ? { params: { force: true } } : {}))
+  await api.delete(`/locations/${id}`, force ? { params: { force: true } } : {})
+}
+
+export const createLocation = async (data: {
+  name: string
+  lat: number
+  lon: number
+  time_window_start?: string
+  time_window_end?: string
+  category?: string
+  city?: string
+  district?: string
+  address?: string
+}): Promise<Location> => {
+  const response = await api.post('/locations/', data)
+  return response.data
 }
 
 export const fetchRoutePreview = async (
@@ -576,9 +591,10 @@ export const generateSchedule = async (
   repIds?: string[],
   force?: boolean
 ): Promise<{ total_visits_planned: number; coverage_pct: number }> => {
-  const response = await withRetry(() =>
-    api.post('/schedule/generate', { month, rep_ids: repIds }, { params: force ? { force: true } : undefined })
-  )
+  const response = await api.post('/schedule/generate', { month, rep_ids: repIds }, {
+    params: force ? { force: true } : undefined,
+    timeout: 120_000,
+  })
   return response.data
 }
 

@@ -79,6 +79,9 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE routes ADD COLUMN IF NOT EXISTS "
                 "model_used VARCHAR DEFAULT 'unknown'"
             ))
+            await conn.execute(text(
+                "UPDATE routes SET model_used = 'unknown' WHERE model_used IS NULL"
+            ))
             logger.info("Column routes.model_used ensured.")
         except Exception as e:
             logger.warning(f"Could not alter routes table: {e}")
@@ -96,6 +99,15 @@ async def lifespan(app: FastAPI):
                 ))
             except Exception as e:
                 logger.warning(f"Could not add column locations.{col_name}: {e}")
+        try:
+            await conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_locations_identity_idx "
+                "ON locations (LOWER(TRIM(name)), lat, lon, COALESCE(category, ''), "
+                "time_window_start, time_window_end)"
+            ))
+            logger.info("Unique index uq_locations_identity_idx ensured.")
+        except Exception as e:
+            logger.warning("Could not ensure unique index for locations identity: %s", e)
         for col_def in [
             "home_lat FLOAT NOT NULL DEFAULT 54.1871",
             "home_lon FLOAT NOT NULL DEFAULT 45.1749",
@@ -107,6 +119,17 @@ async def lifespan(app: FastAPI):
                 ))
             except Exception as e:
                 logger.warning(f"Could not add column sales_reps.{col_name}: {e}")
+        # Backfill NULL home coordinates for reps created before migration
+        try:
+            await conn.execute(text(
+                "UPDATE sales_reps SET home_lat = 54.1871 WHERE home_lat IS NULL"
+            ))
+            await conn.execute(text(
+                "UPDATE sales_reps SET home_lon = 45.1749 WHERE home_lon IS NULL"
+            ))
+            logger.info("Backfilled NULL home coordinates for existing sales_reps.")
+        except Exception as e:
+            logger.warning("Could not backfill home coordinates: %s", e)
     # Сидирование праздников 2026 (если таблица пуста)
     try:
         from sqlalchemy import text as sql_text

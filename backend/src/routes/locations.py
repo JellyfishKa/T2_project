@@ -6,7 +6,8 @@ from typing import List
 from openpyxl import load_workbook
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Location, SkippedVisitStash, VisitLog, VisitSchedule, get_session
@@ -19,6 +20,8 @@ from src.schemas.locations import (
 
 
 router = APIRouter(prefix="/locations", tags=["Locations"])
+MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_UPLOAD_ROWS = 5000
 
 
 @router.get(
@@ -63,9 +66,40 @@ async def create_location(
     session: AsyncSession = Depends(get_session),
 ):
     """Create a new location in the database."""
-    new_location = Location(**location_data.model_dump())
+    data = location_data.model_dump()
+    normalized_name = data["name"].strip()
+    data["name"] = normalized_name
+
+    duplicate_query = await session.execute(
+        select(Location).where(
+            func.lower(func.trim(Location.name)) == normalized_name.lower(),
+            Location.lat.between(data["lat"] - 0.0001, data["lat"] + 0.0001),
+            Location.lon.between(data["lon"] - 0.0001, data["lon"] + 0.0001),
+            Location.category == data.get("category"),
+            Location.time_window_start == data.get("time_window_start"),
+            Location.time_window_end == data.get("time_window_end"),
+        )
+    )
+    existing = duplicate_query.scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Локация с таким названием, координатами и временным окном уже существует",
+        )
+
+    new_location = Location(**data)
     session.add(new_location)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Локация с такими параметрами уже существует",
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
     await session.refresh(new_location)
 
     return new_location
@@ -81,11 +115,88 @@ async def update_location(
     location = await session.get(Location, location_id)
     if not location:
         raise HTTPException(status_code=404, detail="Локация не найдена")
-    for field, value in data.model_dump(exclude_none=True).items():
+    updates = data.model_dump(exclude_none=True)
+    if "name" in updates and isinstance(updates["name"], str):
+        updates["name"] = updates["name"].strip()
+    for field, value in updates.items():
         setattr(location, field, value)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Локация с такими параметрами уже существует",
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
     await session.refresh(location)
     return LocationResponse.model_validate(location)
+
+
+@router.delete(
+    "/{location_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        404: {"description": "Location not found"},
+        409: {"description": "Location has related schedule or visit data"},
+    },
+)
+async def delete_location(
+    location_id: str,
+    force: bool = Query(False, description="Если true — удалить локацию вместе со связанными расписаниями и визитами"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete a location."""
+    location = await session.get(Location, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Локация не найдена")
+
+    schedules_count = (
+        await session.execute(
+            select(func.count()).where(VisitSchedule.location_id == location_id)
+        )
+    ).scalar() or 0
+    visits_count = (
+        await session.execute(
+            select(func.count()).where(VisitLog.location_id == location_id)
+        )
+    ).scalar() or 0
+    stash_count = (
+        await session.execute(
+            select(func.count()).where(SkippedVisitStash.location_id == location_id)
+        )
+    ).scalar() or 0
+
+    if force:
+        try:
+            await session.execute(delete(VisitLog).where(VisitLog.location_id == location_id))
+            await session.execute(delete(SkippedVisitStash).where(SkippedVisitStash.location_id == location_id))
+            await session.execute(delete(VisitSchedule).where(VisitSchedule.location_id == location_id))
+            await session.delete(location)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        return
+
+    protected_records = schedules_count + visits_count + stash_count
+    if protected_records > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Локацию нельзя удалить: с ней связаны расписания или визиты. "
+                "Используйте force=true для принудительного удаления."
+            ),
+        )
+
+    try:
+        await session.delete(location)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
 
 @router.post(
@@ -110,17 +221,35 @@ async def upload_locations(
     """
     filename = (file.filename or "").lower()
     content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Файл слишком большой. Максимальный размер: 10 MB",
+        )
 
-    if filename.endswith(".json"):
-        rows = _parse_json(content)
-    elif filename.endswith(".csv"):
-        rows = _parse_csv(content)
-    elif filename.endswith(".xlsx"):
-        rows = _parse_xlsx(content)
-    else:
+    try:
+        if filename.endswith(".json"):
+            rows = _parse_json(content)
+        elif filename.endswith(".csv"):
+            rows = _parse_csv(content)
+        elif filename.endswith(".xlsx"):
+            rows = _parse_xlsx(content)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported file format. Use .csv, .json, or .xlsx",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported file format. Use .csv, .json, or .xlsx",
+            detail=f"Не удалось прочитать файл: {exc}",
+        ) from exc
+    if len(rows) > MAX_UPLOAD_ROWS:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Слишком много строк в файле. Максимум: {MAX_UPLOAD_ROWS}",
         )
 
     created: list[Location] = []
@@ -156,9 +285,24 @@ async def upload_locations(
             errors.append({"row": idx + 1, "error": str(exc), "data": row})
 
     if created:
-        await session.commit()
-        for loc in created:
-            await session.refresh(loc)
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            errors.append(
+                {
+                    "row": None,
+                    "error": "Часть локаций не сохранена из-за конфликтов уникальности",
+                    "data": None,
+                }
+            )
+            created = []
+        except Exception:
+            await session.rollback()
+            raise
+        else:
+            for loc in created:
+                await session.refresh(loc)
 
     return UploadLocationsResponse(
         created=[LocationResponse.model_validate(loc) for loc in created],
@@ -185,15 +329,9 @@ async def clear_all_locations(
     loc_count = (await session.execute(select(func.count()).select_from(Location))).scalar() or 0
 
     if confirm.lower() != "true":
-        vs_count = (
-            await session.execute(text("SELECT COUNT(*) FROM visit_schedule"))
-        ).scalar() or 0
-        vl_count = (
-            await session.execute(text("SELECT COUNT(*) FROM visit_log"))
-        ).scalar() or 0
-        stash_count = (
-            await session.execute(text("SELECT COUNT(*) FROM skipped_visit_stash"))
-        ).scalar() or 0
+        vs_count = (await session.execute(select(func.count()).select_from(VisitSchedule))).scalar() or 0
+        vl_count = (await session.execute(select(func.count()).select_from(VisitLog))).scalar() or 0
+        stash_count = (await session.execute(select(func.count()).select_from(SkippedVisitStash))).scalar() or 0
         return {
             "preview": True,
             "locations": loc_count,
@@ -204,11 +342,15 @@ async def clear_all_locations(
         }
 
     # Каскадное удаление в правильном порядке зависимостей
-    await session.execute(text("DELETE FROM visit_log WHERE location_id IN (SELECT id FROM locations)"))
-    await session.execute(text("DELETE FROM skipped_visit_stash WHERE location_id IN (SELECT id FROM locations)"))
-    await session.execute(text("DELETE FROM visit_schedule WHERE location_id IN (SELECT id FROM locations)"))
-    await session.execute(text("DELETE FROM locations"))
-    await session.commit()
+    try:
+        await session.execute(delete(VisitLog))
+        await session.execute(delete(SkippedVisitStash))
+        await session.execute(delete(VisitSchedule))
+        await session.execute(delete(Location))
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
     return {
         "preview": False,
