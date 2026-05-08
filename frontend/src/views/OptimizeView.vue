@@ -3,11 +3,11 @@
     <PageHero
       eyebrow="Маршрут"
       title="Оптимизация маршрута"
-      description="Настройте точки, выберите модель и соберите маршрут по шагам: сначала лучший маршрут от ИИ, затем ручная доводка и честное сравнение до/после."
+      description="Настройте точки и соберите маршрут по шагам: сначала алгоритмы предложат лучшие варианты, затем ручная доводка и честное сравнение до/после."
     >
       <template #meta>
         <div class="flex flex-wrap gap-2">
-          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">1 лучший вариант</span>
+          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">2-4 варианта</span>
           <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Ручная доводка</span>
           <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Сравнение до/после</span>
         </div>
@@ -20,7 +20,7 @@
     <template v-if="currentView === 'form'">
       <div class="grid gap-4 md:grid-cols-3">
         <InfoStatCard label="Шаг 1" value="Добавьте точки" hint="Минимум 2 магазина, временные окна и координаты." tone="blue" />
-        <InfoStatCard label="Шаг 2" value="Сравните варианты" hint="ИИ подберёт 3 сценария с описанием и метриками." tone="green" />
+        <InfoStatCard label="Шаг 2" value="Сравните варианты" hint="Алгоритм подберёт 2-4 сценария с описанием и метриками." tone="green" />
         <InfoStatCard label="Шаг 3" value="Доведите вручную" hint="Перестройте порядок точек и сохраните уже рабочий маршрут." tone="amber" />
       </div>
 
@@ -36,46 +36,26 @@
 
         <!-- Боковая панель -->
         <div class="space-y-6">
-          <!-- Выбор модели -->
+          <!-- Профиль оптимизации -->
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Выбор модели</h3>
-            <div class="space-y-3">
-              <label
-                v-for="model in models"
-                :key="model.id"
-                class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                :class="
-                  selectedModel === model.id
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200'
-                "
-              >
-                <input
-                  type="radio"
-                  v-model="selectedModel"
-                  :value="model.id"
-                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                />
-                <div class="ml-3">
-                  <div class="flex items-center">
-                    <div
-                      :class="model.color"
-                      class="h-8 w-8 rounded-lg flex items-center justify-center mr-2"
-                    >
-                      <span :class="model.textColor" class="font-bold text-sm">{{
-                        model.label
-                      }}</span>
-                    </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-900">
-                        {{ model.name }}
-                      </div>
-                      <div class="text-xs text-gray-500">
-                        {{ model.description }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Профиль оптимизации</h3>
+            <div class="space-y-4">
+              <div class="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <p class="text-sm font-medium text-blue-900">Алгоритмы в приоритете</p>
+                <p class="mt-1 text-xs text-blue-700">
+                  Маршрут строится на базе эвристик и ранкера. Резервный fallback подключается только по политике сервера.
+                </p>
+              </div>
+              <label class="block text-sm">
+                <span class="mb-1 block font-medium text-gray-700">Количество вариантов для выбора</span>
+                <select
+                  v-model.number="alternativesCount"
+                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option :value="2">2 варианта</option>
+                  <option :value="3">3 варианта</option>
+                  <option :value="4">4 варианта</option>
+                </select>
               </label>
             </div>
           </div>
@@ -118,14 +98,11 @@
     </template>
 
     <!-- ═══════════════════════════════════════════════════════════════════════
-         СОСТОЯНИЕ 2: Прогресс-бар ожидания LLM
+         СОСТОЯНИЕ 2: Прогресс-бар расчёта
     ════════════════════════════════════════════════════════════════════════ -->
     <template v-else-if="currentView === 'loading'">
       <div class="max-w-2xl mx-auto">
-        <OptimizationProgress
-          :model="selectedModel"
-          :done="loadingDone"
-        />
+        <OptimizationProgress :done="loadingDone" />
       </div>
     </template>
 
@@ -168,7 +145,6 @@
         <OptimizationVariants
           :variants="variantsResponse.variants"
           :locations="formLocations"
-          :model-used="variantsResponse.model_used"
           :llm-evaluation-success="variantsResponse.llm_evaluation_success"
           :response-time-ms="variantsResponse.response_time_ms"
           @select="handleVariantSelect"
@@ -215,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, watch } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import OptimizationForm from '@/components/optimize/OptimizationForm.vue'
 import OptimizationResult from '@/components/optimize/OptimizationResult.vue'
 import OptimizationProgress from '@/components/optimize/OptimizationProgress.vue'
@@ -228,26 +204,6 @@ import { buildLocationAddress } from '@/components/optimize/address'
 import { optimizeVariants, confirmVariant, fetchRoutePreview, getApiErrorMessage } from '@/services/api'
 import type { Constraints, Location } from '@/components/optimize/types'
 import type { Route, RouteVariant, OptimizeVariantsResponse } from '@/services/types'
-
-// ─── Модели ────────────────────────────────────────────────────────────────────
-const models = [
-  {
-    id: 'qwen',
-    name: 'Qwen 0.5B',
-    label: 'Q',
-    description: 'Быстрее, меньше памяти',
-    color: 'bg-purple-100',
-    textColor: 'text-purple-600'
-  },
-  {
-    id: 'llama',
-    name: 'Llama 1B',
-    label: 'L',
-    description: 'Точнее, больше контекст',
-    color: 'bg-green-100',
-    textColor: 'text-green-600'
-  },
-]
 
 // ─── Машина состояний ──────────────────────────────────────────────────────────
 type ViewState = 'form' | 'loading' | 'error' | 'variants' | 'result'
@@ -268,8 +224,7 @@ const SERVICE_TIME_MINUTES_PER_STOP = 15
 const currentView = ref<ViewState>('form')
 
 // ─── Состояние формы ──────────────────────────────────────────────────────────
-const savedModel = localStorage.getItem('t2_preferred_model') ?? 'qwen'
-const selectedModel = ref<string>(savedModel)
+const alternativesCount = ref(3)
 const constraints = ref<Constraints>({
   vehicleCapacity: 1,
   maxDistance: 500,
@@ -345,9 +300,6 @@ const resultLlmEvaluationStatus = computed<LlmEvaluationStatus>(() => {
 const resultLlmQualityScore = computed<number | null>(() =>
   resultLlmEvaluationStatus.value === 'current' ? selectedAiVariantQualityScore.value : null
 )
-
-// Сохранять выбранную модель в localStorage
-watch(selectedModel, (v) => localStorage.setItem('t2_preferred_model', v))
 
 // ─── Обработчики формы ────────────────────────────────────────────────────────
 const handleSubmit = (formData: any) => {
@@ -438,13 +390,17 @@ const handleOptimize = async () => {
   try {
     const result = await optimizeVariants(
       locationIds.value,
-      selectedModel.value,
+      'none',
       {
         vehicle_capacity: constraints.value.vehicleCapacity,
         max_distance_km: constraints.value.maxDistance,
         start_time: constraints.value.startTime,
         end_time: constraints.value.endTime,
-      }
+      },
+      {
+        policy_mode: 'algorithm_primary',
+        max_alternatives: alternativesCount.value,
+      },
     )
 
     // Сигнализируем прогресс-бару что готово
@@ -485,7 +441,7 @@ const handleVariantSelect = (variant: RouteVariant) => {
     total_distance_km: variant.metrics.distance_km,
     total_time_hours: variant.metrics.time_hours,
     total_cost_rub: variant.metrics.cost_rub,
-    model_used: variantsResponse.value?.model_used ?? selectedModel.value,
+    model_used: variantsResponse.value?.model_used ?? 'algorithm_primary',
     fallback_reason: null,
     has_comparison: false,
     created_at: new Date().toISOString(),
@@ -526,7 +482,7 @@ const saveRoute = async () => {
     alert(
       qualityScore > 0
         ? 'Маршрут успешно сохранён!'
-        : 'Маршрут успешно сохранён без LLM-оценки для текущего порядка.'
+        : 'Маршрут успешно сохранён без дополнительной оценки вариантов для текущего порядка.'
     )
   } catch (err: any) {
     console.error('Save error:', err)
@@ -579,7 +535,7 @@ async function getRouteMetrics(routeLocationIds: string[]): Promise<RouteMetrics
 
 function buildRouteName(source: ResultRouteSource, label?: string | null) {
   if (source === 'ai') {
-    return label || routeName.value || 'Маршрут от ИИ'
+    return label || routeName.value || 'Автоподобранный маршрут'
   }
   if (source === 'manual') {
     return routeName.value
@@ -610,7 +566,7 @@ async function applyResultRoute(
       total_distance_km: metrics.total_distance_km,
       total_time_hours: metrics.total_time_hours,
       total_cost_rub: metrics.total_cost_rub,
-      model_used: variantsResponse.value?.model_used ?? selectedModel.value,
+      model_used: variantsResponse.value?.model_used ?? 'algorithm_primary',
       fallback_reason: null,
       has_comparison: false,
       created_at: optimizationResult.value?.created_at ?? new Date().toISOString(),
@@ -688,7 +644,6 @@ const resetForm = () => {
   if (optimizationForm.value) {
     optimizationForm.value.resetForm()
   }
-  selectedModel.value = localStorage.getItem('t2_preferred_model') ?? 'qwen'
   constraints.value = {
     vehicleCapacity: 1,
     maxDistance: 500,

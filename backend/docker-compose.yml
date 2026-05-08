@@ -5,10 +5,10 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set}
       POSTGRES_DB: ${DATABASE_NAME:-t2}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT_BIND:-127.0.0.1:5432:5432}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
     container_name: t2_redis
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT_BIND:-127.0.0.1:6379:6379}"
     volumes:
       - redis_data:/data
 
@@ -38,7 +38,7 @@ services:
       - ./src/models:/app/src/models:ro
     environment:
       - DATABASE_USER=${DATABASE_USER:-postgres}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-postgres}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set}
       - DATABASE_HOST=postgres
       - DATABASE_PORT=${DATABASE_PORT:-5432}
       - DATABASE_NAME=${DATABASE_NAME:-t2}
@@ -46,6 +46,11 @@ services:
       - LLAMA_MODEL_ID=${LLAMA_MODEL_ID:-Llama-3.2-1B-Instruct-Q4_K_M.gguf}
       - DEBUG=${DEBUG:-false}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - SECURITY_ENABLE_API_KEY_AUTH=${SECURITY_ENABLE_API_KEY_AUTH:-false}
+      - SECURITY_API_KEY=${SECURITY_API_KEY:-}
+      - SECURITY_ADMIN_API_KEY=${SECURITY_ADMIN_API_KEY:-}
+      - SECURITY_ALLOW_BULK_LOCATION_DELETE=${SECURITY_ALLOW_BULK_LOCATION_DELETE:-false}
+      - SECURITY_ALLOW_BENCHMARK_RUN=${SECURITY_ALLOW_BENCHMARK_RUN:-false}
       - PYTHONPATH=/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
     depends_on:

@@ -4,7 +4,7 @@ import logging
 import os
 from typing import List, Optional, Tuple
 
-import requests
+import httpx
 
 logger = logging.getLogger("osrm_service")
 
@@ -30,9 +30,10 @@ def osrm_trip_order(
     url = osrm_url.rstrip("/") + f"/trip/v1/driving/{coord_str}"
     params = {"source": "first", "roundtrip": "false", "overview": "false"}
     try:
-        r = requests.get(url, params=params, timeout=timeout_s)
-        r.raise_for_status()
-        payload = r.json()
+        with httpx.Client(timeout=timeout_s) as client:
+            r = client.get(url, params=params)
+            r.raise_for_status()
+            payload = r.json()
         trips = payload.get("trips") or []
         waypoints = payload.get("waypoints") or []
         if not trips or not waypoints:

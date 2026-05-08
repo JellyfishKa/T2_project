@@ -13,19 +13,19 @@ const createTestRouter = () => {
         path: '/',
         name: 'home',
         component: MockComponent,
-        meta: { title: 'Home - T2 LLM Platform' }
+        meta: { title: 'Home - T2 Platform' }
       },
       {
         path: '/dashboard',
         name: 'dashboard',
         component: MockComponent,
-        meta: { title: 'Dashboard - T2 LLM Platform' }
+        meta: { title: 'Dashboard - T2 Platform' }
       },
       {
         path: '/nonexistent',
         name: 'nonexistent',
         component: MockComponent,
-        meta: { title: 'Nonexistent - T2 LLM Platform' }
+        meta: { title: 'Nonexistent - T2 Platform' }
       },
       // Redirect to home if route not found
       {
@@ -37,7 +37,7 @@ const createTestRouter = () => {
 
   // Add the same beforeEach hook as the real router
   router.beforeEach((to, _from, next) => {
-    document.title = (to.meta.title as string) || 'T2 LLM Platform'
+    document.title = (to.meta.title as string) || 'T2 Platform'
     next()
   })
 
@@ -92,13 +92,13 @@ describe('Router', () => {
     await testRouter.push('/dashboard')
 
     // Check if document title was updated
-    expect(title).toBe('Dashboard - T2 LLM Platform')
+    expect(title).toBe('Dashboard - T2 Platform')
 
     // Change back to home
     await testRouter.push('/')
 
     // Check if document title was updated again
-    expect(title).toBe('Home - T2 LLM Platform')
+    expect(title).toBe('Home - T2 Platform')
 
     // Restore original title
     document.title = originalTitle
@@ -127,7 +127,7 @@ describe('Router', () => {
     await testRouter.push('/no-title')
 
     // Check if default title is used
-    expect(title).toBe('T2 LLM Platform')
+    expect(title).toBe('T2 Platform')
 
     // Restore original title
     document.title = originalTitle

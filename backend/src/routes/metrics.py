@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import (Metric as DBMetric,
                                  get_session,
                                  )
+from src.services.routing_observability import get_routing_observability_snapshot
 
 router = APIRouter(tags=["Metrics"])
 
@@ -45,7 +46,30 @@ async def get_all_metrics(
             for m in db_metrics
         ]
 
-        return {"metrics": metrics_list}
+        routing_snapshot = get_routing_observability_snapshot()
+        algorithm_runs = routing_snapshot.get("algorithm_runs_total", 0)
+        fallback_attempts = routing_snapshot.get("llm_fallback_attempts_total", 0)
+        fallback_success = routing_snapshot.get("llm_fallback_success_total", 0)
+        fallback_rate = (
+            round((fallback_attempts / algorithm_runs) * 100, 2)
+            if algorithm_runs > 0
+            else 0.0
+        )
+        fallback_success_rate = (
+            round((fallback_success / fallback_attempts) * 100, 2)
+            if fallback_attempts > 0
+            else 0.0
+        )
+
+        return {
+            "metrics": metrics_list,
+            "routing_observability": {
+                **routing_snapshot,
+                "llm_fallback_rate_pct": fallback_rate,
+                "llm_fallback_success_rate_pct": fallback_success_rate,
+                "storage_mode": "in_process_counter",
+            },
+        }
 
     except Exception as exc:
         raise HTTPException(

@@ -9,16 +9,16 @@
               d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
         </div>
-        <h2 class="text-xl font-bold text-gray-900">Лучший маршрут от ИИ</h2>
+        <h2 class="text-xl font-bold text-gray-900">Лучший маршрут</h2>
       </div>
       <div class="flex items-center justify-between">
         <p class="text-sm text-gray-500">
           Построен лучший вариант маршрута.
           <span v-if="llmEvaluationSuccess" class="text-green-600 font-medium">
-            Модель {{ modelLabel }} оценила каждый вариант.
+            Дополнительная оценка вариантов доступна.
           </span>
           <span v-else class="text-amber-600">
-            Оценка модели недоступна — показаны только метрики.
+            Дополнительная оценка недоступна — показаны только метрики.
           </span>
         </p>
         <span class="text-xs text-gray-400">{{ responseTime }}мс</span>
@@ -194,7 +194,7 @@
             class="pt-3 border-t border-gray-100"
           >
             <p class="text-xs text-gray-400 italic text-center">
-              Оценка модели не получена
+              Дополнительная оценка не получена
             </p>
           </div>
         </div>
@@ -249,7 +249,6 @@ interface VariantLocation {
 const props = defineProps<{
   variants: RouteVariant[]
   locations?: VariantLocation[]
-  modelUsed: string
   llmEvaluationSuccess: boolean
   responseTimeMs: number
 }>()
@@ -269,10 +268,6 @@ const emit = defineEmits<{
 const selectedId = ref<number | null>(null)
 
 // ─── Вычисляемые ──────────────────────────────────────────────────────────────
-const modelLabel = computed(() =>
-  props.modelUsed === 'qwen' ? 'Qwen' : 'Llama'
-)
-
 const responseTime = computed(() =>
   props.responseTimeMs > 1000
     ? `${(props.responseTimeMs / 1000).toFixed(1)}с`

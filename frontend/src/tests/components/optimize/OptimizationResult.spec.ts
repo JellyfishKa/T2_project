@@ -89,18 +89,18 @@ describe('OptimizationResult.vue', () => {
     })
   })
 
-  it('отображает заголовок с информацией о модели', () => {
+  it('отображает заголовок с информацией об источнике', () => {
     expect(wrapper.find('h3').text()).toBe('Результат оптимизации')
     expect(wrapper.text()).toContain(
-      'Маршрут оптимизирован с использованием Qwen'
+      'Источник расчета: Fallback LLM'
     )
     const modelBadge = wrapper
       .findAll('span.inline-flex')
-      .find((node) => node.text() === 'Qwen')
+      .find((node) => node.text() === 'Fallback LLM')
     expect(modelBadge?.exists()).toBe(true)
-    expect(wrapper.text()).toContain('Вариант ИИ')
+    expect(wrapper.text()).toContain('Автовариант')
     expect(wrapper.text()).toContain('Вариант 2')
-    expect(wrapper.text()).toContain('LLM: 91/100')
+    expect(wrapper.text()).toContain('Оценка: 91/100')
   })
 
   it('отображает состояние загрузки', () => {
@@ -190,7 +190,7 @@ describe('OptimizationResult.vue', () => {
     expect(improvementBadge.exists()).toBe(false)
   })
 
-  it('отображает причину использования резервной модели', () => {
+  it('отображает причину использования резервного источника', () => {
     const wrapperWithFallback = mount(OptimizationResult, {
       props: {
         result: mockRouteWithFallback,
@@ -203,7 +203,7 @@ describe('OptimizationResult.vue', () => {
 
     const fallbackReason = wrapperWithFallback.find('.bg-yellow-50')
     expect(fallbackReason.exists()).toBe(true)
-    expect(fallbackReason.text()).toContain('Использована резервная модель')
+    expect(fallbackReason.text()).toContain('Использован резервный источник')
     expect(fallbackReason.text()).toContain(
       'Qwen unavailable, using fallback model'
     )
@@ -298,7 +298,7 @@ describe('OptimizationResult.vue', () => {
     expect(wrapper.emitted('save')).toBeTruthy()
   })
 
-  it('показывает, что ручной маршрут будет сохранён без LLM-оценки', () => {
+  it('показывает, что ручной маршрут будет сохранён без дополнительной оценки', () => {
     const manualWrapper = mount(OptimizationResult, {
       props: {
         result: mockRoute,
@@ -320,17 +320,17 @@ describe('OptimizationResult.vue', () => {
       }
     })
 
-    expect(manualWrapper.text()).toContain('LLM-оценка неактуальна')
+    expect(manualWrapper.text()).toContain('Оценка неактуальна')
     expect(manualWrapper.text()).toContain('Текущий маршрут: метрики примерные')
-    expect(manualWrapper.text()).toContain('Сохранить без LLM-оценки')
+    expect(manualWrapper.text()).toContain('Сохранить без доп.оценки')
   })
 
   it('корректно отображает название модели в бейдже', () => {
     const modelBadge = wrapper
       .findAll('span.inline-flex')
-      .find((node) => node.text() === 'Qwen')!
-    expect(modelBadge.classes()).toContain('bg-purple-100')
-    expect(modelBadge.classes()).toContain('text-purple-800')
+      .find((node) => node.text() === 'Fallback LLM')!
+    expect(modelBadge.classes()).toContain('bg-amber-100')
+    expect(modelBadge.classes()).toContain('text-amber-800')
   })
 
   it('корректно обрабатывает отсутствие локаций', () => {

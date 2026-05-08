@@ -28,7 +28,7 @@ describe('HomeView.vue', () => {
 
     // Check if the description is rendered
     expect(wrapper.text()).toContain(
-      'Комплексная платформа на основе искусственного интеллекта'
+      'Комплексная платформа для алгоритмической оптимизации маршрутов магазинов'
     )
 
     // Check if the navigation section exists
@@ -49,7 +49,7 @@ describe('HomeView.vue', () => {
     // Check if the links have correct text
     const linkTexts = links.map((link) => link.text())
     expect(linkTexts).toContain('Дашборд')
-    expect(linkTexts).toContain('Тест моделей')
+    expect(linkTexts).toContain('Подбор маршрута')
     expect(linkTexts).toContain('Оптимизация')
     expect(linkTexts).toContain('Аналитика')
   })

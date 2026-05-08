@@ -41,6 +41,12 @@ from src.models.schedule_schemas import (
     GenerateOptimizedScheduleResult,
 )
 from src.services.osrm_service import osrm_trip_order
+from src.services.routing_observability import (
+    track_algorithm_run,
+    track_llm_fallback_attempt,
+    track_llm_fallback_failure,
+)
+from src.services.routing_policy import resolve_routing_policy
 from src.services.schedule_planner import (
     AVG_TRAVEL_MIN_PER_TT,
     MAX_TT_PER_DAY,
@@ -76,6 +82,8 @@ def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedSc
     tps = list(req.trade_points)
     max_per_day = req.max_visits_per_day
     n_reps = len(reps)
+    policy = resolve_routing_policy(req.policy_mode, req.llm_fallback_model)
+    track_algorithm_run(policy.mode)
 
     # Simple round-robin: assign trade_points to reps evenly
     rep_tps: Dict[str, list] = {r: [] for r in reps}
@@ -104,6 +112,12 @@ def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedSc
             else:
                 routing_method = "heuristic-nn"
                 ordered_coords = coords
+                if policy.llm_fallback_enabled and policy.llm_fallback_only:
+                    track_llm_fallback_attempt(policy.llm_fallback_model)
+                    track_llm_fallback_failure(
+                        policy.llm_fallback_model,
+                        "schedule_llm_fallback_not_supported",
+                    )
 
             # Compute approximate distance (haversine sum)
             dist_km = 0.0
@@ -147,6 +161,8 @@ def _gen_opt_build(req: GenerateOptimizedScheduleRequest) -> GenerateOptimizedSc
         meta={
             "algorithm": "round-robin + heuristic-nn",
             "max_visits_per_day": req.max_visits_per_day,
+            "policy_mode": policy.mode,
+            "llm_fallback_model": policy.llm_fallback_model,
         },
     )
 

@@ -107,7 +107,7 @@ vi.mock('@/components/optimize/OptimizationVariants.vue', () => ({
   default: {
     name: 'OptimizationVariants',
     template: '<div data-testid="optimization-variants"></div>',
-    props: ['variants', 'locations', 'modelUsed', 'llmEvaluationSuccess', 'responseTimeMs'],
+    props: ['variants', 'locations', 'llmEvaluationSuccess', 'responseTimeMs'],
     emits: ['select', 'reset'],
   }
 }))
@@ -133,7 +133,7 @@ vi.mock('@/components/optimize/OptimizationProgress.vue', () => ({
   default: {
     name: 'OptimizationProgress',
     template: '<div data-testid="optimization-progress"></div>',
-    props: ['model', 'done'],
+    props: ['done'],
   }
 }))
 
@@ -149,6 +149,9 @@ describe('OptimizeView.vue', () => {
     name: 'Вариант 2',
     description: 'Более быстрый маршрут',
     algorithm: 'nearest_neighbor',
+    rank: 1,
+    is_recommended: true,
+    selection_score: 91,
     pros: ['короче'],
     cons: [],
     locations: ['loc-2', 'loc-1', 'loc-3'],
@@ -259,11 +262,15 @@ describe('OptimizeView.vue', () => {
     expect(mockedFetchRoutePreview).toHaveBeenCalledTimes(1)
     expect(mockedOptimizeVariants).toHaveBeenCalledWith(
       ['loc-1', 'loc-2', 'loc-3'],
-      'qwen',
+      'none',
       expect.objectContaining({
         vehicle_capacity: 1,
         max_distance_km: 500,
-      })
+      }),
+      expect.objectContaining({
+        policy_mode: 'algorithm_primary',
+        max_alternatives: 3,
+      }),
     )
     expect(wrapper.vm.originalMetrics).toEqual({
       total_distance_km: 19.2,
@@ -462,7 +469,7 @@ describe('OptimizeView.vue', () => {
       })
     )
     expect(alertSpy).toHaveBeenCalledWith(
-      'Маршрут успешно сохранён без LLM-оценки для текущего порядка.'
+      'Маршрут успешно сохранён без дополнительной оценки вариантов для текущего порядка.'
     )
     alertSpy.mockRestore()
   })

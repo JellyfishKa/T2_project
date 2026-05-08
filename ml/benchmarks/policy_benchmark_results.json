@@ -1,0 +1,147 @@
+{
+  "timestamp": "2026-05-08T10:20:35",
+  "single_route": {
+    "winner": "balanced",
+    "candidates": {
+      "greedy": {
+        "metrics": {
+          "distance_km": 151.64,
+          "time_minutes": 363.94,
+          "cost_rub": 2274.61,
+          "constraints_satisfied": true
+        },
+        "elapsed_ms": 0.021,
+        "score": 987.573
+      },
+      "priority_first": {
+        "metrics": {
+          "distance_km": 343.41,
+          "time_minutes": 824.19,
+          "cost_rub": 5151.21,
+          "constraints_satisfied": true
+        },
+        "elapsed_ms": 0.015,
+        "score": 988.828
+      },
+      "balanced": {
+        "metrics": {
+          "distance_km": 218.17,
+          "time_minutes": 523.62,
+          "cost_rub": 3272.6,
+          "constraints_satisfied": true
+        },
+        "elapsed_ms": 0.013,
+        "score": 992.835
+      }
+    }
+  },
+  "variants": {
+    "winner": "balanced",
+    "candidates": {
+      "greedy": {
+        "metrics": {
+          "distance_km": 151.64,
+          "time_minutes": 363.94,
+          "cost_rub": 2274.61,
+          "constraints_satisfied": true
+        },
+        "elapsed_ms": 0.017,
+        "score": 991.425
+      },
+      "priority_first": {
+        "metrics": {
+          "distance_km": 343.41,
+          "time_minutes": 824.19,
+          "cost_rub": 5151.21,
+          "constraints_satisfied": true
+        },
+        "elapsed_ms": 0.014,
+        "score": 989.8
+      },
+      "balanced": {
+        "metrics": {
+          "distance_km": 218.17,
+          "time_minutes": 523.62,
+          "cost_rub": 3272.6,
+          "constraints_satisfied": true
+        },
+        "elapsed_ms": 0.013,
+        "score": 992.835
+      }
+    }
+  },
+  "schedule": {
+    "winner": "kmeans+balance",
+    "candidates": {
+      "kmeans+balance": {
+        "elapsed_ms": 9126.6,
+        "distance": {
+          "sum_km": 375.95,
+          "avg_km": 10.74,
+          "p95_km": 17.24
+        },
+        "load": {
+          "tp-1": 75,
+          "tp-2": 75,
+          "tp-3": 75,
+          "tp-4": 75,
+          "tp-5": 75
+        },
+        "balance_score": 1.0,
+        "improvement_vs_baseline_pct": 69.79
+      },
+      "dbscan+pack": {
+        "elapsed_ms": 94.36,
+        "distance": {
+          "sum_km": 872.89,
+          "avg_km": 24.94,
+          "p95_km": 34.83
+        },
+        "load": {
+          "tp-1": 362,
+          "tp-2": 10,
+          "tp-3": 1,
+          "tp-4": 1,
+          "tp-5": 1
+        },
+        "balance_score": 0.0028,
+        "improvement_vs_baseline_pct": 29.86
+      },
+      "greedy-geo": {
+        "elapsed_ms": 17.06,
+        "distance": {
+          "sum_km": 479.76,
+          "avg_km": 14.54,
+          "p95_km": 23.15
+        },
+        "load": {
+          "tp-1": 22,
+          "tp-2": 84,
+          "tp-3": 104,
+          "tp-4": 79,
+          "tp-5": 86
+        },
+        "balance_score": 0.2115,
+        "improvement_vs_baseline_pct": 61.45
+      },
+      "final-schedule-planner": {
+        "elapsed_ms": 15.55,
+        "distance": {
+          "sum_km": 401.95,
+          "avg_km": 11.48,
+          "p95_km": 20.9
+        },
+        "load": {
+          "tp-1": 75,
+          "tp-2": 75,
+          "tp-3": 75,
+          "tp-4": 75,
+          "tp-5": 75
+        },
+        "balance_score": 1.0,
+        "improvement_vs_baseline_pct": 67.7
+      }
+    }
+  },
+  "recommended_policy": "hybrid"
+}

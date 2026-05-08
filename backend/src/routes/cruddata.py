@@ -175,6 +175,9 @@ def create_crud_router(model: Type, prefix: str) -> APIRouter:
 # ALL WILL APPEAR UNDER "Tables"
 # =====================================================
 
+locations_router_crud = create_crud_router(Location, "locations")
+# Backward-compatible alias in case old code expects singular name.
+location_router_crud = locations_router_crud
 sales_rep_router_crud = create_crud_router(SalesRep, "sales-reps")
 visit_schedule_router_crud = create_crud_router(VisitSchedule, "visit-schedule")
 daily_route_router_crud = create_crud_router(DailyRouteOverride, "daily-route-overrides")

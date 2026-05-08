@@ -125,6 +125,7 @@ describe('API Service', () => {
       expect(mockedAxios.post).toHaveBeenCalledWith('/optimize', {
         location_ids: ['loc-1', 'loc-2'],
         model: 'qwen',
+        policy_mode: 'algorithm_primary',
         constraints: { max_distance_km: 100 }
       })
     })

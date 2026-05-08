@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.database.models import (
     Location as DBLocation,
     Metric as DBMetric,
@@ -27,6 +28,16 @@ from src.schemas.vehicle import Vehicle
 from src.services.model_selector import (
     get_model_recommendation,
 )
+from src.services.routing_observability import (
+    track_algorithm_run,
+    track_llm_fallback_attempt,
+    track_llm_fallback_failure,
+    track_llm_fallback_success,
+)
+from src.services.routing_policy import (
+    resolve_routing_policy,
+    should_use_llm_fallback,
+)
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService
 from src.services.schedule_planner import VISIT_DURATION_MIN
@@ -43,6 +54,22 @@ class Optimizer:
         self.llama_client = LlamaClient()
         self.max_locations_per_prompt = 40
         self.routing_service = RoutingService()
+
+    def _route_selection_score(self, metrics: Dict[str, Any], quality_score: float) -> float:
+        """
+        Унифицированный score для адаптивного ранжирования:
+        меньшие distance/time/cost и больший quality_score дают лучший итог.
+        """
+        distance = float(metrics.get("distance_km") or 0.0)
+        time_hours = float(metrics.get("time_hours") or 0.0)
+        cost = float(metrics.get("cost_rub") or 0.0)
+        quality = float(quality_score or 0.0)
+        return (
+            settings.routing_weight_quality * quality
+            - settings.routing_weight_distance * distance
+            - settings.routing_weight_time * time_hours
+            - settings.routing_weight_cost * cost
+        )
 
     def _convert_db_to_pydantic(
         self,
@@ -94,6 +121,7 @@ class Optimizer:
         db_locations: List[DBLocation],
         vehicle: Optional[Vehicle] = None,
         model: str = "auto",
+        policy_mode: str = "algorithm_primary",
         transport_mode: str = "car",
     ) -> PydanticRoute:
         start_time_ms = int(time.time() * 1000)
@@ -111,7 +139,11 @@ class Optimizer:
             transport_mode=transport_mode,
         )
 
-        target_model = model
+        policy = resolve_routing_policy(
+            requested_mode=policy_mode,
+            requested_fallback_model=model,
+        )
+        track_algorithm_run(policy.mode)
 
         # Оцениваем 3 алгоритмических варианта и выбираем лучший по метрикам
         candidates = [
@@ -130,23 +162,40 @@ class Optimizer:
                 {**baseline, "constraints_satisfied": True},
                 {**cand_stats, "constraints_satisfied": True},
             )
-            # Выбираем лучший по quality_score
-            if q_score > best_algo_score:
-                best_algo_score = q_score
+            weighted_score = self._route_selection_score(
+                {
+                    "distance_km": cand_stats["distance_km"],
+                    "time_hours": cand_stats["time_minutes"] / 60,
+                    "cost_rub": cand_stats["cost_rub"],
+                },
+                q_score,
+            )
+            # Адаптивный выбор лучшего алгоритма по комбинированному KPI-скору.
+            if weighted_score > best_algo_score:
+                best_algo_score = weighted_score
                 best_algo_name = name
                 best_algo_locations = locs
 
         final_locations = best_algo_locations
         model_used = best_algo_name
 
-        # LLM опциональный слой поверх алгоритма
-        if target_model in ("qwen", "llama"):
-            model_used = f"{best_algo_name}+{target_model}"
-            # Здесь можно добавить вызов LLM для дообучения/улучшения маршрута
-            # try:
-            #     final_locations = await client.improve_route(final_locations)
-            # except Exception as exc:
-            #     logger.warning("LLM layer failed: %s", exc)
+        if policy.compare_mode:
+            model_used = f"{best_algo_name}+compare({policy.requested_fallback_model})"
+
+        if should_use_llm_fallback(policy, best_algo_score):
+            fallback_model = policy.llm_fallback_model
+            track_llm_fallback_attempt(fallback_model)
+            try:
+                await self._probe_llm_fallback(
+                    fallback_model,
+                    final_locations,
+                )
+                track_llm_fallback_success(fallback_model)
+                model_used = f"{best_algo_name}+llm_fallback({fallback_model})"
+            except Exception as exc:
+                logger.warning("LLM fallback probe failed: %s", exc)
+                track_llm_fallback_failure(fallback_model, "probe_failed")
+                model_used = f"{best_algo_name}+fallback_unavailable"
 
         optimized_route = PydanticRoute(
             ID=str(uuid.uuid4()),
@@ -258,6 +307,25 @@ class Optimizer:
         )
         return optimized_route
 
+    async def _probe_llm_fallback(
+        self,
+        fallback_model: str,
+        locations: List[PydanticLocation],
+    ) -> None:
+        """
+        Проверка доступности fallback LLM.
+        Не переупорядочивает маршрут: алгоритм остаётся источником истины.
+        """
+        if not locations:
+            return
+        if fallback_model == "qwen":
+            client = self.qwen_client
+        else:
+            client = self.llama_client
+        # Достаточно успешно пройти генерацию — результат используем только как
+        # сигнал доступности fallback.
+        await client.generate_route(locations, constraints={"fallback_probe": True})
+
     # ─── Вспомогательный greedy для подмножества точек ──────────────────────────
 
     def _greedy_subset(
@@ -340,7 +408,7 @@ class Optimizer:
             return list(locations)
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
-        depot = {"lat": 54.1871, "lon": 45.1749}
+        depot = {"lat": settings.default_depot_lat, "lon": settings.default_depot_lon}
         all_dicts = [depot] + loc_dicts
         matrix = compute_distance_matrix(all_dicts)
         n = len(all_dicts)
@@ -374,6 +442,8 @@ class Optimizer:
         db_locations: List[DBLocation],
         vehicle: Optional[Vehicle] = None,
         model: str = "qwen",
+        policy_mode: str = "algorithm_primary",
+        max_alternatives: int = 3,
         transport_mode: str = "car",
     ):
         """
@@ -437,6 +507,14 @@ class Optimizer:
                 {**baseline, "constraints_satisfied": True},
                 {**real, "constraints_satisfied": True},
             )
+            selection_score = self._route_selection_score(
+                {
+                    "distance_km": real["distance_km"],
+                    "time_hours": real["time_minutes"] / 60,
+                    "cost_rub": real["cost_rub"],
+                },
+                q_score,
+            )
             variants_data.append({
                 "id": vc["id"],
                 "name": vc["name"],
@@ -449,31 +527,48 @@ class Optimizer:
                     "cost_rub": real["cost_rub"],
                     "quality_score": q_score,
                 },
+                "selection_score": selection_score,
                 "pros": [],
                 "cons": [],
             })
 
-        # ── LLM: генерируем pros/cons (graceful fallback при ошибке) ───────────
-        llm_success = False
-        try:
-            client = (
-                self.qwen_client if model == "qwen" else self.llama_client
-            )
-            evaluation = await client.evaluate_variants(variants_data)
-            if evaluation:
-                eval_by_id = {item["id"]: item for item in evaluation}
-                for v in variants_data:
-                    ev = eval_by_id.get(v["id"])
-                    if ev:
-                        v["pros"] = ev.get("pros", [])[:3]
-                        v["cons"] = ev.get("cons", [])[:3]
-                llm_success = True
-        except Exception as exc:
-            logger.warning("LLM evaluate_variants failed: %s", exc)
+        policy = resolve_routing_policy(
+            requested_mode=policy_mode,
+            requested_fallback_model=model,
+        )
+        track_algorithm_run(policy.mode)
 
-        best_variant = min(
+        # ── LLM: генерируем pros/cons только в compare/fallback режимах ────────
+        llm_success = False
+        llm_enabled = (
+            settings.routing_enable_llm_variant_evaluation
+            and (policy.compare_mode or policy.llm_fallback_only)
+        )
+        if llm_enabled:
+            fallback_model = policy.llm_fallback_model
+            track_llm_fallback_attempt(fallback_model)
+            try:
+                client = (
+                    self.qwen_client if fallback_model == "qwen" else self.llama_client
+                )
+                evaluation = await client.evaluate_variants(variants_data)
+                if evaluation:
+                    eval_by_id = {item["id"]: item for item in evaluation}
+                    for v in variants_data:
+                        ev = eval_by_id.get(v["id"])
+                        if ev:
+                            v["pros"] = ev.get("pros", [])[:3]
+                            v["cons"] = ev.get("cons", [])[:3]
+                    llm_success = True
+                    track_llm_fallback_success(fallback_model)
+            except Exception as exc:
+                logger.warning("LLM evaluate_variants failed: %s", exc)
+                track_llm_fallback_failure(fallback_model, "variants_eval_failed")
+
+        ranked_variants = sorted(
             variants_data,
             key=lambda variant: (
+                -variant["selection_score"],
                 -variant["metrics"]["quality_score"],
                 variant["metrics"]["distance_km"],
                 variant["metrics"]["time_hours"],
@@ -481,26 +576,41 @@ class Optimizer:
                 variant["id"],
             ),
         )
+        top_n = min(
+            max(max_alternatives, 1),
+            4,
+            len(ranked_variants),
+        )
+        selected = ranked_variants[:top_n]
+        best_variant = selected[0]
 
-        response_variants = [
+        response_variants = []
+        for rank, variant in enumerate(selected, start=1):
+            response_variants.append(
             RouteVariant(
-                id=1,
-                name="Лучший маршрут",
+                id=variant["id"],
+                name=variant["name"],
                 description=(
-                    f"{best_variant['name']}. "
-                    "Выбран автоматически как лучший вариант по качеству и метрикам."
+                    f"{variant['name']}. "
+                    + (
+                        "Рекомендуется автоматически по комбинированному KPI-скору."
+                        if rank == 1
+                        else "Альтернативный маршрут для ручного выбора."
+                    )
                 ),
-                algorithm=best_variant["algorithm"],
-                pros=best_variant["pros"],
-                cons=best_variant["cons"],
-                locations=[loc.ID for loc in best_variant["locations_ordered"]],
-                metrics=RouteVariantMetrics(**best_variant["metrics"]),
-            )
-        ]
+                algorithm=variant["algorithm"],
+                rank=rank,
+                is_recommended=(rank == 1),
+                selection_score=round(float(variant["selection_score"]), 4),
+                pros=variant["pros"],
+                cons=variant["cons"],
+                locations=[loc.ID for loc in variant["locations_ordered"]],
+                metrics=RouteVariantMetrics(**variant["metrics"]),
+            ))
 
         return OptimizeVariantsResponse(
             variants=response_variants,
-            model_used=model,
+            model_used=best_variant["algorithm"],
             response_time_ms=int(time.time() * 1000) - start_time_ms,
             llm_evaluation_success=llm_success,
         )
@@ -616,7 +726,7 @@ class Optimizer:
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
         # Добавляем depot как первую точку для матрицы расстояний
-        depot = {"lat": 54.1871, "lon": 45.1749}
+        depot = {"lat": settings.default_depot_lat, "lon": settings.default_depot_lon}
         all_dicts = [depot] + loc_dicts
         matrix = compute_distance_matrix(all_dicts)
         n = len(all_dicts)

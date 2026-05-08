@@ -22,13 +22,31 @@ class Settings(BaseSettings):
     llama_model_id: str = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 
     database_user: str = "postgres"
-    database_password: str = "postgres"
+    database_password: str = "change_me_in_env"
     database_host: str = "localhost"
     database_port: int = 5432
     database_name: str = "t2"
 
     debug: bool = False
     perf_warn_threshold_ms: int = 10_000
+    routing_primary_mode: str = "algorithm_primary"
+    routing_enable_llm_fallback: bool = True
+    routing_llm_fallback_model: str = "llama"
+    routing_quality_floor: float = 60.0
+    routing_enable_llm_variant_evaluation: bool = False
+    routing_allow_direct_llm_routes: bool = False
+    routing_default_alternatives_count: int = 3
+    routing_weight_distance: float = 0.4
+    routing_weight_time: float = 0.3
+    routing_weight_cost: float = 0.2
+    routing_weight_quality: float = 0.1
+    default_depot_lat: float = 54.1871
+    default_depot_lon: float = 45.1749
+    security_enable_api_key_auth: bool = False
+    security_api_key: str | None = None
+    security_admin_api_key: str | None = None
+    security_allow_bulk_location_delete: bool = False
+    security_allow_benchmark_run: bool = False
 
     @field_validator("debug", mode="before")
     @classmethod

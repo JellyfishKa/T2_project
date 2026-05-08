@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class OptimizeRequest(BaseModel):
     location_ids: List[str]
     model: str = "none"
+    policy_mode: Literal["algorithm_primary", "compare_mode", "llm_fallback_only"] = "algorithm_primary"
     constraints: Optional[Dict] = Field(default_factory=lambda: {
         "max_stops_per_route": 50,
         "time_window_minutes": 480,
@@ -43,6 +44,9 @@ class RouteVariant(BaseModel):
     name: str
     description: str
     algorithm: str
+    rank: int = 1
+    is_recommended: bool = False
+    selection_score: float = 0.0
     pros: List[str] = Field(default_factory=list)
     cons: List[str] = Field(default_factory=list)
     locations: List[str]          # упорядоченные ID точек
@@ -51,7 +55,9 @@ class RouteVariant(BaseModel):
 
 class OptimizeVariantsRequest(BaseModel):
     location_ids: List[str]
-    model: str = "qwen"           # только одна модель за раз
+    model: str = "none"           # алгоритмы в приоритете, LLM только fallback
+    policy_mode: Literal["algorithm_primary", "compare_mode", "llm_fallback_only"] = "algorithm_primary"
+    max_alternatives: int = Field(default=3, ge=1, le=4)
     constraints: Optional[Dict] = Field(default_factory=dict)
 
 

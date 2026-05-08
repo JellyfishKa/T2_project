@@ -11,6 +11,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models import Location, SkippedVisitStash, VisitLog, VisitSchedule, get_session
+from src.security import (
+    ensure_admin_access,
+    ensure_api_access,
+    ensure_bulk_location_delete_enabled,
+)
 from src.schemas.locations import (
     LocationCreate,
     LocationResponse,
@@ -64,6 +69,7 @@ async def get_locations(
 async def create_location(
     location_data: LocationCreate,
     session: AsyncSession = Depends(get_session),
+    _: None = Depends(ensure_api_access),
 ):
     """Create a new location in the database."""
     data = location_data.model_dump()
@@ -110,6 +116,7 @@ async def update_location(
     location_id: str,
     data: LocationUpdate,
     session: AsyncSession = Depends(get_session),
+    _: None = Depends(ensure_api_access),
 ):
     """Обновить данные локации."""
     location = await session.get(Location, location_id)
@@ -147,6 +154,7 @@ async def delete_location(
     location_id: str,
     force: bool = Query(False, description="Если true — удалить локацию вместе со связанными расписаниями и визитами"),
     session: AsyncSession = Depends(get_session),
+    _: None = Depends(ensure_api_access),
 ):
     """Delete a location."""
     location = await session.get(Location, location_id)
@@ -212,6 +220,7 @@ async def delete_location(
 async def upload_locations(
     file: UploadFile,
     session: AsyncSession = Depends(get_session),
+    _: None = Depends(ensure_api_access),
 ):
     """Upload locations from a CSV, JSON, or XLSX file.
 
@@ -320,6 +329,7 @@ async def upload_locations(
 async def clear_all_locations(
     confirm: str = Query("false", description="Передай 'true' для фактического удаления"),
     session: AsyncSession = Depends(get_session),
+    _: None = Depends(ensure_admin_access),
 ):
     """Очистить все локации (с каскадным удалением расписания и визитов).
 
@@ -340,6 +350,8 @@ async def clear_all_locations(
             "skipped_visit_stash": stash_count,
             "message": "Передай ?confirm=true для выполнения удаления",
         }
+
+    ensure_bulk_location_delete_enabled()
 
     # Каскадное удаление в правильном порядке зависимостей
     try:

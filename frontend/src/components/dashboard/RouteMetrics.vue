@@ -57,13 +57,13 @@
       />
     </div>
 
-    <!-- Model Performance Metrics -->
+    <!-- Source Performance Metrics -->
     <div
       v-if="metrics.length > 0 && !isLoading"
       class="border-t border-gray-200 pt-6"
     >
       <h5 class="text-lg font-medium text-gray-900 mb-4">
-        Производительность моделей для этого маршрута
+        Производительность источников расчёта для этого маршрута
       </h5>
 
       <div class="overflow-x-auto border border-gray-200 rounded-lg">
@@ -74,7 +74,7 @@
                 scope="col"
                 class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
-                Модель
+                Источник
               </th>
               <th
                 scope="col"
@@ -185,16 +185,24 @@ defineProps<{
 
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
-    llama: 'Llama',
-    qwen: 'Qwen'
+    algorithm_primary: 'Алгоритм',
+    compare_mode: 'Сравнение',
+    llm_fallback_only: 'Fallback LLM',
+    none: 'Алгоритм',
+    llama: 'Fallback LLM',
+    qwen: 'Fallback LLM'
   }
   return modelMap[model] || model
 }
 
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
-    llama: 'bg-blue-100 text-blue-800',
-    qwen: 'bg-purple-100 text-purple-800'
+    algorithm_primary: 'bg-emerald-100 text-emerald-800',
+    compare_mode: 'bg-blue-100 text-blue-800',
+    llm_fallback_only: 'bg-amber-100 text-amber-800',
+    none: 'bg-emerald-100 text-emerald-800',
+    llama: 'bg-amber-100 text-amber-800',
+    qwen: 'bg-amber-100 text-amber-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

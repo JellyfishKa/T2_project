@@ -9,9 +9,36 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: t2
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d t2"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+    env:
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 5432
+      DATABASE_NAME: t2
+      SECURITY_ENABLE_API_KEY_AUTH: "false"
+      SECURITY_ALLOW_BULK_LOCATION_DELETE: "false"
+      SECURITY_ALLOW_BENCHMARK_RUN: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +100,45 @@ jobs:
         run: |
           cd frontend
           npm run type-check
+
+      - name: Start backend for API smoke e2e
+        if: matrix.python-version == '3.12'
+        run: |
+          cd backend
+          python -m uvicorn main:app --host 127.0.0.1 --port 8000 > ../backend-ci.log 2>&1 &
+          cd ..
+          for i in {1..40}; do
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
+              echo "Backend is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend failed to start"
+          cat backend-ci.log || true
+          exit 1
+
+      - name: Setup Node.js for e2e
+        if: matrix.python-version == '3.12'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        if: matrix.python-version == '3.12'
+        run: |
+          cd e2e
+          npm ci
+
+      - name: Run API e2e smoke tests
+        if: matrix.python-version == '3.12'
+        env:
+          API_URL: http://127.0.0.1:8000
+        run: |
+          cd e2e
+          npm run test -- tests/smoke/policy-benchmark.spec.ts tests/optimize/variants-confirm.spec.ts
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

@@ -108,6 +108,8 @@ export interface GenerateOptimizedScheduleRequest {
   async_mode?: boolean;
   force?: boolean;
   osrm_url?: string;
+  policy_mode?: 'algorithm_primary' | 'compare_mode' | 'llm_fallback_only';
+  llm_fallback_model?: 'qwen' | 'llama';
 }
 
 export interface GenerateOptimizedScheduleAccepted {
@@ -225,6 +227,9 @@ export interface RouteVariant {
   name: string
   description: string
   algorithm: string
+  rank: number
+  is_recommended: boolean
+  selection_score: number
   pros: string[]
   cons: string[]
   locations: string[]           // упорядоченные ID точек
@@ -329,6 +334,7 @@ export interface BenchmarkRunResponse {
 export interface OptimizeRequest {
   location_ids: string[]
   model?: string
+  policy_mode?: 'algorithm_primary' | 'compare_mode' | 'llm_fallback_only'
   constraints?: {
     max_stops_per_route?: number
     time_window_minutes?: number

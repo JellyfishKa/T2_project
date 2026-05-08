@@ -21,7 +21,6 @@ vi.mock('@/services/api', () => ({
   fetchRouteDetails: vi.fn(),
   fetchRouteComparison: vi.fn(),
   getMetrics: vi.fn(),
-  compareModels: vi.fn(),
   checkHealth: vi.fn(),
   getApiErrorMessage: vi.fn((err: unknown) => err instanceof Error ? err.message : String(err))
 }))
@@ -58,14 +57,6 @@ vi.mock('@/components/dashboard/RouteMetrics.vue', () => ({
     name: 'RouteMetrics',
     template: '<div data-testid="route-metrics">RouteMetrics Mock</div>',
     props: ['route', 'metrics', 'isLoading']
-  }
-}))
-
-vi.mock('@/components/dashboard/ModelComparison.vue', () => ({
-  default: {
-    name: 'ModelComparison',
-    template: '<div data-testid="model-comparison">ModelComparison Mock</div>',
-    props: ['benchmarkResults', 'recommendations', 'isLoading']
   }
 }))
 
@@ -217,34 +208,6 @@ describe('DashboardView.vue', () => {
     ]
   }
 
-  const mockModelComparison = {
-    models: [
-      {
-        name: 'llama',
-        avg_response_time_ms: 1250,
-        avg_quality_score: 0.87,
-        total_cost_rub: 250,
-        success_rate: 0.95,
-        usage_count: 100
-      },
-      {
-        name: 'qwen',
-        avg_response_time_ms: 450,
-        avg_quality_score: 0.82,
-        total_cost_rub: 0,
-        success_rate: 0.99,
-        usage_count: 200
-      }
-    ],
-    recommendations: [
-      {
-        scenario: 'Быстрые запросы',
-        recommended_model: 'qwen',
-        reason: 'Бесплатно и очень быстро'
-      }
-    ]
-  }
-
   const mockHealthStatus = {
     status: 'healthy' as const,
     services: {
@@ -281,7 +244,6 @@ describe('DashboardView.vue', () => {
     vi.mocked(api.fetchRoutes).mockResolvedValue(mockRoutes)
     vi.mocked(api.fetchRouteDetails).mockResolvedValue(mockRouteDetails)
     vi.mocked(api.getMetrics).mockResolvedValue(mockAllMetrics)
-    vi.mocked(api.compareModels).mockResolvedValue(mockModelComparison)
     vi.mocked(api.checkHealth).mockResolvedValue(mockHealthStatus)
     vi.mocked(api.fetchRouteComparison).mockResolvedValue(mockRouteComparison)
     vi.mocked(api.getApiErrorMessage).mockImplementation((err: unknown) =>
@@ -307,7 +269,6 @@ describe('DashboardView.vue', () => {
     await flushPromises()
 
     expect(api.fetchRoutes).toHaveBeenCalledWith(0, 100)
-    expect(api.compareModels).toHaveBeenCalled()
     expect(api.checkHealth).toHaveBeenCalled()
     expect(api.getMetrics).toHaveBeenCalled()
   })
@@ -339,7 +300,6 @@ describe('DashboardView.vue', () => {
     await flushPromises()
 
     vi.mocked(api.fetchRoutes).mockClear()
-    vi.mocked(api.compareModels).mockClear()
     vi.mocked(api.checkHealth).mockClear()
     vi.mocked(api.getMetrics).mockClear()
 
@@ -352,7 +312,6 @@ describe('DashboardView.vue', () => {
     await flushPromises()
 
     expect(api.fetchRoutes).toHaveBeenCalled()
-    expect(api.compareModels).toHaveBeenCalled()
     expect(api.checkHealth).toHaveBeenCalled()
     expect(api.getMetrics).toHaveBeenCalled()
   })

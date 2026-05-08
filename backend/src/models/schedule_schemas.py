@@ -32,6 +32,10 @@ class GenerateOptimizedScheduleRequest(BaseModel):
         default=None,
         description="Если задано, используем OSRM trip service; иначе heuristic fallback",
     )
+    policy_mode: Literal["algorithm_primary", "compare_mode", "llm_fallback_only"] = (
+        "algorithm_primary"
+    )
+    llm_fallback_model: Literal["qwen", "llama"] = "llama"
 
 
 class GenerateOptimizedScheduleAccepted(BaseModel):

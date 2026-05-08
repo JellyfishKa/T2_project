@@ -1,0 +1,7 @@
+{
+  "recommended_policy": "hybrid",
+  "single_route_winner": "balanced",
+  "variants_winner": "balanced",
+  "schedule_winner": "kmeans+balance",
+  "generated_at": "2026-05-08T10:20:35"
+}

@@ -9,7 +9,6 @@ vi.mock('@/services/api', () => ({
   fetchRoutes: vi.fn(),
   fetchRouteComparison: vi.fn(),
   getMetrics: vi.fn(),
-  compareModels: vi.fn(),
   getInsights: vi.fn(),
   downloadScheduleExcel: vi.fn(),
   importScheduleExcel: vi.fn(),
@@ -136,28 +135,6 @@ describe('AnalyticsView.vue', () => {
     ]
   }
 
-  const mockModelComparison = {
-    models: [
-      {
-        name: 'llama',
-        avg_response_time_ms: 1250,
-        avg_quality_score: 0.87,
-        total_cost_rub: 250,
-        success_rate: 0.95,
-        usage_count: 100
-      },
-      {
-        name: 'qwen',
-        avg_response_time_ms: 450,
-        avg_quality_score: 0.82,
-        total_cost_rub: 0,
-        success_rate: 0.99,
-        usage_count: 200
-      },
-    ],
-    recommendations: []
-  }
-
   const mockRouteComparison = {
     route_id: 'route-1',
     original: [
@@ -184,7 +161,6 @@ describe('AnalyticsView.vue', () => {
 
     vi.mocked(api.fetchRoutes).mockResolvedValue(mockRoutes)
     vi.mocked(api.getMetrics).mockResolvedValue(mockMetrics)
-    vi.mocked(api.compareModels).mockResolvedValue(mockModelComparison)
     vi.mocked(api.getInsights).mockResolvedValue(null as any)
     vi.mocked(api.downloadScheduleExcel).mockResolvedValue(undefined)
     vi.mocked(api.importScheduleExcel).mockResolvedValue({ updated: 0, skipped: 0, errors: [] })
@@ -221,7 +197,6 @@ describe('AnalyticsView.vue', () => {
 
     expect(api.fetchRoutes).toHaveBeenCalledWith(0, 100)
     expect(api.getMetrics).toHaveBeenCalled()
-    expect(api.compareModels).toHaveBeenCalled()
   })
 
   it('отображает статистические карточки после загрузки', async () => {
@@ -250,13 +225,12 @@ describe('AnalyticsView.vue', () => {
     expect(lineChart.exists()).toBe(true)
   })
 
-  it('правильно рассчитывает статистику по моделям', async () => {
+  it('правильно рассчитывает статистику по источникам', async () => {
     await flushPromises()
 
-    // Проверяем наличие названий моделей в таблице
-    expect(wrapper.text()).toContain('Llama')
-    expect(wrapper.text()).toContain('Qwen')
-    // Таблица отображает агрегированные средние, а не индивидуальные значения:
+    // qwen/llama показываются как fallback-источник
+    expect(wrapper.text()).toContain('Fallback LLM')
+    // Таблица отображает агрегированные средние:
     // llama: (1245+1850)/2 = 1548, qwen: 432/1 = 432
     expect(wrapper.text()).toContain('1548')
     expect(wrapper.text()).toContain('432')
@@ -304,7 +278,6 @@ describe('AnalyticsView.vue', () => {
     // Очищаем вызовы после начальной загрузки
     vi.mocked(api.fetchRoutes).mockClear()
     vi.mocked(api.getMetrics).mockClear()
-    vi.mocked(api.compareModels).mockClear()
 
     // Находим кнопку обновления по тексту и кликаем
     const refreshButton = wrapper
@@ -317,7 +290,6 @@ describe('AnalyticsView.vue', () => {
 
     expect(api.fetchRoutes).toHaveBeenCalled()
     expect(api.getMetrics).toHaveBeenCalled()
-    expect(api.compareModels).toHaveBeenCalled()
   })
 
   it('отображает пустое состояние при отсутствии данных', async () => {
@@ -341,21 +313,23 @@ describe('AnalyticsView.vue', () => {
     expect(emptyWrapper.text()).toContain('Нет данных для отображения')
   })
 
-  it('правильно форматирует названия моделей', async () => {
+  it('правильно форматирует названия источников', async () => {
     await flushPromises()
 
     const vm = wrapper.vm as any
-    expect(vm.getModelName('llama')).toBe('Llama')
-    expect(vm.getModelName('qwen')).toBe('Qwen')
+    expect(vm.getModelName('llama')).toBe('Fallback LLM')
+    expect(vm.getModelName('qwen')).toBe('Fallback LLM')
+    expect(vm.getModelName('algorithm_primary')).toBe('Алгоритм')
     expect(vm.getModelName('unknown')).toBe('unknown')
   })
 
-  it('правильно применяет классы для бейджей моделей', async () => {
+  it('правильно применяет классы для бейджей источников', async () => {
     await flushPromises()
 
     const vm = wrapper.vm as any
-    expect(vm.getModelBadgeClass('llama')).toBe('bg-blue-100 text-blue-800')
-    expect(vm.getModelBadgeClass('qwen')).toBe('bg-purple-100 text-purple-800')
+    expect(vm.getModelBadgeClass('llama')).toBe('bg-amber-100 text-amber-800')
+    expect(vm.getModelBadgeClass('qwen')).toBe('bg-amber-100 text-amber-800')
+    expect(vm.getModelBadgeClass('algorithm_primary')).toBe('bg-emerald-100 text-emerald-800')
   })
 
   it('корректно строит данные для scatter plot', async () => {

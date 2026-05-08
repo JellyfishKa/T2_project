@@ -2,7 +2,7 @@
   <div
     class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
   >
-    <!-- Header with model info - показываем только если есть result -->
+    <!-- Header with source info - показываем только если есть result -->
     <div
       v-if="result"
       class="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50"
@@ -13,7 +13,7 @@
             Результат оптимизации
           </h3>
           <p class="text-sm text-gray-600 mt-1">
-            Маршрут оптимизирован с использованием
+            Источник расчета:
             <span class="font-medium text-blue-600">{{
               getModelName(result.model_used)
             }}</span>
@@ -175,10 +175,10 @@
             Исходный маршрут: {{ originalRouteWarning }}
           </p>
           <p v-if="llmEvaluationStatus === 'stale'">
-            LLM-оценка снята: после ручной перестановки этот порядок не сравнивался моделью.
+            Оценка снята: после ручной перестановки этот порядок не пересчитывался.
           </p>
           <p v-else-if="llmEvaluationStatus === 'unavailable'">
-            Для текущего порядка нет актуальной LLM-оценки.
+            Для текущего порядка нет актуальной оценки.
           </p>
         </div>
       </div>
@@ -261,7 +261,7 @@
             />
           </svg>
           <span class="text-sm text-yellow-800">
-            Использована резервная модель: {{ result.fallback_reason }}
+            Использован резервный источник: {{ result.fallback_reason }}
           </span>
         </div>
       </div>
@@ -284,7 +284,7 @@
               class="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
               @click="$emit('restore-ai')"
             >
-              Вернуть {{ aiRouteLabel || 'вариант ИИ' }}
+              Вернуть {{ aiRouteLabel || 'автовариант' }}
             </button>
             <button
               v-if="canRestoreOriginal"
@@ -365,7 +365,7 @@
           :disabled="isUpdatingMetrics"
           class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
         >
-          {{ llmEvaluationStatus === 'current' ? 'Сохранить маршрут' : 'Сохранить без LLM-оценки' }}
+          {{ llmEvaluationStatus === 'current' ? 'Сохранить маршрут' : 'Сохранить без доп.оценки' }}
         </button>
         <button
           @click="$emit('reset')"
@@ -431,16 +431,24 @@ const dragOverIndex = ref<number | null>(null)
 
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
-    llama: 'Llama',
-    qwen: 'Qwen'
+    algorithm_primary: 'Алгоритм',
+    compare_mode: 'Сравнение',
+    llm_fallback_only: 'Fallback LLM',
+    none: 'Алгоритм',
+    llama: 'Fallback LLM',
+    qwen: 'Fallback LLM'
   }
   return modelMap[model] || model
 }
 
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
-    llama: 'bg-blue-100 text-blue-800',
-    qwen: 'bg-purple-100 text-purple-800'
+    algorithm_primary: 'bg-emerald-100 text-emerald-800',
+    compare_mode: 'bg-blue-100 text-blue-800',
+    llm_fallback_only: 'bg-amber-100 text-amber-800',
+    none: 'bg-emerald-100 text-emerald-800',
+    llama: 'bg-amber-100 text-amber-800',
+    qwen: 'bg-amber-100 text-amber-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }
@@ -466,7 +474,7 @@ const getLocationTimeWindow = (locationId: string): string => {
 
 const routeSourceLabel = computed(() => {
   if (props.routeSource === 'manual') return 'Ручной порядок'
-  if (props.routeSource === 'ai') return 'Вариант ИИ'
+  if (props.routeSource === 'ai') return 'Автовариант'
   return 'Исходный порядок'
 })
 
@@ -480,12 +488,12 @@ const originalLocationIds = computed(() => props.originalLocationIds ?? [])
 
 const llmStatusLabel = computed(() => {
   if (props.llmEvaluationStatus === 'current' && props.llmQualityScore !== null && props.llmQualityScore !== undefined) {
-    return `LLM: ${props.llmQualityScore.toFixed(0)}/100`
+    return `Оценка: ${props.llmQualityScore.toFixed(0)}/100`
   }
   if (props.llmEvaluationStatus === 'stale') {
-    return 'LLM-оценка неактуальна'
+    return 'Оценка неактуальна'
   }
-  return 'LLM-оценка не рассчитана'
+  return 'Оценка не рассчитана'
 })
 
 const llmStatusBadgeClass = computed(() => {
