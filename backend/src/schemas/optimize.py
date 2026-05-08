@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class OptimizeRequest(BaseModel):
     location_ids: List[str]
     model: str = "none"
+    policy_mode: str = "algorithm_primary"
     constraints: Optional[Dict] = Field(default_factory=lambda: {
         "max_stops_per_route": 50,
         "time_window_minutes": 480,
@@ -52,6 +53,7 @@ class RouteVariant(BaseModel):
 class OptimizeVariantsRequest(BaseModel):
     location_ids: List[str]
     model: str = "qwen"           # только одна модель за раз
+    policy_mode: str = "algorithm_primary"
     constraints: Optional[Dict] = Field(default_factory=dict)
 
 

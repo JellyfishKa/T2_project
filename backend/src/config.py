@@ -29,6 +29,12 @@ class Settings(BaseSettings):
 
     debug: bool = False
     perf_warn_threshold_ms: int = 10_000
+    routing_primary_mode: str = "algorithm_primary"
+    routing_enable_llm_fallback: bool = True
+    routing_llm_fallback_model: str = "llama"
+    routing_quality_floor: float = 60.0
+    routing_enable_llm_variant_evaluation: bool = False
+    routing_allow_direct_llm_routes: bool = False
 
     @field_validator("debug", mode="before")
     @classmethod

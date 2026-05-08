@@ -19,6 +19,9 @@ BENCH_DIR = project_root / "ml" / "benchmarks"
 script_path = BENCH_DIR / "llm_benchmark.py"
 LOG_FILE = BENCH_DIR / "results_log.json"
 RESULTS_FILE = BENCH_DIR / "results.json"
+POLICY_SCRIPT = BENCH_DIR / "policy_benchmark.py"
+POLICY_RESULTS_FILE = BENCH_DIR / "policy_benchmark_results.json"
+POLICY_SELECTION_FILE = BENCH_DIR / "policy_selection.json"
 
 
 def _run_benchmark_process(
@@ -68,6 +71,29 @@ def _run_benchmark_process(
                 f"failed: {error_detail[:200]}"
             )
 
+    except Exception as exc:
+        benchmark_status[task_id] = f"error: {exc}"
+
+
+def _run_policy_benchmark_process(task_id: str):
+    benchmark_status[task_id] = "running"
+    if not POLICY_SCRIPT.exists():
+        benchmark_status[task_id] = f"failed: script not found at {POLICY_SCRIPT}"
+        return
+    cmd = [sys.executable, str(POLICY_SCRIPT)]
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            cwd=str(project_root),
+        )
+        if result.returncode == 0:
+            benchmark_status[task_id] = "completed"
+        else:
+            benchmark_status[task_id] = f"failed: {(result.stderr.strip() or result.stdout.strip())[:200]}"
     except Exception as exc:
         benchmark_status[task_id] = f"error: {exc}"
 
@@ -170,4 +196,27 @@ async def get_latest_result():
         )
 
     with open(RESULTS_FILE, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+@router.post("/policy/run")
+async def run_policy_benchmark(background_tasks: BackgroundTasks):
+    task_id = f"policy_{int(time.time())}"
+    background_tasks.add_task(_run_policy_benchmark_process, task_id)
+    return {"status": "started", "task_id": task_id}
+
+
+@router.get("/policy/latest")
+async def get_latest_policy_benchmark():
+    if not POLICY_RESULTS_FILE.exists():
+        raise HTTPException(status_code=404, detail="Policy benchmark result not found")
+    with open(POLICY_RESULTS_FILE, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+@router.get("/policy/recommendation")
+async def get_policy_recommendation():
+    if not POLICY_SELECTION_FILE.exists():
+        raise HTTPException(status_code=404, detail="Policy selection not found")
+    with open(POLICY_SELECTION_FILE, "r", encoding="utf-8") as file:
         return json.load(file)

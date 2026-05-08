@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import (Metric as DBMetric,
                                  get_session,
                                  )
+from src.services.routing_observability import get_routing_observability_snapshot
 
 router = APIRouter(tags=["Metrics"])
 
@@ -45,7 +46,10 @@ async def get_all_metrics(
             for m in db_metrics
         ]
 
-        return {"metrics": metrics_list}
+        return {
+            "metrics": metrics_list,
+            "routing_observability": get_routing_observability_snapshot(),
+        }
 
     except Exception as exc:
         raise HTTPException(

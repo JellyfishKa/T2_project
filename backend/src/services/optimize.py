@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.database.models import (
     Location as DBLocation,
     Metric as DBMetric,
@@ -26,6 +27,16 @@ from src.models.schemas import (
 from src.schemas.vehicle import Vehicle 
 from src.services.model_selector import (
     get_model_recommendation,
+)
+from src.services.routing_observability import (
+    track_algorithm_run,
+    track_llm_fallback_attempt,
+    track_llm_fallback_failure,
+    track_llm_fallback_success,
+)
+from src.services.routing_policy import (
+    resolve_routing_policy,
+    should_use_llm_fallback,
 )
 from src.services.quality_evaluator import evaluate_route_quality
 from src.services.routing import RoutingService
@@ -94,6 +105,7 @@ class Optimizer:
         db_locations: List[DBLocation],
         vehicle: Optional[Vehicle] = None,
         model: str = "auto",
+        policy_mode: str = "algorithm_primary",
         transport_mode: str = "car",
     ) -> PydanticRoute:
         start_time_ms = int(time.time() * 1000)
@@ -111,7 +123,11 @@ class Optimizer:
             transport_mode=transport_mode,
         )
 
-        target_model = model
+        policy = resolve_routing_policy(
+            requested_mode=policy_mode,
+            requested_model=model,
+        )
+        track_algorithm_run(policy.mode)
 
         # Оцениваем 3 алгоритмических варианта и выбираем лучший по метрикам
         candidates = [
@@ -139,14 +155,23 @@ class Optimizer:
         final_locations = best_algo_locations
         model_used = best_algo_name
 
-        # LLM опциональный слой поверх алгоритма
-        if target_model in ("qwen", "llama"):
-            model_used = f"{best_algo_name}+{target_model}"
-            # Здесь можно добавить вызов LLM для дообучения/улучшения маршрута
-            # try:
-            #     final_locations = await client.improve_route(final_locations)
-            # except Exception as exc:
-            #     logger.warning("LLM layer failed: %s", exc)
+        if policy.compare_mode:
+            model_used = f"{best_algo_name}+compare({policy.requested_model})"
+
+        if should_use_llm_fallback(policy, best_algo_score):
+            fallback_model = policy.llm_fallback_model
+            track_llm_fallback_attempt(fallback_model)
+            try:
+                await self._probe_llm_fallback(
+                    fallback_model,
+                    final_locations,
+                )
+                track_llm_fallback_success(fallback_model)
+                model_used = f"{best_algo_name}+llm_fallback({fallback_model})"
+            except Exception as exc:
+                logger.warning("LLM fallback probe failed: %s", exc)
+                track_llm_fallback_failure(fallback_model, "probe_failed")
+                model_used = f"{best_algo_name}+fallback_unavailable"
 
         optimized_route = PydanticRoute(
             ID=str(uuid.uuid4()),
@@ -257,6 +282,25 @@ class Optimizer:
             model,
         )
         return optimized_route
+
+    async def _probe_llm_fallback(
+        self,
+        fallback_model: str,
+        locations: List[PydanticLocation],
+    ) -> None:
+        """
+        Проверка доступности fallback LLM.
+        Не переупорядочивает маршрут: алгоритм остаётся источником истины.
+        """
+        if not locations:
+            return
+        if fallback_model == "qwen":
+            client = self.qwen_client
+        else:
+            client = self.llama_client
+        # Достаточно успешно пройти генерацию — результат используем только как
+        # сигнал доступности fallback.
+        await client.generate_route(locations, constraints={"fallback_probe": True})
 
     # ─── Вспомогательный greedy для подмножества точек ──────────────────────────
 
@@ -374,6 +418,7 @@ class Optimizer:
         db_locations: List[DBLocation],
         vehicle: Optional[Vehicle] = None,
         model: str = "qwen",
+        policy_mode: str = "algorithm_primary",
         transport_mode: str = "car",
     ):
         """
@@ -453,23 +498,38 @@ class Optimizer:
                 "cons": [],
             })
 
-        # ── LLM: генерируем pros/cons (graceful fallback при ошибке) ───────────
+        policy = resolve_routing_policy(
+            requested_mode=policy_mode,
+            requested_model=model,
+        )
+        track_algorithm_run(policy.mode)
+
+        # ── LLM: генерируем pros/cons только в compare/fallback режимах ────────
         llm_success = False
-        try:
-            client = (
-                self.qwen_client if model == "qwen" else self.llama_client
-            )
-            evaluation = await client.evaluate_variants(variants_data)
-            if evaluation:
-                eval_by_id = {item["id"]: item for item in evaluation}
-                for v in variants_data:
-                    ev = eval_by_id.get(v["id"])
-                    if ev:
-                        v["pros"] = ev.get("pros", [])[:3]
-                        v["cons"] = ev.get("cons", [])[:3]
-                llm_success = True
-        except Exception as exc:
-            logger.warning("LLM evaluate_variants failed: %s", exc)
+        llm_enabled = (
+            settings.routing_enable_llm_variant_evaluation
+            and (policy.compare_mode or policy.llm_fallback_only)
+        )
+        if llm_enabled:
+            fallback_model = policy.llm_fallback_model
+            track_llm_fallback_attempt(fallback_model)
+            try:
+                client = (
+                    self.qwen_client if fallback_model == "qwen" else self.llama_client
+                )
+                evaluation = await client.evaluate_variants(variants_data)
+                if evaluation:
+                    eval_by_id = {item["id"]: item for item in evaluation}
+                    for v in variants_data:
+                        ev = eval_by_id.get(v["id"])
+                        if ev:
+                            v["pros"] = ev.get("pros", [])[:3]
+                            v["cons"] = ev.get("cons", [])[:3]
+                    llm_success = True
+                    track_llm_fallback_success(fallback_model)
+            except Exception as exc:
+                logger.warning("LLM evaluate_variants failed: %s", exc)
+                track_llm_fallback_failure(fallback_model, "variants_eval_failed")
 
         best_variant = min(
             variants_data,
@@ -500,7 +560,7 @@ class Optimizer:
 
         return OptimizeVariantsResponse(
             variants=response_variants,
-            model_used=model,
+            model_used=best_variant["algorithm"],
             response_time_ms=int(time.time() * 1000) - start_time_ms,
             llm_evaluation_success=llm_success,
         )

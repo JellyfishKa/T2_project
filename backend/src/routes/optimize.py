@@ -91,19 +91,17 @@ async def run_optimization(
             db_locations=ordered_locations,
             vehicle=vehicle_schema,
             model=payload.model,
+            policy_mode=payload.policy_mode,
             transport_mode=transport_mode,
         )
 
         execution_time_ms = int((time.time() - start_time) * 1000)
 
         fallback_reason = None
-        if (
-            payload.model != 'auto' and
-            optimized_route.model_used != payload.model
-        ):
+        if "fallback" in optimized_route.model_used:
             fallback_reason = (
-                f'Model {payload.model} failed, '
-                f'used {optimized_route.model_used} instead.'
+                f"Primary algorithm path required fallback checks. "
+                f"Final strategy: {optimized_route.model_used}."
             )
 
         from datetime import datetime
@@ -176,6 +174,7 @@ async def get_optimization_variants(
             db_locations=ordered_locations,
             vehicle=vehicle_schema,
             model=payload.model,
+            policy_mode=payload.policy_mode,
             transport_mode=transport_mode,
         )
     except Exception as exc:
