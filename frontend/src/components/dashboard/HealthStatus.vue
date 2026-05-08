@@ -51,7 +51,7 @@
         <!-- Services Status -->
         <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
           <div
-            v-for="(statusValue, service) in status.services"
+            v-for="(statusValue, service) in visibleServices"
             :key="service"
             class="flex items-center"
           >
@@ -89,7 +89,18 @@ import type { HealthStatus } from '@/services/api'
 
 const props = defineProps<{
   status: HealthStatus
+  hideModelServices?: boolean
 }>()
+
+const visibleServices = computed(() => {
+  if (!props.hideModelServices) {
+    return props.status.services
+  }
+  const filtered = Object.entries(props.status.services).filter(
+    ([service]) => service !== 'qwen' && service !== 'llama'
+  )
+  return Object.fromEntries(filtered)
+})
 
 const statusTitle = computed(() => {
   return props.status.status === 'healthy'

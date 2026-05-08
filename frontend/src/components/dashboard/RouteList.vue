@@ -47,10 +47,10 @@
                 <div class="flex-shrink-0 h-10 w-10">
                   <div
                     class="h-10 w-10 rounded-lg flex items-center justify-center"
-                    :class="getModelColor(route.model_used)"
+                    :class="props.hideModelInfo ? 'bg-slate-500' : getModelColor(route.model_used)"
                   >
                     <span class="text-white font-bold text-sm">{{
-                      getModelInitial(route.model_used)
+                      props.hideModelInfo ? 'R' : getModelInitial(route.model_used)
                     }}</span>
                   </div>
                 </div>
@@ -64,7 +64,7 @@
                 </div>
               </div>
             </td>
-            <td class="px-4 py-4 whitespace-nowrap">
+            <td v-if="!props.hideModelInfo" class="px-4 py-4 whitespace-nowrap">
               <span
                 class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
                 :class="getModelBadgeClass(route.model_used)"
@@ -115,22 +115,23 @@
           <div class="flex items-center">
             <div
               class="h-10 w-10 rounded-lg flex items-center justify-center"
-              :class="getModelColor(route.model_used)"
+              :class="props.hideModelInfo ? 'bg-slate-500' : getModelColor(route.model_used)"
             >
               <span class="text-white font-bold text-sm">{{
-                getModelInitial(route.model_used)
+                props.hideModelInfo ? 'R' : getModelInitial(route.model_used)
               }}</span>
             </div>
             <div class="ml-3">
               <div class="text-sm font-medium text-gray-900">
                 {{ route.name }}
               </div>
-              <div class="text-xs text-gray-500">
+              <div v-if="!props.hideModelInfo" class="text-xs text-gray-500">
                 {{ getModelName(route.model_used) }}
               </div>
             </div>
           </div>
           <span
+            v-if="!props.hideModelInfo"
             class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
             :class="getModelBadgeClass(route.model_used)"
           >
@@ -217,6 +218,7 @@ const props = defineProps<{
   routes: Route[]
   isLoading?: boolean
   selectedRouteId?: string | null
+  hideModelInfo?: boolean
   sortable?: boolean
   sortField?: SortField
   sortDirection?: SortDirection
@@ -228,13 +230,18 @@ const emit = defineEmits<{
   (e: 'sort', field: SortField, direction: SortDirection): void
 }>()
 
-const columns = [
-  { field: 'name' as const, label: 'Маршрут' },
-  { field: 'model_used' as const, label: 'Модель' },
-  { field: 'total_distance_km' as const, label: 'Расстояние' },
-  { field: 'total_time_hours' as const, label: 'Время' },
-  { field: 'total_cost_rub' as const, label: 'Стоимость' }
-]
+const columns = computed(() => {
+  const base: Array<{ field: SortField; label: string }> = [
+    { field: 'name' as const, label: 'Маршрут' },
+    { field: 'total_distance_km' as const, label: 'Расстояние' },
+    { field: 'total_time_hours' as const, label: 'Время' },
+    { field: 'total_cost_rub' as const, label: 'Стоимость' }
+  ]
+  if (!props.hideModelInfo) {
+    base.splice(1, 0, { field: 'model_used' as const, label: 'Модель' })
+  }
+  return base
+})
 
 const sortedRoutes = computed(() => {
   if (!props.sortable || !props.sortField) return props.routes

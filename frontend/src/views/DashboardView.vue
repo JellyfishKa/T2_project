@@ -3,13 +3,12 @@
     <PageHero
       eyebrow="Обзор"
       title="Дашборд"
-      description="Короткий срез по маршрутам, сервисам и моделям: сначала здоровье системы и главные цифры, потом уже детали маршрута и история метрик."
+      description="Короткий срез по маршрутам и сервисам: сначала здоровье системы и главные цифры, потом детали маршрута и история метрик."
     >
       <template #meta>
         <div class="flex flex-wrap gap-2">
           <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Маршруты</span>
           <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Сервисы</span>
-          <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">Модели</span>
         </div>
       </template>
       <template #actions>
@@ -77,7 +76,7 @@
     <template v-else>
       <!-- Health Status -->
       <div v-if="healthStatus" class="mb-6">
-        <HealthStatus :status="healthStatus" />
+        <HealthStatus :status="healthStatus" :hide-model-services="true" />
       </div>
 
       <!-- Route Statistics -->
@@ -131,6 +130,7 @@
                 :routes="routes.items"
                 :is-loading="isLoadingRoutes"
                 :selected-route-id="selectedRouteId"
+                :hide-model-info="true"
                 :sortable="true"
                 :sort-field="routeSortField"
                 :sort-direction="routeSortDirection"
@@ -161,22 +161,6 @@
             </div>
           </div>
 
-          <!-- Model Comparison -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
-              <h3 class="text-lg font-semibold text-gray-900">
-                Сравнение моделей
-              </h3>
-              <p class="mt-1 text-sm text-gray-600">Производительность LLM</p>
-            </div>
-            <div class="px-4 py-5 sm:p-6">
-              <ModelComparison
-                :benchmark-results="modelComparison?.models || []"
-                :recommendations="modelComparison?.recommendations || []"
-                :is-loading="isLoadingComparison"
-              />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -219,6 +203,7 @@
           <MetricsTable
             :metrics="allMetrics"
             :is-loading="isLoadingMetrics"
+            :hide-model-info="true"
             :sortable="true"
             :sort-field="metricsSortField"
             :sort-direction="metricsSortDirection"
@@ -244,7 +229,6 @@ import { ref, computed, onMounted } from 'vue'
 import RouteList from '@/components/dashboard/RouteList.vue'
 import RouteCompareModal from '@/components/dashboard/RouteCompareModal.vue'
 import RouteMetrics from '@/components/dashboard/RouteMetrics.vue'
-import ModelComparison from '@/components/dashboard/ModelComparison.vue'
 import MetricsTable from '@/components/dashboard/MetricsTable.vue'
 import HealthStatus from '@/components/dashboard/HealthStatus.vue'
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
@@ -255,14 +239,12 @@ import {
   fetchRouteDetails,
   fetchRouteComparison,
   getMetrics,
-  compareModels,
   checkHealth,
   getApiErrorMessage,
   type Route,
   type RouteDetails,
   type RouteComparison,
   type Metric,
-  type ModelComparison as ApiModelComparison,
   type HealthStatus as HealthStatusType,
   type PaginatedResponse
 } from '@/services/api'
@@ -289,7 +271,6 @@ const isLoadingStats = ref(true)
 const isLoadingRoutes = ref(true)
 const isLoadingRouteDetails = ref(false)
 const isLoadingMetrics = ref(false)
-const isLoadingComparison = ref(true)
 const isRefreshing = ref(false)
 
 const error = ref<string | null>(null)
@@ -299,7 +280,6 @@ const selectedRouteId = ref<string | null>(null)
 const selectedRouteDetails = ref<RouteDetails | null>(null)
 const routeMetrics = ref<Metric[]>([])
 const allMetrics = ref<Metric[]>([])
-const modelComparison = ref<ApiModelComparison | null>(null)
 const healthStatus = ref<HealthStatusType | null>(null)
 const isRouteComparisonOpen = ref(false)
 const isLoadingRouteComparison = ref(false)
@@ -442,13 +422,11 @@ const closeRouteComparison = () => {
 const loadDashboardData = async () => {
   isLoadingStats.value = true
   isLoadingRoutes.value = true
-  isLoadingComparison.value = true
   error.value = null
 
   // Загружаем данные независимо — ошибка одного не блокирует остальные
-  const [routesResult, comparisonResult, healthResult] = await Promise.allSettled([
+  const [routesResult, healthResult] = await Promise.allSettled([
     fetchRoutes(0, 100),
-    compareModels(),
     checkHealth()
   ])
 
@@ -467,12 +445,6 @@ const loadDashboardData = async () => {
     console.error('Routes loading error:', routesResult.reason)
   }
 
-  if (comparisonResult.status === 'fulfilled') {
-    modelComparison.value = comparisonResult.value
-  } else {
-    console.error('Comparison loading error:', comparisonResult.reason)
-  }
-
   if (healthResult.status === 'fulfilled') {
     healthStatus.value = healthResult.value
   } else {
@@ -481,7 +453,6 @@ const loadDashboardData = async () => {
 
   isLoadingStats.value = false
   isLoadingRoutes.value = false
-  isLoadingComparison.value = false
 }
 
 const loadRouteDetails = async (routeId: string) => {

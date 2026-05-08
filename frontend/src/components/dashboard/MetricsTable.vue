@@ -31,7 +31,7 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-for="metric in sortedMetrics" :key="metric.id">
-            <td class="px-3 py-4 whitespace-nowrap">
+            <td v-if="!props.hideModelInfo" class="px-3 py-4 whitespace-nowrap">
               <span
                 class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                 :class="getModelBadgeClass(metric.model)"
@@ -92,6 +92,7 @@
       >
         <div class="flex items-center justify-between mb-3">
           <span
+            v-if="!props.hideModelInfo"
             class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
             :class="getModelBadgeClass(metric.model)"
           >
@@ -171,6 +172,7 @@ type SortDirection = 'asc' | 'desc'
 const props = defineProps<{
   metrics: Metric[]
   isLoading?: boolean
+  hideModelInfo?: boolean
   sortable?: boolean
   sortField?: SortField
   sortDirection?: SortDirection
@@ -180,14 +182,19 @@ const emit = defineEmits<{
   (e: 'sort', field: SortField, direction: SortDirection): void
 }>()
 
-const columns = [
-  { field: 'model' as const, label: 'Модель' },
-  { field: 'route_id' as const, label: 'Маршрут' },
-  { field: 'response_time_ms' as const, label: 'Время ответа' },
-  { field: 'quality_score' as const, label: 'Качество' },
-  { field: 'cost_rub' as const, label: 'Стоимость' },
-  { field: 'timestamp' as const, label: 'Время' }
-]
+const columns = computed(() => {
+  const base: Array<{ field: SortField; label: string }> = [
+    { field: 'route_id' as const, label: 'Маршрут' },
+    { field: 'response_time_ms' as const, label: 'Время ответа' },
+    { field: 'quality_score' as const, label: 'Качество' },
+    { field: 'cost_rub' as const, label: 'Стоимость' },
+    { field: 'timestamp' as const, label: 'Время' }
+  ]
+  if (!props.hideModelInfo) {
+    base.unshift({ field: 'model' as const, label: 'Модель' })
+  }
+  return base
+})
 
 const sortedMetrics = computed(() => {
   if (!props.sortable || !props.sortField) return props.metrics

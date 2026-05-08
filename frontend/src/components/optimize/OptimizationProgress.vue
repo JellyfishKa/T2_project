@@ -27,9 +27,7 @@
       </div>
       <h2 class="text-xl font-bold text-gray-900">Генерация вариантов маршрута</h2>
       <p class="text-sm text-gray-500 mt-1">
-        Модель
-        <span class="font-semibold" :class="modelLabelColor">{{ modelLabel }}</span>
-        анализирует точки и формирует варианты...
+        Алгоритмы рассчитывают варианты и подготавливают ранжирование...
       </p>
     </div>
 
@@ -118,7 +116,6 @@ interface Step {
 }
 
 const props = defineProps<{
-  model: string   // 'qwen' | 'llama'
   done: boolean   // true когда API ответил
 }>()
 
@@ -126,7 +123,7 @@ const props = defineProps<{
 const steps: Step[] = [
   { label: 'Подготовка данных и точек маршрута',    targetProgress: 15, minDuration: 2  },
   { label: 'Расчёт трёх вариантов маршрута',        targetProgress: 30, minDuration: 3  },
-  { label: 'Анализ вариантов языковой моделью',     targetProgress: 88, minDuration: 30 },
+  { label: 'Оценка и ранжирование вариантов',        targetProgress: 88, minDuration: 30 },
   { label: 'Формирование и проверка результатов',   targetProgress: 100, minDuration: 1 },
 ]
 
@@ -142,14 +139,6 @@ let elapsedInterval: ReturnType<typeof setInterval> | null = null
 // ─── Вычисляемые ──────────────────────────────────────────────────────────────
 const currentStepLabel = computed(
   () => steps[currentStepIndex.value]?.label ?? 'Завершение...'
-)
-
-const modelLabel = computed(() =>
-  props.model === 'qwen' ? 'Qwen' : 'Llama'
-)
-
-const modelLabelColor = computed(() =>
-  props.model === 'qwen' ? 'text-purple-600' : 'text-green-600'
 )
 
 const elapsedLabel = computed(() => {
@@ -170,7 +159,7 @@ function getIncrement(): number {
   const range = step.targetProgress - (steps[currentStepIndex.value - 1]?.targetProgress ?? 0)
   const minTicks = (step.minDuration * 1000) / TICK_MS
 
-  // Если LLM-шаг (индекс 2), идём очень медленно
+  // Шаг ранжирования занимает больше времени, держим более плавный прогресс
   return currentStepIndex.value === 2
     ? Math.min(range / minTicks, 0.6)
     : range / minTicks
