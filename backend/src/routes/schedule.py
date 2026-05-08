@@ -1004,11 +1004,6 @@ async def save_day_route_override(
         raise HTTPException(status_code=404, detail="Маршрут дня не найден")
 
     schedule_location_ids = [s.location_id for s in schedules]
-    if set(schedule_location_ids) != set(payload.location_ids):
-        raise HTTPException(
-            status_code=422,
-            detail="Набор точек маршрута не совпадает с расписанием дня",
-        )
 
     existing_override = await _get_route_override(session, payload.rep_id, payload.date)
     original_location_ids = (
