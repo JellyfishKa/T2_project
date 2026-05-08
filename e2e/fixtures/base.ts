@@ -160,6 +160,8 @@ export const test = base.extend<Fixtures>({
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        ...(process.env.E2E_API_KEY ? { 'X-API-Key': process.env.E2E_API_KEY } : {}),
+        ...(process.env.E2E_ADMIN_API_KEY ? { 'X-Admin-API-Key': process.env.E2E_ADMIN_API_KEY } : {}),
       },
     })
     await use(client)

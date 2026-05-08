@@ -56,7 +56,10 @@ async def optimize_route(
     except Exception as e:
         track_llm_fallback_failure("qwen", "direct_qwen_failed")
         if not policy.llm_fallback_enabled:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(
+                status_code=500,
+                detail="Qwen optimization failed",
+            )
         # Последний защитный контур: алгоритм вместо LLM.
         fallback_route = nearest_neighbour_route(locations, model_used="algorithm-nn-fallback")
         if include_recommendation:

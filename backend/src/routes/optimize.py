@@ -175,6 +175,7 @@ async def get_optimization_variants(
             vehicle=vehicle_schema,
             model=payload.model,
             policy_mode=payload.policy_mode,
+            max_alternatives=payload.max_alternatives,
             transport_mode=transport_mode,
         )
     except Exception as exc:

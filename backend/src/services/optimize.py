@@ -55,6 +55,22 @@ class Optimizer:
         self.max_locations_per_prompt = 40
         self.routing_service = RoutingService()
 
+    def _route_selection_score(self, metrics: Dict[str, Any], quality_score: float) -> float:
+        """
+        Унифицированный score для адаптивного ранжирования:
+        меньшие distance/time/cost и больший quality_score дают лучший итог.
+        """
+        distance = float(metrics.get("distance_km") or 0.0)
+        time_hours = float(metrics.get("time_hours") or 0.0)
+        cost = float(metrics.get("cost_rub") or 0.0)
+        quality = float(quality_score or 0.0)
+        return (
+            settings.routing_weight_quality * quality
+            - settings.routing_weight_distance * distance
+            - settings.routing_weight_time * time_hours
+            - settings.routing_weight_cost * cost
+        )
+
     def _convert_db_to_pydantic(
         self,
         db_loc: DBLocation,
@@ -125,7 +141,7 @@ class Optimizer:
 
         policy = resolve_routing_policy(
             requested_mode=policy_mode,
-            requested_model=model,
+            requested_fallback_model=model,
         )
         track_algorithm_run(policy.mode)
 
@@ -146,9 +162,17 @@ class Optimizer:
                 {**baseline, "constraints_satisfied": True},
                 {**cand_stats, "constraints_satisfied": True},
             )
-            # Выбираем лучший по quality_score
-            if q_score > best_algo_score:
-                best_algo_score = q_score
+            weighted_score = self._route_selection_score(
+                {
+                    "distance_km": cand_stats["distance_km"],
+                    "time_hours": cand_stats["time_minutes"] / 60,
+                    "cost_rub": cand_stats["cost_rub"],
+                },
+                q_score,
+            )
+            # Адаптивный выбор лучшего алгоритма по комбинированному KPI-скору.
+            if weighted_score > best_algo_score:
+                best_algo_score = weighted_score
                 best_algo_name = name
                 best_algo_locations = locs
 
@@ -156,7 +180,7 @@ class Optimizer:
         model_used = best_algo_name
 
         if policy.compare_mode:
-            model_used = f"{best_algo_name}+compare({policy.requested_model})"
+            model_used = f"{best_algo_name}+compare({policy.requested_fallback_model})"
 
         if should_use_llm_fallback(policy, best_algo_score):
             fallback_model = policy.llm_fallback_model
@@ -384,7 +408,7 @@ class Optimizer:
             return list(locations)
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
-        depot = {"lat": 54.1871, "lon": 45.1749}
+        depot = {"lat": settings.default_depot_lat, "lon": settings.default_depot_lon}
         all_dicts = [depot] + loc_dicts
         matrix = compute_distance_matrix(all_dicts)
         n = len(all_dicts)
@@ -419,6 +443,7 @@ class Optimizer:
         vehicle: Optional[Vehicle] = None,
         model: str = "qwen",
         policy_mode: str = "algorithm_primary",
+        max_alternatives: int = 3,
         transport_mode: str = "car",
     ):
         """
@@ -482,6 +507,14 @@ class Optimizer:
                 {**baseline, "constraints_satisfied": True},
                 {**real, "constraints_satisfied": True},
             )
+            selection_score = self._route_selection_score(
+                {
+                    "distance_km": real["distance_km"],
+                    "time_hours": real["time_minutes"] / 60,
+                    "cost_rub": real["cost_rub"],
+                },
+                q_score,
+            )
             variants_data.append({
                 "id": vc["id"],
                 "name": vc["name"],
@@ -494,13 +527,14 @@ class Optimizer:
                     "cost_rub": real["cost_rub"],
                     "quality_score": q_score,
                 },
+                "selection_score": selection_score,
                 "pros": [],
                 "cons": [],
             })
 
         policy = resolve_routing_policy(
             requested_mode=policy_mode,
-            requested_model=model,
+            requested_fallback_model=model,
         )
         track_algorithm_run(policy.mode)
 
@@ -531,9 +565,10 @@ class Optimizer:
                 logger.warning("LLM evaluate_variants failed: %s", exc)
                 track_llm_fallback_failure(fallback_model, "variants_eval_failed")
 
-        best_variant = min(
+        ranked_variants = sorted(
             variants_data,
             key=lambda variant: (
+                -variant["selection_score"],
                 -variant["metrics"]["quality_score"],
                 variant["metrics"]["distance_km"],
                 variant["metrics"]["time_hours"],
@@ -541,22 +576,37 @@ class Optimizer:
                 variant["id"],
             ),
         )
+        top_n = min(
+            max(max_alternatives, 1),
+            4,
+            len(ranked_variants),
+        )
+        selected = ranked_variants[:top_n]
+        best_variant = selected[0]
 
-        response_variants = [
+        response_variants = []
+        for rank, variant in enumerate(selected, start=1):
+            response_variants.append(
             RouteVariant(
-                id=1,
-                name="Лучший маршрут",
+                id=variant["id"],
+                name=variant["name"],
                 description=(
-                    f"{best_variant['name']}. "
-                    "Выбран автоматически как лучший вариант по качеству и метрикам."
+                    f"{variant['name']}. "
+                    + (
+                        "Рекомендуется автоматически по комбинированному KPI-скору."
+                        if rank == 1
+                        else "Альтернативный маршрут для ручного выбора."
+                    )
                 ),
-                algorithm=best_variant["algorithm"],
-                pros=best_variant["pros"],
-                cons=best_variant["cons"],
-                locations=[loc.ID for loc in best_variant["locations_ordered"]],
-                metrics=RouteVariantMetrics(**best_variant["metrics"]),
-            )
-        ]
+                algorithm=variant["algorithm"],
+                rank=rank,
+                is_recommended=(rank == 1),
+                selection_score=round(float(variant["selection_score"]), 4),
+                pros=variant["pros"],
+                cons=variant["cons"],
+                locations=[loc.ID for loc in variant["locations_ordered"]],
+                metrics=RouteVariantMetrics(**variant["metrics"]),
+            ))
 
         return OptimizeVariantsResponse(
             variants=response_variants,
@@ -676,7 +726,7 @@ class Optimizer:
 
         loc_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in locations]
         # Добавляем depot как первую точку для матрицы расстояний
-        depot = {"lat": 54.1871, "lon": 45.1749}
+        depot = {"lat": settings.default_depot_lat, "lon": settings.default_depot_lon}
         all_dicts = [depot] + loc_dicts
         matrix = compute_distance_matrix(all_dicts)
         n = len(all_dicts)

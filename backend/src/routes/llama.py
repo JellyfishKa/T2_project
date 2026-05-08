@@ -45,11 +45,11 @@ async def optimize_route_llama(locations: List[Location],
         track_llm_fallback_success("llama")
         return route
 
-    except LlamaValidationError as e:
+    except LlamaValidationError:
         track_llm_fallback_failure("llama", "validation_error")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ошибка валидации данных: {str(e)}",
+            detail="Ошибка валидации данных",
         )
     except LlamaAuthError:
         track_llm_fallback_failure("llama", "auth_error")
@@ -69,13 +69,19 @@ async def optimize_route_llama(locations: List[Location],
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Llama API не ответил вовремя (timeout > 20s)",
         )
-    except LlamaServerError as e:
+    except LlamaServerError:
         track_llm_fallback_failure("llama", "server_error")
         if policy.llm_fallback_enabled:
             return nearest_neighbour_route(locations, model_used="algorithm-nn-fallback")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка сервера Llama: {str(e)}")
-    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ошибка сервера Llama",
+        )
+    except Exception:
         track_llm_fallback_failure("llama", "unexpected_error")
         if policy.llm_fallback_enabled:
             return nearest_neighbour_route(locations, model_used="algorithm-nn-fallback")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Критическая ошибка Llama: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Критическая ошибка Llama",
+        )

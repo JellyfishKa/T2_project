@@ -17,11 +17,12 @@ def test_resolve_routing_policy_supports_legacy_model_aliases():
 
     legacy_compare = resolve_routing_policy("compare", "qwen")
     assert legacy_compare.mode == MODE_COMPARE
-    assert legacy_compare.requested_model == "qwen"
+    assert legacy_compare.requested_fallback_model == "qwen"
+    assert legacy_compare.llm_fallback_model == "qwen"
 
     legacy_llm = resolve_routing_policy("llama", "llama")
     assert legacy_llm.mode == MODE_LLM_FALLBACK_ONLY
-    assert legacy_llm.requested_model == "llama"
+    assert legacy_llm.requested_fallback_model == "llama"
 
 
 def test_should_use_llm_fallback_by_mode_and_quality():

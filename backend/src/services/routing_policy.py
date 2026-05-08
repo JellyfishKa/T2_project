@@ -26,7 +26,7 @@ LEGACY_MODEL_TO_MODE = {
 @dataclass(frozen=True)
 class RoutingPolicy:
     mode: str
-    requested_model: str
+    requested_fallback_model: str
     llm_fallback_model: str
     llm_fallback_enabled: bool
     quality_floor: float
@@ -60,14 +60,14 @@ def _normalize_model(raw_model: Optional[str]) -> str:
 
 def resolve_routing_policy(
     requested_mode: Optional[str],
-    requested_model: Optional[str],
+    requested_fallback_model: Optional[str],
 ) -> RoutingPolicy:
     mode = _normalize_mode(requested_mode)
-    model = _normalize_model(requested_model)
+    model = _normalize_model(requested_fallback_model)
     return RoutingPolicy(
         mode=mode,
-        requested_model=model,
-        llm_fallback_model=settings.routing_llm_fallback_model,
+        requested_fallback_model=model,
+        llm_fallback_model=model,
         llm_fallback_enabled=settings.routing_enable_llm_fallback,
         quality_floor=settings.routing_quality_floor,
     )

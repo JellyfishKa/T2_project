@@ -45,7 +45,9 @@ const API_CONFIG = {
   timeout: 30000, // 30 секунд
   headers: {
     'Content-Type': 'application/json',
-    Accept: 'application/json'
+    Accept: 'application/json',
+    ...(import.meta.env.VITE_API_KEY ? { 'X-API-Key': String(import.meta.env.VITE_API_KEY) } : {}),
+    ...(import.meta.env.VITE_ADMIN_API_KEY ? { 'X-Admin-API-Key': String(import.meta.env.VITE_ADMIN_API_KEY) } : {}),
   }
 }
 
@@ -276,11 +278,13 @@ export const uploadLocations = async (
 export const optimize = async (
   locationIds: string[],
   model: string,
-  constraints: any
+  constraints: any,
+  policyMode: 'algorithm_primary' | 'compare_mode' | 'llm_fallback_only' = 'algorithm_primary',
 ): Promise<Route> => {
   const request = {
     location_ids: locationIds,
     model: model,
+    policy_mode: policyMode,
     constraints: constraints
   }
 
@@ -295,11 +299,17 @@ export const optimize = async (
 export const optimizeVariants = async (
   locationIds: string[],
   model: string,
-  constraints: any
+  constraints: any,
+  options?: {
+    policy_mode?: 'algorithm_primary' | 'compare_mode' | 'llm_fallback_only'
+    max_alternatives?: number
+  }
 ): Promise<OptimizeVariantsResponse> => {
   const request = {
     location_ids: locationIds,
     model,
+    policy_mode: options?.policy_mode ?? 'algorithm_primary',
+    max_alternatives: options?.max_alternatives ?? 3,
     constraints
   }
   // LLM может работать 30-120с → увеличенный timeout

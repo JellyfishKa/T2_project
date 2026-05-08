@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 from typing import Dict
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from src.security import ensure_admin_access, ensure_benchmark_run_enabled
 
 router = APIRouter(prefix="/benchmark", tags=["Benchmark"])
 
@@ -110,7 +111,9 @@ async def start_benchmark(
         False,
         description="Использовать клиенты GigaChat/T-Pro",
     ),
+    _: None = Depends(ensure_admin_access),
 ):
+    ensure_benchmark_run_enabled()
     task_id = f"bench_{int(time.time())}"
 
     background_tasks.add_task(
@@ -200,7 +203,11 @@ async def get_latest_result():
 
 
 @router.post("/policy/run")
-async def run_policy_benchmark(background_tasks: BackgroundTasks):
+async def run_policy_benchmark(
+    background_tasks: BackgroundTasks,
+    _: None = Depends(ensure_admin_access),
+):
+    ensure_benchmark_run_enabled()
     task_id = f"policy_{int(time.time())}"
     background_tasks.add_task(_run_policy_benchmark_process, task_id)
     return {"status": "started", "task_id": task_id}

@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List
 
+from src.config import settings
 from src.models.geo_utils import compute_distance_matrix
 from src.models.schemas import Location, Route
 
@@ -15,7 +16,7 @@ def nearest_neighbour_route(
     if len(locations) <= 1:
         ordered = list(locations)
     else:
-        all_points = [{"lat": 54.1871, "lon": 45.1749}] + [
+        all_points = [{"lat": settings.default_depot_lat, "lon": settings.default_depot_lon}] + [
             {"lat": loc.lat, "lon": loc.lon} for loc in locations
         ]
         matrix = compute_distance_matrix(all_points)
