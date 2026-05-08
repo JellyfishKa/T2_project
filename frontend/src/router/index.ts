@@ -8,25 +8,25 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { title: 'Home - T2 LLM Platform' }
+      meta: { title: 'Home - T2 Platform' }
     },
     {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('../views/DashboardView.vue'),
-      meta: { title: 'Dashboard - T2 LLM Platform' }
+      meta: { title: 'Dashboard - T2 Platform' }
     },
     {
       path: '/optimize',
       name: 'optimize',
       component: () => import('../views/OptimizeView.vue'),
-      meta: { title: 'Optimize - T2 LLM Platform' }
+      meta: { title: 'Optimize - T2 Platform' }
     },
     {
       path: '/analytics',
       name: 'analytics',
       component: () => import('../views/AnalyticsView.vue'),
-      meta: { title: 'Analytics - T2 LLM Platform' }
+      meta: { title: 'Analytics - T2 Platform' }
     },
     {
       path: '/schedule',
@@ -60,7 +60,7 @@ const router = createRouter({
 
 // Update document title on route change
 router.beforeEach((to, _from, next) => {
-  document.title = (to.meta.title as string) || 'T2 LLM Platform'
+  document.title = (to.meta.title as string) || 'T2 Platform'
   next()
 })
 

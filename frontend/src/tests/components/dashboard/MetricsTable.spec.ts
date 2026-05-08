@@ -31,7 +31,7 @@ describe('MetricsTable.vue', () => {
     })
 
     // Проверяем заголовки
-    expect(wrapper.text()).toContain('Модель')
+    expect(wrapper.text()).toContain('Источник')
     expect(wrapper.text()).toContain('Маршрут')
     expect(wrapper.text()).toContain('Время ответа')
     expect(wrapper.text()).toContain('Качество')
@@ -39,7 +39,7 @@ describe('MetricsTable.vue', () => {
     expect(wrapper.text()).toContain('Время')
 
     // Проверяем данные
-    expect(wrapper.text()).toContain('Llama')
+    expect(wrapper.text()).toContain('Fallback LLM')
     expect(wrapper.text()).toContain('route-1')
     expect(wrapper.text()).toContain('1245 мс')
     expect(wrapper.text()).toContain('87.0%')
@@ -57,7 +57,7 @@ describe('MetricsTable.vue', () => {
     )
   })
 
-  it('правильно переводит названия моделей', () => {
+  it('правильно переводит названия источников', () => {
     const wrapper = mount(MetricsTable, {
       props: {
         metrics: [
@@ -83,7 +83,6 @@ describe('MetricsTable.vue', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('Llama')
-    expect(wrapper.text()).toContain('Qwen')
+    expect(wrapper.text()).toContain('Fallback LLM')
   })
 })

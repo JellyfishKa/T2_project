@@ -3,7 +3,7 @@
     <PageHero
       eyebrow="Операционный план"
       title="Расписание маршрутов"
-      description="Планируйте дни торговых представителей, применяйте маршруты ИИ и вручную доводите порядок точек без перегрузки таблицами."
+      description="Планируйте дни торговых представителей, применяйте алгоритмические маршруты и вручную доводите порядок точек без перегрузки таблицами."
     >
       <template #meta>
         <div class="flex flex-wrap items-center gap-2">
@@ -13,8 +13,8 @@
         </div>
       </template>
       <template #actions>
-        <button class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" @click="openOptimizeMonthModal">Оптимизировать месяц</button>
-        <button class="btn-primary" @click="openGenerateModal">Сгенерировать план</button>
+        <button class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" :disabled="plannerActionsBusy" @click="openOptimizeMonthModal">Оптимизировать месяц</button>
+        <button class="btn-primary" :disabled="plannerActionsBusy" @click="openGenerateModal">Сгенерировать план</button>
         <button class="btn-secondary" @click="showHolidays = true">Праздники</button>
         <button class="btn-secondary" @click="showFM = true">Форс-мажор</button>
         <button
@@ -58,7 +58,7 @@
           :disabled="stashLoading"
           @click="resolveAllAI"
         >
-          Перераспределить все через ИИ
+          Перераспределить автоматически
         </button>
       </div>
       <div
@@ -342,7 +342,7 @@
       </div>
     </div>
 
-    <!-- Модал: детальный просмотр дня + LLM оптимизация -->
+    <!-- Модал: детальный просмотр дня + алгоритмическая оптимизация -->
     <div v-if="showDayModal && selectedDayRoute" class="modal-overlay" @click.self="showDayModal = false" @click="showDownloadDropdown = false">
       <div class="planner-modal">
         <div class="planner-modal__header">
@@ -625,7 +625,7 @@
                   :class="plannerPanel === 'ai' ? 'planner-tab--active' : ''"
                   @click="plannerPanel = 'ai'"
                 >
-                  Варианты ИИ
+                  Варианты алгоритмов
                 </button>
               </div>
 
@@ -696,29 +696,32 @@
 
               <div v-else class="space-y-4">
                 <div class="mb-4">
-                  <h3 class="text-sm font-semibold text-gray-900">Варианты от ИИ</h3>
+                  <h3 class="text-sm font-semibold text-gray-900">Варианты маршрута</h3>
                   <p class="text-xs text-gray-500 mt-1">
-                    Получите лучший вариант от ИИ и при необходимости скорректируйте его вручную.
+                    Постройте 2-4 альтернативы алгоритмами, затем выберите лучший вариант и при необходимости скорректируйте вручную.
                   </p>
                 </div>
 
-            <!-- Выбор модели + кнопка оптимизации -->
+            <!-- Профиль оптимизации + кнопка расчета -->
             <div class="border border-gray-200 rounded-xl p-3 bg-gray-50 mb-4">
-              <p class="text-xs text-gray-500 mb-2">Модель для оценки вариантов</p>
-              <div class="flex gap-2 mb-3">
-                <button
-                  v-for="m in [{ id: 'qwen', label: 'Qwen 0.5B', hint: 'быстрая' }, { id: 'llama', label: 'Llama 1B', hint: 'точнее' }]"
-                  :key="m.id"
-                  class="flex-1 text-xs py-2 rounded-lg font-medium transition-colors border"
-                  :class="selectedModel === m.id
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-                  :disabled="dayOptLoading"
-                  @click="selectedModel = (m.id as 'qwen' | 'llama')"
-                >
-                  {{ m.label }}
-                  <span class="opacity-60 ml-1">({{ m.hint }})</span>
-                </button>
+              <p class="text-xs text-gray-500 mb-2">Профиль расчета</p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                <label class="text-xs text-gray-600">
+                  Режим
+                  <select v-model="dayPolicyMode" class="input-sm mt-1">
+                    <option value="algorithm_primary">Алгоритмы в приоритете</option>
+                    <option value="compare_mode">Сравнение и объяснение</option>
+                    <option value="llm_fallback_only">Только резервный fallback</option>
+                  </select>
+                </label>
+                <label class="text-xs text-gray-600">
+                  Вариантов
+                  <select v-model.number="dayAlternativesCount" class="input-sm mt-1">
+                    <option :value="2">2</option>
+                    <option :value="3">3</option>
+                    <option :value="4">4</option>
+                  </select>
+                </label>
               </div>
 
               <button
@@ -730,7 +733,7 @@
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                <span>{{ dayOptLoading ? 'Строю маршрут…' : 'Получить лучший маршрут' }}</span>
+                <span>{{ dayOptLoading ? 'Строю варианты…' : 'Построить варианты' }}</span>
               </button>
 
               <!-- Прогресс-бар -->
@@ -739,20 +742,20 @@
                   <div class="absolute top-0 left-0 h-1 bg-blue-500 rounded-full animate-pulse w-full" />
                 </div>
                 <p class="text-xs text-gray-500 mt-1 text-center">
-                  Оцениваю маршрут через {{ selectedModel === 'qwen' ? 'Qwen' : 'Llama' }}…
+                  Выполняю алгоритмический расчет и ранжирование вариантов…
                 </p>
               </div>
             </div>
 
             <div v-if="dayOptError" class="mb-3 text-sm text-red-600">{{ dayOptError }}</div>
 
-            <!-- Лучший маршрут от ИИ -->
+            <!-- Лучшие маршруты -->
             <div v-if="dayOptResult" class="space-y-2">
               <div class="flex items-center justify-between gap-2 text-xs text-gray-500 mb-2">
-                <span>Лучший вариант готов</span>
+                <span>Варианты готовы</span>
                 <span>
-                  Модель: <strong class="text-blue-700">{{ dayOptResult.model_used }}</strong>
-                  <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-600 ml-1">· ИИ-оценка недоступна</span>
+                  Источник: <strong class="text-blue-700">{{ dayOptResult.model_used }}</strong>
+                  <span v-if="!dayOptResult.llm_evaluation_success" class="text-yellow-600 ml-1">· Доп.оценка недоступна</span>
                 </span>
               </div>
 
@@ -948,6 +951,7 @@ const optimizingMonth = ref(false)
 const optimizeProgressMessage = ref('')
 const optimizeError = ref<string | null>(null)
 const optimizeCanForce = ref(false)
+const preparingPlannerData = ref(false)
 
 // Toast state
 const toastMessage = ref<string | null>(null)
@@ -995,7 +999,8 @@ const selectedDayRoute = ref<DailyRoute | null>(null)
 const dayOptResult = ref<OptimizeVariantsResponse | null>(null)
 const dayOptLoading = ref(false)
 const dayOptError = ref<string | null>(null)
-const selectedModel = ref<'qwen' | 'llama'>('qwen')
+const dayPolicyMode = ref<'algorithm_primary' | 'compare_mode' | 'llm_fallback_only'>('algorithm_primary')
+const dayAlternativesCount = ref(3)
 const selectedVariantId = ref<number | null>(null)
 const confirmingVariant = ref(false)
 const revertingDayRoute = ref(false)
@@ -1154,10 +1159,18 @@ async function optimizeRemainingVisits() {
   dayOptResult.value = null
   selectedVariantId.value = null
   try {
-    dayOptResult.value = await optimizeVariants(ids, selectedModel.value, {
-      vehicle_id: dayVehicleId.value,
-      transport_mode: dayTransportMode.value,
-    })
+    dayOptResult.value = await optimizeVariants(
+      ids,
+      'none',
+      {
+        vehicle_id: dayVehicleId.value,
+        transport_mode: dayTransportMode.value,
+      },
+      {
+        policy_mode: dayPolicyMode.value,
+        max_alternatives: dayAlternativesCount.value,
+      }
+    )
     const bestVariant = dayOptResult.value.variants[0]
     if (bestVariant) {
       previewVariant(bestVariant)
@@ -1226,7 +1239,7 @@ async function resolveAllAI() {
     await loadSkippedStash()
     await loadSchedule()
   } catch (e: any) {
-    alert(`Ошибка ИИ-перераспределения: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
+    alert(`Ошибка автоперераспределения: ${getApiErrorMessage(e, 'неизвестная ошибка')}`)
   } finally {
     stashLoading.value = false
   }
@@ -1360,6 +1373,10 @@ const sortedRoutes = computed(() =>
   [...routes.value].sort((a, b) => a.date.localeCompare(b.date) || a.rep_name.localeCompare(b.rep_name))
 )
 
+const plannerActionsBusy = computed(() =>
+  loading.value || generating.value || optimizingMonth.value || preparingPlannerData.value
+)
+
 function isSameLocationOrder(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index])
 }
@@ -1448,7 +1465,7 @@ async function refreshDayRouteMetrics() {
 }
 
 function routeSourceLabel(source?: DailyRoute['route_source']): string {
-  if (source === 'ai') return 'ИИ'
+  if (source === 'ai') return 'Алгоритм'
   if (source === 'manual') return 'Ручной'
   return 'Базовый'
 }
@@ -1516,7 +1533,22 @@ async function loadReps() {
   reps.value = await fetchReps().catch(() => [])
 }
 
+async function ensurePlannerDependenciesLoaded() {
+  preparingPlannerData.value = true
+  try {
+    if (!reps.value.length) {
+      await loadReps()
+    }
+    if (!locationsById.value.size) {
+      await loadLocations()
+    }
+  } finally {
+    preparingPlannerData.value = false
+  }
+}
+
 async function openGenerateModal() {
+  await ensurePlannerDependenciesLoaded()
   showGenerate.value = true
   genResult.value = null
   genCanForce.value = false
@@ -1550,7 +1582,8 @@ async function toggleHoliday(h: Holiday) {
   }
 }
 
-function openOptimizeMonthModal() {
+async function openOptimizeMonthModal() {
+  await ensurePlannerDependenciesLoaded()
   const existingCount = routes.value.reduce((acc, r) => acc + r.visits.length, 0)
   optimizeCanForce.value = existingCount > 0
   optimizeError.value = null
@@ -1595,7 +1628,10 @@ async function startMonthOptimization(force = false) {
       optimizeProgressMessage.value = 'Оптимизация в процессе. Это может занять пару минут...'
       
       let completed = false
-      while (!completed) {
+      let pollAttempts = 0
+      const maxPollAttempts = 120
+      while (!completed && pollAttempts < maxPollAttempts) {
+        pollAttempts += 1
         await new Promise(r => setTimeout(r, 2500))
         const jobStatus = await getOptimizedScheduleJob(jobId)
         
@@ -1612,6 +1648,9 @@ async function startMonthOptimization(force = false) {
         } else {
           optimizeProgressMessage.value = 'Рассчитываем маршруты и балансируем нагрузку...'
         }
+      }
+      if (!completed) {
+        throw new Error('Оптимизация выполняется слишком долго. Проверьте статус задачи позже.')
       }
     } else if (res.status === 'completed' && 'days' in res) {
       showOptimizeMonthModal.value = false
@@ -1867,10 +1906,18 @@ async function optimizeDayRoute() {
   plannerPanel.value = 'ai'
   try {
     const locationIds = currentLocationIds.value
-    dayOptResult.value = await optimizeVariants(locationIds, selectedModel.value, {
-      vehicle_id: dayVehicleId.value,
-      transport_mode: dayTransportMode.value,
-    })
+    dayOptResult.value = await optimizeVariants(
+      locationIds,
+      'none',
+      {
+        vehicle_id: dayVehicleId.value,
+        transport_mode: dayTransportMode.value,
+      },
+      {
+        policy_mode: dayPolicyMode.value,
+        max_alternatives: dayAlternativesCount.value,
+      }
+    )
     const bestVariant = dayOptResult.value.variants[0]
     if (bestVariant) {
       previewVariant(bestVariant)

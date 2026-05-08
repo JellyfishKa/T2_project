@@ -20,7 +20,7 @@
     <template v-if="currentView === 'form'">
       <div class="grid gap-4 md:grid-cols-3">
         <InfoStatCard label="Шаг 1" value="Добавьте точки" hint="Минимум 2 магазина, временные окна и координаты." tone="blue" />
-        <InfoStatCard label="Шаг 2" value="Сравните варианты" hint="ИИ подберёт 3 сценария с описанием и метриками." tone="green" />
+        <InfoStatCard label="Шаг 2" value="Сравните варианты" hint="Алгоритм подберёт 2-4 сценария с описанием и метриками." tone="green" />
         <InfoStatCard label="Шаг 3" value="Доведите вручную" hint="Перестройте порядок точек и сохраните уже рабочий маршрут." tone="amber" />
       </div>
 
@@ -43,7 +43,7 @@
               <div class="rounded-lg border border-blue-100 bg-blue-50 p-3">
                 <p class="text-sm font-medium text-blue-900">Алгоритмы в приоритете</p>
                 <p class="mt-1 text-xs text-blue-700">
-                  Маршрут строится на базе эвристик и ранкера. LLM используется только как резервный механизм по политике сервера.
+                  Маршрут строится на базе эвристик и ранкера. Резервный fallback подключается только по политике сервера.
                 </p>
               </div>
               <label class="block text-sm">
@@ -535,7 +535,7 @@ async function getRouteMetrics(routeLocationIds: string[]): Promise<RouteMetrics
 
 function buildRouteName(source: ResultRouteSource, label?: string | null) {
   if (source === 'ai') {
-    return label || routeName.value || 'Маршрут от ИИ'
+    return label || routeName.value || 'Автоподобранный маршрут'
   }
   if (source === 'manual') {
     return routeName.value

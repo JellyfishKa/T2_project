@@ -91,7 +91,7 @@ describe('RouteMetrics.vue', () => {
     const routeInfo = wrapper.find('.bg-gray-50.rounded-lg')
     expect(routeInfo.text()).toContain('Test Route 1')
     expect(routeInfo.text()).toContain('ID: route-1')
-    expect(routeInfo.text()).toContain('Llama')
+    expect(routeInfo.text()).toContain('Fallback LLM')
   })
 
   it('отображает три MetricCard с ключевыми метриками', () => {
@@ -111,15 +111,15 @@ describe('RouteMetrics.vue', () => {
     expect(metricCards[2].props('unit')).toBe('₽')
   })
 
-  it('отображает таблицу с метриками моделей', () => {
+  it('отображает таблицу с метриками источников', () => {
     const table = wrapper.find('table')
     expect(table.exists()).toBe(true)
 
     const rows = wrapper.findAll('tbody tr')
     expect(rows.length).toBe(3)
 
-    // Проверяем данные первой строки (llama)
-    expect(rows[0].text()).toContain('Llama')
+    // Проверяем данные первой строки (fallback источник)
+    expect(rows[0].text()).toContain('Fallback LLM')
     expect(rows[0].text()).toContain('1245 мс')
     expect(rows[0].text()).toContain('87.0%')
     expect(rows[0].text()).toContain('25.50 ₽')
@@ -152,19 +152,19 @@ describe('RouteMetrics.vue', () => {
     )
   })
 
-  it('применяет правильные классы для бейджей моделей', () => {
+  it('применяет правильные классы для бейджей источников', () => {
     const badges = wrapper.findAll('span.inline-flex')
 
-    // Первый бейдж - модель маршрута (llama), следующие - модели в таблице
-    // Метрики: llama, qwen, llama — все получают цвет по своей модели
-    expect(badges[1].classes()).toContain('bg-blue-100')
-    expect(badges[1].classes()).toContain('text-blue-800')
+    // Первый бейдж - источник маршрута, следующие - источники в таблице
+    // Метрики: llama, qwen, llama — все считаются fallback-источником
+    expect(badges[1].classes()).toContain('bg-amber-100')
+    expect(badges[1].classes()).toContain('text-amber-800')
 
-    expect(badges[2].classes()).toContain('bg-purple-100')
-    expect(badges[2].classes()).toContain('text-purple-800')
+    expect(badges[2].classes()).toContain('bg-amber-100')
+    expect(badges[2].classes()).toContain('text-amber-800')
 
-    expect(badges[3].classes()).toContain('bg-blue-100')
-    expect(badges[3].classes()).toContain('text-blue-800')
+    expect(badges[3].classes()).toContain('bg-amber-100')
+    expect(badges[3].classes()).toContain('text-amber-800')
   })
 
   it('правильно определяет цвет для времени ответа', async () => {
@@ -183,19 +183,21 @@ describe('RouteMetrics.vue', () => {
     expect(vm.getResponseTimePercentage(2500)).toBe(100) // ограничение
   })
 
-  it('правильно получает название модели', () => {
+  it('правильно получает название источника', () => {
     const vm = wrapper.vm as any
 
-    expect(vm.getModelName('llama')).toBe('Llama')
-    expect(vm.getModelName('qwen')).toBe('Qwen')
+    expect(vm.getModelName('llama')).toBe('Fallback LLM')
+    expect(vm.getModelName('qwen')).toBe('Fallback LLM')
+    expect(vm.getModelName('algorithm_primary')).toBe('Алгоритм')
     expect(vm.getModelName('unknown')).toBe('unknown')
   })
 
-  it('правильно получает классы для бейджей моделей', () => {
+  it('правильно получает классы для бейджей источников', () => {
     const vm = wrapper.vm as any
 
-    expect(vm.getModelBadgeClass('llama')).toBe('bg-blue-100 text-blue-800')
-    expect(vm.getModelBadgeClass('qwen')).toBe('bg-purple-100 text-purple-800')
+    expect(vm.getModelBadgeClass('llama')).toBe('bg-amber-100 text-amber-800')
+    expect(vm.getModelBadgeClass('qwen')).toBe('bg-amber-100 text-amber-800')
+    expect(vm.getModelBadgeClass('algorithm_primary')).toBe('bg-emerald-100 text-emerald-800')
   })
 
   it('отображает сообщение об отсутствии метрик', () => {

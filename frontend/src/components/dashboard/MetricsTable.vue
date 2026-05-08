@@ -191,7 +191,7 @@ const columns = computed(() => {
     { field: 'timestamp' as const, label: 'Время' }
   ]
   if (!props.hideModelInfo) {
-    base.unshift({ field: 'model' as const, label: 'Модель' })
+    base.unshift({ field: 'model' as const, label: 'Источник' })
   }
   return base
 })
@@ -238,16 +238,24 @@ const handleSort = (field: SortField) => {
 // Helper functions
 const getModelName = (model: string): string => {
   const modelMap: Record<string, string> = {
-    llama: 'Llama',
-    qwen: 'Qwen'
+    algorithm_primary: 'Алгоритм',
+    compare_mode: 'Сравнение',
+    llm_fallback_only: 'Fallback LLM',
+    none: 'Алгоритм',
+    llama: 'Fallback LLM',
+    qwen: 'Fallback LLM'
   }
   return modelMap[model] || model
 }
 
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
-    llama: 'bg-blue-100 text-blue-800',
-    qwen: 'bg-purple-100 text-purple-800'
+    algorithm_primary: 'bg-emerald-100 text-emerald-800',
+    compare_mode: 'bg-blue-100 text-blue-800',
+    llm_fallback_only: 'bg-amber-100 text-amber-800',
+    none: 'bg-emerald-100 text-emerald-800',
+    llama: 'bg-amber-100 text-amber-800',
+    qwen: 'bg-amber-100 text-amber-800'
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
 }

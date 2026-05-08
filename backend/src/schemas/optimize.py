@@ -55,7 +55,7 @@ class RouteVariant(BaseModel):
 
 class OptimizeVariantsRequest(BaseModel):
     location_ids: List[str]
-    model: str = "qwen"           # только одна модель за раз
+    model: str = "none"           # алгоритмы в приоритете, LLM только fallback
     policy_mode: Literal["algorithm_primary", "compare_mode", "llm_fallback_only"] = "algorithm_primary"
     max_alternatives: int = Field(default=3, ge=1, le=4)
     constraints: Optional[Dict] = Field(default_factory=dict)

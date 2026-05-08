@@ -3,7 +3,7 @@
     <PageHero
       eyebrow="Аналитика"
       title="Аналитика"
-      description="Статистика и визуализация производительности маршрутов и моделей. Сначала ключевые показатели, затем графики и детальная таблица по моделям."
+      description="Статистика и визуализация производительности маршрутов и стратегий расчёта. Сначала ключевые показатели, затем графики и детальная таблица."
     >
       <template #meta>
         <div class="flex flex-wrap gap-2">
@@ -120,13 +120,13 @@
 
       <!-- Charts Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Model Performance Chart (Bar Chart) -->
+        <!-- Source Performance Chart (Bar Chart) -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4">
-            Производительность моделей
+            Производительность источников расчёта
           </h3>
           <p class="text-sm text-gray-600 mb-4">
-            Среднее время ответа по моделям (мс)
+            Среднее время ответа по источникам (мс)
           </p>
           <div v-if="isLoading" class="h-64 flex items-center justify-center">
             <SkeletonLoader height="200px" />
@@ -199,7 +199,7 @@
       >
         <div class="px-6 py-4 border-b border-gray-200">
           <h3 class="text-lg font-semibold text-gray-900">
-            Детальная статистика по моделям
+            Детальная статистика по источникам расчёта
           </h3>
         </div>
         <div class="p-6">
@@ -213,7 +213,7 @@
                   <th
                     class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
                   >
-                    Модель
+                    Источник
                   </th>
                   <th
                     class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
@@ -264,7 +264,7 @@
             </table>
           </div>
           <div v-else class="text-center py-8 text-gray-500">
-            Нет данных по моделям
+            Нет данных по источникам расчёта
           </div>
         </div>
       </div>
@@ -287,7 +287,7 @@
               <thead>
                 <tr>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Маршрут</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Модель</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Источник</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
                   <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действие</th>
                 </tr>
@@ -580,7 +580,6 @@ import {
   fetchRoutes,
   fetchRouteComparison,
   getMetrics,
-  compareModels,
   getInsights,
   downloadScheduleExcel,
   importScheduleExcel,
@@ -631,7 +630,6 @@ const currentRequestId = ref(0)
 
 const routes = ref<Route[]>([])
 const metrics = ref<Metric[]>([])
-const modelComparison = ref<any>(null)
 const insights = ref<Insights | null>(null)
 const exportLoading = ref(false)
 const importLoading = ref(false)
@@ -809,18 +807,10 @@ const modelStats = computed<ModelStat[]>(() => {
 })
 
 const modelPerformanceData = computed(() => {
-  // Приоритет: данные сравнения моделей, иначе — агрегированные метрики
-  const source: { label: string; value: number }[] =
-    modelComparison.value?.models?.length
-      ? modelComparison.value.models.map((m: any) => ({
-          label: m.name as string,
-          value: m.avg_response_time_ms as number
-        }))
-      : modelStats.value.map((m: ModelStat) => ({
-          label: m.model,
-          value: Math.round(m.avgResponseTime)
-        }))
-
+  const source = modelStats.value.map((m: ModelStat) => ({
+    label: getModelName(m.model),
+    value: Math.round(m.avgResponseTime),
+  }))
   if (!source.length) return { labels: [], datasets: [] }
 
   return {
@@ -857,16 +847,7 @@ const scatterData = computed(() => {
           y: route.total_cost_rub,
           routeName: route.name
         })),
-        backgroundColor: routes.value.map((route) => {
-          switch (route.model_used) {
-            case 'llama':
-              return '#3b82f6'
-            case 'qwen':
-              return '#8b5cf6'
-            default:
-              return '#6b7280'
-          }
-        }),
+        backgroundColor: routes.value.map((route) => getSourceColor(route.model_used)),
         pointRadius: 6,
         pointHoverRadius: 8
       }
@@ -936,19 +917,39 @@ const comparisonRouteName = computed(() => {
 
 // Methods
 const getModelName = (model: string): string => {
-  const modelMap: Record<string, string> = {
-    llama: 'Llama',
-    qwen: 'Qwen'
+  const sourceMap: Record<string, string> = {
+    algorithm_primary: 'Алгоритм',
+    compare_mode: 'Сравнение',
+    llm_fallback_only: 'Fallback LLM',
+    none: 'Алгоритм',
+    qwen: 'Fallback LLM',
+    llama: 'Fallback LLM',
   }
-  return modelMap[model] || model
+  return sourceMap[model] || model
 }
 
 const getModelBadgeClass = (model: string): string => {
   const badgeMap: Record<string, string> = {
-    llama: 'bg-blue-100 text-blue-800',
-    qwen: 'bg-purple-100 text-purple-800'
+    algorithm_primary: 'bg-emerald-100 text-emerald-800',
+    compare_mode: 'bg-blue-100 text-blue-800',
+    llm_fallback_only: 'bg-amber-100 text-amber-800',
+    none: 'bg-emerald-100 text-emerald-800',
+    qwen: 'bg-amber-100 text-amber-800',
+    llama: 'bg-amber-100 text-amber-800',
   }
   return badgeMap[model] || 'bg-gray-100 text-gray-800'
+}
+
+const getSourceColor = (source: string): string => {
+  const colorMap: Record<string, string> = {
+    algorithm_primary: '#10b981',
+    compare_mode: '#3b82f6',
+    llm_fallback_only: '#f59e0b',
+    none: '#10b981',
+    qwen: '#f59e0b',
+    llama: '#f59e0b',
+  }
+  return colorMap[source] || '#6b7280'
 }
 
 const calcDuration = (timeIn: string | null, timeOut: string | null): number | null => {
@@ -975,10 +976,9 @@ const loadAnalyticsData = async () => {
     isLoading.value = true
     error.value = null
 
-    const [routesData, metricsData, comparisonData, insightsData, repsData] = await Promise.all([
+    const [routesData, metricsData, insightsData, repsData] = await Promise.all([
       fetchRoutes(0, 100),
       getMetrics(),
-      compareModels().catch(() => null),  // /benchmark/compare может отсутствовать
       getInsights().catch(() => null),
       fetchReps().catch(() => []),
     ])
@@ -987,7 +987,6 @@ const loadAnalyticsData = async () => {
 
     routes.value = routesData.items ?? []
     metrics.value = metricsData?.metrics ?? []
-    modelComparison.value = comparisonData
     insights.value = insightsData
     repsForFilter.value = repsData
 

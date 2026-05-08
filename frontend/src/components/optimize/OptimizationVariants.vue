@@ -194,7 +194,7 @@
             class="pt-3 border-t border-gray-100"
           >
             <p class="text-xs text-gray-400 italic text-center">
-              Оценка модели не получена
+              Дополнительная оценка не получена
             </p>
           </div>
         </div>
