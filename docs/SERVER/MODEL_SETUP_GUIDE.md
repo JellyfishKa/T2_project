@@ -249,7 +249,7 @@ LLAMA_MODEL_ID=placeholder.gguf
 
 ### Общий принцип
 
-Сервер FastAPI регистрирует два роутера: `/qwen` и `/llama`. Модели загружаются в RAM **только при первом запросе** к соответствующему endpoint (Lazy Loading).
+Сервер FastAPI регистрирует два роутера: `/api/v1/qwen` и `/api/v1/llama`. Модели загружаются в RAM **только при первом запросе** к соответствующему endpoint (Lazy Loading).
 
 Это значит:
 - Сервер запустится даже если какой-то GGUF файл не найден
@@ -273,7 +273,7 @@ Swagger UI (интерактивная документация): `http://127.0.
 **Что нужно**: скачан `qwen2-0_5b-instruct-q4_k_m.gguf`, RAM 8+ GB
 
 **Использование**:
-- Отправляй запросы только на `POST /qwen/optimize`
+- Отправляй запросы только на `POST /api/v1/qwen/optimize`
 - Llama endpoint вернёт ошибку — это нормально
 - Потребление RAM: ~0.6 GB (только модель) + ~0.3 GB (FastAPI/Python)
 
@@ -284,13 +284,13 @@ Swagger UI (интерактивная документация): `http://127.0.
 **Что нужно**: скачаны оба GGUF файла, RAM 8+ GB
 
 **Использование**:
-- `POST /qwen/optimize` — основная работа
-- `POST /llama/optimize` — если Qwen не справилась
+- `POST /api/v1/qwen/optimize` — основная работа
+- `POST /api/v1/llama/optimize` — если Qwen не справилась
 - Суммарное потребление RAM (если обе загружены): ~1.8 GB
 
 **Порядок загрузки в RAM**: модели грузятся при первом запросе. Рекомендуется "прогреть" их по очереди:
-1. Отправить запрос на `/qwen/optimize` (загрузится Qwen, ~5 сек)
-2. Отправить запрос на `/llama/optimize` (загрузится Llama, ~5 сек)
+1. Отправить запрос на `/api/v1/qwen/optimize` (загрузится Qwen, ~5 сек)
+2. Отправить запрос на `/api/v1/llama/optimize` (загрузится Llama, ~5 сек)
 
 После прогрева все последующие запросы будут быстрее.
 
@@ -310,12 +310,12 @@ Swagger UI (интерактивная документация): `http://127.0.
 
 **Тестовый запрос к Qwen**:
 ```powershell
-curl -X POST http://127.0.0.1:8000/qwen/optimize -H "Content-Type: application/json" -d '{\"locations\": [{\"ID\": \"loc_1\", \"name\": \"Красная площадь\", \"address\": \"Москва\", \"lat\": 55.7539, \"lon\": 37.6208, \"time_window_start\": \"10:00\", \"time_window_end\": \"22:00\", \"priority\": \"high\"}, {\"ID\": \"loc_2\", \"name\": \"Парк Горького\", \"address\": \"Москва\", \"lat\": 55.7298, \"lon\": 37.5995, \"time_window_start\": \"08:00\", \"time_window_end\": \"23:00\", \"priority\": \"medium\"}], \"constraints\": {}}'
+curl -X POST http://127.0.0.1:8000/api/v1/qwen/optimize -H "Content-Type: application/json" -d '{\"locations\": [{\"ID\": \"loc_1\", \"name\": \"Красная площадь\", \"address\": \"Москва\", \"lat\": 55.7539, \"lon\": 37.6208, \"time_window_start\": \"10:00\", \"time_window_end\": \"22:00\", \"priority\": \"high\"}, {\"ID\": \"loc_2\", \"name\": \"Парк Горького\", \"address\": \"Москва\", \"lat\": 55.7298, \"lon\": 37.5995, \"time_window_start\": \"08:00\", \"time_window_end\": \"23:00\", \"priority\": \"medium\"}], \"constraints\": {}}'
 ```
 
 **Тестовый запрос к Llama** (заменить `qwen` на `llama`):
 ```powershell
-curl -X POST http://127.0.0.1:8000/llama/optimize -H "Content-Type: application/json" -d '{\"locations\": [{\"ID\": \"loc_1\", \"name\": \"Красная площадь\", \"address\": \"Москва\", \"lat\": 55.7539, \"lon\": 37.6208, \"time_window_start\": \"10:00\", \"time_window_end\": \"22:00\", \"priority\": \"high\"}, {\"ID\": \"loc_2\", \"name\": \"Парк Горького\", \"address\": \"Москва\", \"lat\": 55.7298, \"lon\": 37.5995, \"time_window_start\": \"08:00\", \"time_window_end\": \"23:00\", \"priority\": \"medium\"}], \"constraints\": {}}'
+curl -X POST http://127.0.0.1:8000/api/v1/llama/optimize -H "Content-Type: application/json" -d '{\"locations\": [{\"ID\": \"loc_1\", \"name\": \"Красная площадь\", \"address\": \"Москва\", \"lat\": 55.7539, \"lon\": 37.6208, \"time_window_start\": \"10:00\", \"time_window_end\": \"22:00\", \"priority\": \"high\"}, {\"ID\": \"loc_2\", \"name\": \"Парк Горького\", \"address\": \"Москва\", \"lat\": 55.7298, \"lon\": 37.5995, \"time_window_start\": \"08:00\", \"time_window_end\": \"23:00\", \"priority\": \"medium\"}], \"constraints\": {}}'
 ```
 
 ### Ожидаемые времена ответа (первый запрос / последующие, CPU)
@@ -380,7 +380,7 @@ CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --force-reinstall --no-
 
 PowerShell может конфликтовать с curl. Используй полный путь:
 ```powershell
-curl.exe -X POST http://127.0.0.1:8000/qwen/optimize ...
+curl.exe -X POST http://127.0.0.1:8000/api/v1/qwen/optimize ...
 ```
 
 Или используй Swagger UI: `http://127.0.0.1:8000/docs`

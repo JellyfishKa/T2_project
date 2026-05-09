@@ -38,7 +38,7 @@ Tests require the application to be running before you execute them.
 **With Docker (recommended):**
 ```bash
 # from project root
-docker-compose up -d
+docker compose up -d
 # Frontend: http://localhost:80
 # API:      http://localhost:8000
 ```

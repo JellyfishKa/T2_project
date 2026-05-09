@@ -117,7 +117,7 @@
 
 #### TC-REG-001: All Week 1 tests pass
 - **Описание**: Все тесты недели 1 проходят
-- **Ожидаемый результат**: pytest backend/tests/ - все passed
+- **Ожидаемый результат**: `cd backend && pytest tests/ -v` - все passed
 
 #### TC-REG-002: All Week 2 tests pass (updated)
 - **Описание**: Все тесты недели 2 проходят с обновлениями
@@ -134,7 +134,7 @@
 ## 6. Стратегия выполнения
 
 1. Обновить тесты для удаления T-Pro
-2. Запустить: `pytest backend/tests/ -v`
+2. Запустить: `cd backend && pytest tests/ -v`
 3. Запустить ML тесты: `pytest ml/tests/ -v`
 4. Запустить frontend тесты: `npm run test:run`
 5. Проверить покрытие: `pytest --cov=backend/src backend/tests/ --cov-report=term-missing`

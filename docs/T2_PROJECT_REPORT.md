@@ -72,11 +72,11 @@ T2 поставила задачу разработать программу м�
 
 - REST API бэкенд на FastAPI (Python 3.11)
 - Vue 3 SPA фронтенд (6 страниц)
-- PostgreSQL БД (8 таблиц)
+- PostgreSQL БД (13 таблиц)
 - Два локальных LLM: Qwen 0.5B + Llama 1B (GGUF)
 - Алгоритм SchedulePlanner (категории A/B/C/D, MAX 14 ТТ/день)
 - Система форс-мажоров с round-robin перераспределением
-- Excel-экспорт (4 листа) и обратный импорт
+- Excel-экспорт (6 листов) и обратный импорт
 - Сравнение маршрутов до/после оптимизации через единый snapshot store
 - CI/CD: GitHub Actions, 258+ тестов
 
@@ -87,7 +87,7 @@ T2 поставила задачу разработать программу м�
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                       БРАУЗЕР (Vue 3 SPA)                        │
-│   Home · Dashboard · Optimize · Analytics · Schedule · Reps      │
+│   Home · Dashboard · Optimize · Analytics · Schedule · Database  │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ HTTP (Nginx reverse proxy)
 ┌───────────────────────────▼──────────────────────────────────────┐
@@ -95,10 +95,10 @@ T2 поставила задачу разработать программу м�
 │  /optimize  /schedule  /reps  /force_majeure  /export  /visits    │
 └──────┬──────────────┬─────────────────┬─────────────────────────┘
        │              │                 │
-  ┌────▼────┐   ┌─────▼──────┐   ┌─────▼──────────────┐
-  │PostgreSQL│  │   Redis    │   │   Qwen / Llama      │
-  │ (8 табл) │  │  (кеш)    │   │   (GGUF/local)      │
-  └──────────┘  └────────────┘   └────────────────────┘
+  ┌────▼────┐                    ┌─────▼──────────────┐
+  │PostgreSQL│                   │   Qwen / Llama      │
+  │ (8 табл) │                   │   (GGUF/local)      │
+  └──────────┘                   └────────────────────┘
 ```
 
 ### 2.3 Основные компоненты системы
@@ -110,7 +110,7 @@ T2 поставила задачу разработать программу м�
 | ForceMajeureService | Round-robin перераспределение визитов при форс-мажоре |
 | LLM: Qwen 0.5B | Генерация pros/cons для вариантов маршрута (GGUF, ~400 MB) |
 | LLM: Llama 1B | Альтернативная модель по выбору пользователя (GGUF, ~808 MB) |
-| Excel Export | 4 листа: Расписание / Журнал визитов / Статистика ТТ / Активность ТП |
+| Excel Export | 6 листов: Расписание / Журнал визитов / Статистика ТТ / Активность ТП / Журнал изменений / Маршруты навигатор |
 | Insights API | Охват ТТ, план/факт, по категориям, по районам, активность сотрудников |
 | Route Comparison | Snapshot до/после в `optimization_results`, shared modal в Dashboard и Analytics |
 
@@ -118,7 +118,7 @@ T2 поставила задачу разработать программу м�
 
 ## 3. База данных
 
-**PostgreSQL, 8 таблиц. ORM: SQLAlchemy 2.0 async. Миграции: Alembic.**
+**PostgreSQL, 13 таблиц. ORM: SQLAlchemy 2.0 async. Миграции: Alembic.**
 
 ### locations — Торговые точки
 
@@ -173,8 +173,8 @@ T2 поставила задачу разработать программу м�
 - Интеграция LLM: QwenClient + LlamaClient (GGUF через llama-cpp-python)
 - Vue 3 фронтенд: layout, роутинг, mock API
 - ML: бенчмарк моделей, quality evaluator
-- Docker Compose: 4 сервиса (postgres, redis, backend, frontend, nginx)
-- **Результат:** базовая оптимизация маршрутов работает (`POST /optimize`)
+- Docker Compose: 3 сервиса (postgres, backend, frontend)
+- **Результат:** базовая оптимизация маршрутов работает (`POST /api/v1/optimize`)
 
 **Роман:** FastAPI skeleton, DB init, QwenClient
 **Владислав:** Vue 3 + Vite setup, Sidebar, mock HomeView
@@ -224,15 +224,15 @@ T2 поставила задачу разработать программу м�
 - БД: 4 новые таблицы (SalesRep, VisitSchedule, VisitLog, ForceMajeureEvent)
 - SchedulePlanner: алгоритм A/B/C/D, MAX 14 ТТ/день, auto-reschedule skipped
 - ForceMajeureService: round-robin перераспределение, 4 типа инцидентов
-- LLM варианты: `/optimize/variants` (3 алгоритма + pros/cons от LLM)
-- Excel export: 4 листа (Расписание, Журнал, Статистика, Активность ТП)
+- LLM варианты: `/api/v1/optimize/variants` (3 алгоритма + pros/cons от LLM)
+- Excel export: 6 листов (Расписание, Журнал, Статистика, Активность ТП, Журнал изменений, Маршруты навигатор)
 - Excel import: `POST /import/schedule` — обратная загрузка заполненного файла
 - Analytics: реальный `/insights` API + UI с охватом ТТ по категориям
-- ScheduleView + RepsView: новые страницы, Day modal, спиннер, кнопки
+- ScheduleView + DatabaseView: новые страницы, Day modal, спиннер, вкладки сущностей
 - CI: 182/182 frontend тестов, 61/61 backend тестов
 - **Результат:** все конкурсные требования выполнены ✅
 
-**Роман (BE-W4):** модели SalesRep/VisitSchedule/VisitLog/ForceMajeure, /reps CRUD, /schedule/generate, /force_majeure, /visits, /export/schedule, /optimize/variants + /confirm, /insights реальный
+**Роман (BE-W4):** модели SalesRep/VisitSchedule/VisitLog/ForceMajeure, /api/v1/reps CRUD, /api/v1/schedule/generate, /api/v1/force_majeure, /api/v1/visits, /api/v1/export/schedule, /api/v1/optimize/variants + /api/v1/optimize/confirm, /api/v1/insights
 **Владислав (FE-W4):** ScheduleView (calendar + Day modal), RepsView CRUD, Excel кнопки, прогресс-бар вариантов, analytics fix (`compareModels().catch(()=>null)`)
 **Дмитрий (ML-W4):** SchedulePlanner алгоритм, ForceMajeureService, generate_mordovia_dataset.py, datagen 250 ТТ
 **Сергей (QA-W4):** 182 frontend тестов (Vitest), тест-план, документация (8 файлов)
@@ -255,7 +255,7 @@ T2 поставила задачу разработать программу м�
 1. Вычисляются метрики 3 вариантов (расстояние, время, стоимость, quality_score)
 2. LLM генерирует 2 pros и 2 cons для каждого варианта на русском языке
 3. Graceful fallback: если LLM не ответила — варианты показываются с метриками без текста
-4. Пользователь выбирает вариант → `POST /optimize/confirm` → сохранение в БД
+4. Пользователь выбирает вариант → `POST /api/v1/optimize/confirm` → сохранение в БД
 
 ### 5.2 Планировщик расписания (SchedulePlanner)
 
@@ -333,7 +333,7 @@ T2 поставила задачу разработать программу м�
 
 ## 6. Полный список API-эндпоинтов
 
-**Итого: 33 эндпоинта**
+**Итого:** актуальный список endpoint'ов см. в Swagger (`/docs`), включая расширенный CRUD-набор.
 
 ### Система
 
@@ -401,7 +401,7 @@ T2 поставила задачу разработать программу м�
 | GET | `/api/v1/routes/` | История маршрутов (пагинация) |
 | GET | `/api/v1/routes/{id}` | Детали маршрута с метриками |
 | GET | `/api/v1/routes/{id}/comparison` | Snapshot-сравнение маршрута до/после |
-| GET | `/api/v1/export/schedule` | Excel-отчёт 4 листа (`?month=YYYY-MM`) |
+| GET | `/api/v1/export/schedule` | Excel-отчёт 6 листов (`?month=YYYY-MM`) |
 | GET | `/api/v1/benchmark/compare` | Сравнение LLM-моделей |
 
 ---
@@ -415,8 +415,8 @@ T2 поставила задачу разработать программу м�
 | Язык | Python 3.11+ |
 | Фреймворк | FastAPI (async, Pydantic v2) |
 | ORM | SQLAlchemy 2.0 (async) + Alembic |
-| База данных | PostgreSQL 15 + asyncpg |
-| Кеш | Redis 7 |
+| База данных | PostgreSQL 16 + asyncpg |
+| Кеш | Не используется (Redis удален из текущего стека) |
 | LLM Runtime | llama-cpp-python 0.3.16 (GGUF) |
 | Модель 1 | Qwen2-0.5B-Instruct Q4_K_M (~400 MB, ~0.6 GB RAM) |
 | Модель 2 | Llama-3.2-1B-Instruct Q4_K_M (~808 MB, ~1.2 GB RAM) |
@@ -432,13 +432,13 @@ T2 поставила задачу разработать программу м�
 | Графики | Chart.js 4 + vue-chartjs |
 | HTTP | Axios (с retry + timeout) |
 | Тестирование | Vitest + Vue Test Utils (182 теста, ~70% coverage) |
-| Страницы | Home · Dashboard · Optimize · Analytics · Schedule · Reps |
+| Страницы | Home · Dashboard · Optimize · Analytics · Schedule · Database |
 
 ### DevOps & Infrastructure
 
 | Параметр | Значение |
 |----------|----------|
-| Контейнеры | Docker + Docker Compose (4 сервиса) |
+| Контейнеры | Docker + Docker Compose (3 сервиса) |
 | Реверс-прокси | Nginx (SPA routing + API proxy) |
 | CI/CD | GitHub Actions (lint + test + coverage) |
 | Сервер | Ubuntu 24.04, ~55 GB disk, Tailscale VPN |
@@ -469,22 +469,22 @@ T2 поставила задачу разработать программу м�
 
 ### Ключевые тест-кейсы
 
-- `POST /optimize` — возвращает упорядоченный список `location_ids` за < 1 сек
-- `POST /optimize/variants` — возвращает ровно 3 варианта с метриками
+- `POST /api/v1/optimize` — возвращает упорядоченный список `location_ids` за < 1 сек
+- `POST /api/v1/optimize/variants` — возвращает ровно 3 варианта с метриками
 - `POST /schedule/generate` — все ТТ получают нужное кол-во визитов по категории
 - `PATCH /schedule/{id}` status=skipped — автоматически создаётся `rescheduled` запись
 - `POST /force_majeure` — все `affected_tt_ids` перераспределяются, ни одна не теряется
-- `GET /export/schedule` — Excel файл содержит 4 листа, размер > 5 KB
+- `GET /export/schedule` — Excel файл содержит 6 листов, размер > 5 KB
 - `GET /insights` — `coverage_pct` корректно считается от реальных ТТ в БД
 
 ### Производительность
 
 | Операция | Время | Примечание |
 |----------|-------|------------|
-| `POST /optimize` | < 100 мс | Greedy nearest-neighbor, чистый Python |
-| `POST /optimize/variants` | 30–90 сек | Включает LLM inference для pros/cons |
+| `POST /api/v1/optimize` | < 100 мс | Greedy nearest-neighbor, чистый Python |
+| `POST /api/v1/optimize/variants` | 30–90 сек | Включает LLM inference для pros/cons |
 | `POST /schedule/generate` | < 500 мс | 250 ТТ, 4 сотрудника, 1 месяц |
-| `GET /export/schedule` | < 2 сек | openpyxl генерация 4 листов |
+| `GET /export/schedule` | < 2 сек | openpyxl генерация 6 листов |
 | `POST /force_majeure` | < 200 мс | БД-операции, без LLM |
 | LLM: первый запрос | 5–15 сек | Загрузка GGUF модели в RAM |
 | LLM: последующие запросы | 3–8 сек | Модель уже в памяти (lazy load) |
@@ -559,7 +559,7 @@ curl -X POST "http://localhost:8000/api/v1/schedule/generate" \
 
 | # | Требование | Статус | Реализация |
 |---|------------|--------|------------|
-| 1.1 | Расчёт маршрутов с минимизацией километража | ✅ Выполнено | Greedy (Haversine + nearest-neighbor). `/optimize` + `/optimize/variants`. 15–20% экономия. |
+| 1.1 | Расчёт маршрутов с минимизацией километража | ✅ Выполнено | Greedy (Haversine + nearest-neighbor). `/api/v1/optimize` + `/api/v1/optimize/variants`. 15–20% экономия. |
 | 1.2 | Учёт рабочего времени торговых представителей | ✅ Выполнено | SchedulePlanner: 09:00–18:00, пн–пт, MAX 14 ТТ/день. |
 | 1.3 | Сегментация ТТ по категориям A/B/C/D | ✅ Выполнено | A=3x/мес, B=2x, C=1x, D=квартал. Priority-first алгоритм. Цвет в UI. |
 | 1.4 | 100% охват базы ТТ + механизм пропущенных точек | ✅ Выполнено | `coverage_pct` в `/insights`. `skipped` → автоматически создаётся `rescheduled`. |
@@ -580,7 +580,7 @@ curl -X POST "http://localhost:8000/api/v1/schedule/generate" \
 | 3.2 | Отчёт о времени нахождения ТП на каждой ТТ | ✅ Выполнено | `time_in`/`time_out` в `VisitLog`. Excel «Журнал визитов» с длительностью в минутах. |
 | 3.3 | Детализация по времени и дате посещения | ✅ Выполнено | `VisitLog`: `visited_date` + `time_in` + `time_out`. API `/visits` + Excel лист 2. |
 | 3.4 | Количество выходов ТП на маршрут | ✅ Выполнено | `outings_count` в `/insights` (уникальные дни с визитами). Excel «Активность ТП». |
-| 3.5 | Выгрузка аналитической информации | ✅ Выполнено | `GET /export/schedule?month=YYYY-MM` → Excel 4 листа. Одна кнопка в UI. |
+| 3.5 | Выгрузка аналитической информации | ✅ Выполнено | `GET /export/schedule?month=YYYY-MM` → Excel 6 листов. Одна кнопка в UI. |
 
 ---
 
@@ -588,7 +588,7 @@ curl -X POST "http://localhost:8000/api/v1/schedule/generate" \
 >
 > Платформа реализует полный цикл: загрузка данных → планирование → трекинг → аналитика → экспорт.
 > Локальный ИИ: данные клиентов не покидают сервер компании.
-> **33 API эндпоинта · 8 таблиц БД · 6 страниц UI · 258+ тестов**
+> **Актуальный API в Swagger · 13 таблиц БД · 6 страниц UI · CI smoke/e2e**
 
 ---
 

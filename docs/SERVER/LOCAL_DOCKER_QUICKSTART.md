@@ -35,7 +35,7 @@ SECURITY_ENABLE_API_KEY_AUTH=false
 Из корня репозитория:
 
 ```bash
-docker compose -f backend/docker-compose.yml up -d postgres redis backend
+docker compose up -d postgres backend
 ```
 
 Проверка:
@@ -47,7 +47,7 @@ curl http://127.0.0.1:8000/health
 ## 4) (Опционально) Поднять frontend
 
 ```bash
-docker compose -f backend/docker-compose.yml up -d frontend
+docker compose up -d frontend
 ```
 
 Frontend: `http://127.0.0.1`
@@ -55,11 +55,11 @@ Frontend: `http://127.0.0.1`
 ## 5) Остановить
 
 ```bash
-docker compose -f backend/docker-compose.yml down
+docker compose down
 ```
 
-Чтобы удалить тома БД/Redis:
+Чтобы удалить тома БД:
 
 ```bash
-docker compose -f backend/docker-compose.yml down -v
+docker compose down -v
 ```

@@ -17,7 +17,7 @@ T2 — комплексная платформа на основе искусс�
 
 ### Неделя 1-2: Инфраструктура + LLM интеграция ✅
 - [x] Интегрированы 2 LLM-модели (Qwen 0.5B, Llama 3.2 1B)
-- [x] Оптимизация маршрутов работает (`POST /optimize`)
+- [x] Оптимизация маршрутов работает (`POST /api/v1/optimize`)
 - [x] Панель управления и аналитика готовы
 - [x] Тестовое покрытие > 60%
 
@@ -31,7 +31,7 @@ T2 — комплексная платформа на основе искусс�
 - [x] Трекинг времени на каждой ТТ (`time_in`/`time_out`)
 - [x] Детальный просмотр дня + LLM-варианты маршрута
 - [x] Форс-мажоры с автоперераспределением визитов
-- [x] Excel экспорт (4 листа) + Excel импорт с результатами
+- [x] Excel экспорт (6 листов) + Excel импорт с результатами
 - [x] Реальная аналитика (охват ТТ, активность ТП, инсайты)
 
 ### Неделя 5: Качество и UX (v1.2.0) ✅
@@ -43,7 +43,7 @@ T2 — комплексная платформа на основе искусс�
 - [x] Пагинация GET /schedule/ (`from_date`, `to_date`)
 - [x] localStorage для модели и месяца (OptimizeView, ScheduleView)
 - [x] requestId pattern — защита от race conditions в AnalyticsView
-- [x] ~189 тестов (ScheduleView.spec.ts + RepsView.spec.ts)
+- [x] Расширенное покрытие тестами (frontend + backend + e2e smoke)
 
 ---
 
@@ -113,16 +113,16 @@ T2_project/
 │   │   │   ├── qwen_client.py       # Qwen2-0.5B
 │   │   │   └── llama_client.py      # Llama-3.2-1B
 │   │   ├── routes/
-│   │   │   ├── optimize.py          # POST /optimize, /optimize/variants, /optimize/confirm
-│   │   │   ├── schedule.py          # GET/POST /schedule
+│   │   │   ├── optimize.py          # POST /api/v1/optimize, /api/v1/optimize/variants, /api/v1/optimize/confirm
+│   │   │   ├── schedule.py          # GET/POST /api/v1/schedule
 │   │   │   ├── reps.py              # CRUD /reps
-│   │   │   ├── force_majeure.py     # POST /force_majeure
-│   │   │   ├── visits.py            # GET/POST /visits
-│   │   │   ├── export.py            # GET /export/schedule (Excel)
-│   │   │   ├── import_excel.py      # POST /import/schedule (Excel)
-│   │   │   ├── insights.py          # GET /insights
-│   │   │   ├── metrics.py           # GET /metrics
-│   │   │   └── locations.py         # CRUD /locations
+│   │   │   ├── force_majeure.py     # POST /api/v1/force_majeure
+│   │   │   ├── visits.py            # GET/POST /api/v1/visits
+│   │   │   ├── export.py            # GET /api/v1/export/schedule (Excel)
+│   │   │   ├── import_excel.py      # POST /api/v1/import/schedule (Excel)
+│   │   │   ├── insights.py          # GET /api/v1/insights
+│   │   │   ├── metrics.py           # GET /api/v1/metrics
+│   │   │   └── locations.py         # CRUD /api/v1/locations
 │   │   ├── schemas/                 # Pydantic схемы
 │   │   └── services/
 │   │       ├── optimize.py          # Optimizer + generate_variants()
@@ -162,7 +162,7 @@ T2_project/
 
 ### Требования
 - Python 3.11+
-- Node.js 18+
+- Node.js 20+
 - Docker & Docker Compose
 - Git
 
@@ -201,7 +201,7 @@ Frontend: `http://localhost:5173`
 
 ```bash
 cp .env.example .env
-docker-compose up -d
+docker compose up -d
 curl http://localhost:8000/health
 ```
 
@@ -210,9 +210,9 @@ curl http://localhost:8000/health
 ## Ключевые функции
 
 ### 1. Оптимизация маршрутов (LLM)
-- Единый endpoint `POST /optimize` с авто-fallback (Qwen → Llama → Greedy)
-- **3 варианта маршрута** с pros/cons от LLM (`POST /optimize/variants`)
-- Сохранение выбранного варианта (`POST /optimize/confirm`)
+- Единый endpoint `POST /api/v1/optimize` с авто-fallback (Qwen → Llama → Greedy)
+- **3 варианта маршрута** с pros/cons от LLM (`POST /api/v1/optimize/variants`)
+- Сохранение выбранного варианта (`POST /api/v1/optimize/confirm`)
 
 ### 2. Сравнение маршрутов
 - История сравнения строится из `optimization_results`, без отдельной таблицы версий маршрутов
@@ -240,7 +240,7 @@ curl http://localhost:8000/health
 ### 6. Excel интеграция
 ```
 Экспорт: GET /api/v1/export/schedule?month=YYYY-MM
-  → t2_schedule_YYYY-MM.xlsx с 4 листами:
+  → t2_schedule_YYYY-MM.xlsx с 6 листами:
     • Расписание     — все плановые визиты
     • Журнал визитов — фактические визиты с длительностью
     • Статистика по ТТ — охват, % выполнения по категориям
@@ -275,7 +275,7 @@ curl http://localhost:8000/health
 |-------|----------|-----------|
 | POST | `/api/v1/schedule/generate` | Генерация месячного плана |
 | GET  | `/api/v1/schedule/` | Список визитов (фильтры) |
-| PATCH| `/api/v1/schedule/{id}/status` | Обновить статус + время |
+| PATCH| `/api/v1/schedule/{visit_id}` | Обновить статус + время |
 | GET  | `/api/v1/visits` | История фактических визитов |
 | POST | `/api/v1/force_majeure` | Регистрация форс-мажора |
 
@@ -293,7 +293,7 @@ curl http://localhost:8000/health
 |-------|----------|-----------|
 | GET  | `/api/v1/metrics` | Метрики моделей |
 | GET  | `/api/v1/insights?month=YYYY-MM` | Инсайты по охвату ТТ |
-| GET  | `/api/v1/export/schedule?month=YYYY-MM` | Скачать Excel (4 листа) |
+| GET  | `/api/v1/export/schedule?month=YYYY-MM` | Скачать Excel (6 листов) |
 | POST | `/api/v1/import/schedule` | Загрузить заполненный Excel |
 | GET  | `/api/v1/routes/` | Список маршрутов |
 | GET  | `/api/v1/routes/{id}/comparison` | Сравнение маршрута до/после |
@@ -304,10 +304,10 @@ curl http://localhost:8000/health
 ## Тестирование
 
 ```bash
-# Frontend (~173 теста)
+# Frontend (текущее количество — см. вывод vitest)
 cd frontend && npx vitest run
 
-# Backend (61 тест)
+# Backend (текущее количество — см. вывод pytest)
 cd backend && pytest tests/ -v
 
 # TypeScript проверка
@@ -322,11 +322,11 @@ python ml/benchmarks/llm_benchmark.py --mock
 
 ### Покрытие тестами
 
-| Компонент | Тестов | Coverage |
-|-----------|--------|----------|
-| Backend | 61 | 64% |
-| Frontend | ~173 | ~70% |
-| ML | 15 | ~80% |
+| Компонент | Проверка |
+|-----------|----------|
+| Backend | `cd backend && pytest tests/ -v` |
+| Frontend | `cd frontend && npx vitest run` |
+| TypeScript | `cd frontend && npm run type-check` |
 
 ---
 
@@ -338,12 +338,12 @@ python ml/benchmarks/llm_benchmark.py --mock
 | Расписание визитов | Алгоритм A/B/C/D, 14 ТТ/день | ✅ |
 | Трекинг времени | time_in/time_out → длительность | ✅ |
 | Форс-мажоры | Регистрация + перераспределение | ✅ |
-| Excel экспорт | 4 листа с форматированием | ✅ |
+| Excel экспорт | 6 листов с форматированием | ✅ |
 | Excel импорт | Обновление статусов + VisitLog | ✅ |
 | LLM варианты | 3 варианта + pros/cons | ✅ |
 | Аналитика | Охват, активность, инсайты | ✅ |
-| Docker deployment | docker-compose up -d | ✅ |
-| CI/CD | GitHub Actions, ~173+61 тестов | ✅ |
+| Docker deployment | docker compose up -d | ✅ |
+| CI/CD | GitHub Actions (pytest + vitest + type-check + e2e smoke) | ✅ |
 
 ---
 

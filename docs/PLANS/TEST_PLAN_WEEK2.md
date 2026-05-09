@@ -112,8 +112,8 @@
 
 ## 5. Стратегия выполнения
 
-1. Запустить unit тесты: `pytest backend/tests/`
-2. Запустить integration тесты: `pytest backend/tests/test_integration.py`
+1. Запустить unit тесты: `cd backend && pytest tests/`
+2. Запустить integration тесты: `cd backend && pytest tests/test_integration.py`
 3. Запустить frontend тесты: `npm run test:run` (в frontend/)
 4. Проверить покрытие: `pytest --cov=backend/src backend/tests/`
 5. Проверить CI: GitHub Actions workflow

@@ -31,7 +31,7 @@ T2_project/
 │   │   │   ├── geo_utils.py     
 │   │   │   └── schemas.py       
 │   │   ├── schemas/             
-│   │   └──config.py           
+│   │   └── config.py
 │   ├── tests/    
 │   ├── requirements/                   
 │   ├── main.py
@@ -63,7 +63,7 @@ T2_project/
 
 ### Требования
 - Python 3.11+
-- Node.js 18+
+- Node.js 20+
 - Docker & Docker Compose
 - Git
 
@@ -102,7 +102,7 @@ Frontend: `http://localhost:5173`
 
 ```bash
 cp .env.example .env
-docker-compose up -d
+docker compose up -d
 curl http://localhost:8000/health
 ```
 

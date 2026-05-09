@@ -17,7 +17,7 @@
 | Трекинг времени на ТТ | Фактическое время прихода/ухода в VisitLog → API → UI |
 | Детальный просмотр дня | Day modal с LLM-оптимизацией маршрута (3 варианта + pros/cons) |
 | Форс-мажоры | Перераспределение визитов при болезни / отпуске сотрудника |
-| Excel-интеграция | Экспорт расписания (4 листа) + обратный импорт с результатами |
+| Excel-интеграция | Экспорт расписания (6 листов) + обратный импорт с результатами |
 | Аналитика | Реальная статистика по охвату ТТ, активности ТП, инсайты |
 
 ---
@@ -41,7 +41,7 @@ force_majeure_events — форс-мажоры (id, type, rep_id, event_date, re
 | `src/routes/schedule.py` | Генерация и просмотр расписания |
 | `src/routes/force_majeure.py` | Регистрация и обработка форс-мажоров |
 | `src/routes/visits.py` | История фактических визитов |
-| `src/routes/export.py` | Excel-экспорт (4 листа) |
+| `src/routes/export.py` | Excel-экспорт (6 листов) |
 | `src/routes/import_excel.py` | Excel-импорт с результатами визитов |
 | `src/services/schedule_planner.py` | SchedulePlanner — алгоритм планирования |
 | `src/services/force_majeure_service.py` | ForceMajeureService — перераспределение |
@@ -196,15 +196,15 @@ force_majeure_events — форс-мажоры (id, type, rep_id, event_date, re
 
 ---
 
-### BE-W4-8: Endpoint `/optimize/variants` и `/optimize/confirm`
+### BE-W4-8: Endpoint `/api/v1/optimize/variants` и `/api/v1/optimize/confirm`
 
 **Приоритет**: 🔴 HIGH
 **Оценка**: 4 часа
 **Статус**: ✅ Done
 
 **Acceptance Criteria**:
-- ✅ `POST /optimize/variants` — генерирует 3 варианта без сохранения; LLM оценивает pros/cons
-- ✅ `POST /optimize/confirm` — сохраняет выбранный вариант в БД (`routes` таблица)
+- ✅ `POST /api/v1/optimize/variants` — генерирует 3 варианта без сохранения; LLM оценивает pros/cons
+- ✅ `POST /api/v1/optimize/confirm` — сохраняет выбранный вариант в БД (`routes` таблица)
 - ✅ Схемы `OptimizeVariantsRequest`, `OptimizeVariantsResponse`, `ConfirmVariantRequest`
 - ✅ Если LLM недоступна — варианты возвращаются без pros/cons (`llm_evaluation_success=false`)
 
@@ -296,11 +296,11 @@ function visitDuration(visit: VisitScheduleItem): number | null {
 - ✅ Заголовок: имя ТП, дата, кол-во ТТ
 - ✅ Список визитов: категория, имя ТТ, `time_in`–`time_out` (если есть), статус
 - ✅ Выбор модели: кнопки **Qwen 0.5B** / **Llama 1B**
-- ✅ Кнопка «Получить варианты (ИИ)» → `POST /optimize/variants`
+- ✅ Кнопка «Получить варианты (ИИ)» → `POST /api/v1/optimize/variants`
 - ✅ Spinner + прогресс-бар во время загрузки
 - ✅ Три карточки вариантов: название, описание, метрики (км/ч/₽/%), pros/cons
 - ✅ Выбор варианта кликом (выделение border-blue-500)
-- ✅ Кнопка «Сохранить выбранный маршрут» → `POST /optimize/confirm`
+- ✅ Кнопка «Сохранить выбранный маршрут» → `POST /api/v1/optimize/confirm`
 - ✅ Обработка ошибок: `dayOptError` с текстом под кнопкой
 
 ---
@@ -582,9 +582,9 @@ it('выбирает Qwen модель по умолчанию', async () => {
 | BE-W4-3 | Роман | SchedulePlanner + API `/schedule` | 10 | 🔴 HIGH | ✅ |
 | BE-W4-4 | Роман | API `/force_majeure` + redistribution | 6 | 🟡 MED | ✅ |
 | BE-W4-5 | Роман | API `/visits` + time tracking | 4 | 🟡 MED | ✅ |
-| BE-W4-6 | Роман | Excel экспорт (4 листа) | 6 | 🔴 HIGH | ✅ |
+| BE-W4-6 | Роман | Excel экспорт (6 листов) | 6 | 🔴 HIGH | ✅ |
 | BE-W4-7 | Роман | Excel импорт (status + time) | 5 | 🟡 MED | ✅ |
-| BE-W4-8 | Роман | `/optimize/variants` + `/confirm` | 4 | 🔴 HIGH | ✅ |
+| BE-W4-8 | Роман | `/api/v1/optimize/variants` + `/api/v1/optimize/confirm` | 4 | 🔴 HIGH | ✅ |
 | FE-W4-1 | Владислав | `ScheduleView.vue` — календарь | 10 | 🔴 HIGH | ✅ |
 | FE-W4-2 | Владислав | `RepsView.vue` — CRUD | 5 | 🟡 MED | ✅ |
 | FE-W4-3 | Владислав | Модал визита (статус + время) | 4 | 🔴 HIGH | ✅ |
@@ -620,7 +620,7 @@ it('выбирает Qwen модель по умолчанию', async () => {
 
 | Требование из PDF | Реализовано в неделе 4 |
 |---|---|
-| Расчёт маршрутов с минимизацией километража | ✅ `/optimize` + `/optimize/variants` (3 варианта) |
+| Расчёт маршрутов с минимизацией километража | ✅ `/api/v1/optimize` + `/api/v1/optimize/variants` (3 варианта) |
 | Учёт рабочего времени (9–18) | ✅ SchedulePlanner: 540 мин, Пн-Пт |
 | Сегментация ТТ по категориям A/B/C/D | ✅ Частота визитов: A=3, B=2, C=1, D=1/квартал |
 | 100% охват базы ТТ | ✅ Insights: `coverage_percent` |
@@ -628,7 +628,7 @@ it('выбирает Qwen модель по умолчанию', async () => {
 | **Отчёт о времени нахождения на каждой ТТ** | ✅ `time_in`/`time_out` в VisitLog + UI |
 | **Детализация по времени и дате посещения** | ✅ VisitLog + Журнал визитов (Excel лист 2) |
 | **Количество выходов ТП на маршрут** | ✅ Insights + Excel лист «Активность ТП» |
-| **Выгрузка аналитической информации** | ✅ Excel 4 листа + Excel импорт |
+| **Выгрузка аналитической информации** | ✅ Excel 6 листов + Excel импорт |
 
 ---
 

@@ -111,7 +111,7 @@ DEBUG=false
 cp .env.example .env
 
 # Запускаем все сервисы
-docker-compose up -d
+docker compose up -d
 
 # Проверяем здоровье системы
 curl http://localhost:8000/health

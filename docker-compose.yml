@@ -17,15 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: t2_redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
   backend:
     build:
       context: ./backend
@@ -46,13 +37,16 @@ services:
       - LLAMA_MODEL_ID=${LLAMA_MODEL_ID:-Llama-3.2-1B-Instruct-Q4_K_M.gguf}
       - DEBUG=${DEBUG:-false}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - SECURITY_ENABLE_API_KEY_AUTH=${SECURITY_ENABLE_API_KEY_AUTH:-false}
+      - SECURITY_API_KEY=${SECURITY_API_KEY:-}
+      - SECURITY_ADMIN_API_KEY=${SECURITY_ADMIN_API_KEY:-}
+      - SECURITY_ALLOW_BULK_LOCATION_DELETE=${SECURITY_ALLOW_BULK_LOCATION_DELETE:-false}
+      - SECURITY_ALLOW_BENCHMARK_RUN=${SECURITY_ALLOW_BENCHMARK_RUN:-false}
       - PYTHONPATH=/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -74,4 +68,3 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:

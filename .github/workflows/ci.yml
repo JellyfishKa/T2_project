@@ -23,10 +23,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]

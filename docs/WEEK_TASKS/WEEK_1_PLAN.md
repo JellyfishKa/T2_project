@@ -259,7 +259,7 @@ class QwenClient(LLMClient):
 
 ---
 
-### BE-6: Настройка Docker и docker-compose для dev окружения
+### BE-6: Настройка Docker и Docker Compose для dev окружения
 
 **Приоритет**: 🟡 MEDIUM
 
@@ -275,12 +275,11 @@ class QwenClient(LLMClient):
 **Acceptance Criteria**:
 - ✅ Dockerfile создан (backend/Dockerfile)
 - ✅ docker-compose.yml создан в корне проекта
-- ✅ Сервисы в docker-compose:
+- ✅ Сервисы в Docker Compose:
   - backend (FastAPI, порт 8000)
   - frontend (Vue, порт 5173)
   - postgres (database, порт 5432)
-  - redis (cache, опционально, порт 6379)
-- ✅ All services успешно запускаются: `docker-compose up`
+- ✅ All services успешно запускаются: `docker compose up`
 - ✅ Backend API доступен на localhost:8000
 - ✅ Health check endpoint работает: GET /health
 - ✅ .env.example обновлён с DATABASE_URL
@@ -290,7 +289,7 @@ class QwenClient(LLMClient):
 
 **Примечания**:
 - Используй multi-stage builds для optimization
-- Environment variables должны передаваться через docker-compose
+- Environment variables должны передаваться через Docker Compose
 - Volume маппинг для development (code changes без rebuild)
 - Поддержка всех 3 новых LLM моделей (Qwen, T-Pro, Llama)
 
@@ -720,7 +719,7 @@ TRY: Llama (reliable) - FALLBACK
 | BE-4 | **QwenClient (PRIMARY)** ✨ | 🔴 HIGH | 6ч | Backend | BE-2, BE-3 |
 | BE-4.5 | **T-ProClient (SECONDARY)** ✨ NEW | 🔴 HIGH | 5ч | Backend | BE-2, BE-3 |
 | BE-5 | **LlamaClient (FALLBACK)** ✨ NEW | 🔴 HIGH | 6ч | Backend | BE-2, BE-3 |
-| BE-6 | Docker + docker-compose | 🟡 MED | 4ч | Backend | BE-1 |
+| BE-6 | Docker + Docker Compose | 🟡 MED | 4ч | Backend | BE-1 |
 | FE-1 | Vue 3 + Vite инициализация | 🔴 HIGH | 2ч | Frontend | BE-1 |
 | FE-2 | Layout + навигация | 🟡 MED | 4ч | Frontend | FE-1 |
 | FE-3 | API сервис + mock данные | 🟡 MED | 5ч | Frontend | FE-1 |
