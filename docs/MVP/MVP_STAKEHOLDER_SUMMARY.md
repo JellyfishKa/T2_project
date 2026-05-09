@@ -16,9 +16,9 @@ T2 — платформа оптимизации маршрутов рознич
 |------------|--------|
 | **33+ API-эндпоинтов** | Оптимизация, локации, маршруты, метрики, расписание, форс-мажоры |
 | **2 LLM-модели** | Qwen (основная) + Llama (fallback), автоматическое переключение |
-| **6 UI-страниц** | Home, Dashboard, Optimize, Analytics, Schedule, Reps |
+| **6 UI-страниц** | Home, Dashboard, Optimize, Analytics, Schedule, Database |
 | **Расписание и аудит** | SchedulePlanner, state machine визитов, AuditLog, Excel-экспорт (5 листов) |
-| **Docker-инфраструктура** | 4 сервиса запускаются одной командой |
+| **Docker-инфраструктура** | 3 сервиса запускаются одной командой |
 | **CI/CD** | ~189 тестов (Vitest + pytest), линтинг, coverage через GitHub Actions |
 
 ---
@@ -40,10 +40,10 @@ T2 — платформа оптимизации маршрутов рознич
 
 | Метрика | Значение |
 |---------|----------|
-| Реализовано API-эндпоинтов | 15 из 15 (100%) |
-| UI-страниц | 4 из 4 (100%) |
+| Реализовано API-эндпоинтов | Актуальный список в Swagger (`/docs`) |
+| UI-страниц | 6 (Home, Dashboard, Optimize, Analytics, Schedule, Database) |
 | LLM-моделей | 2 из 2 (100%) |
-| Docker-сервисов | 4 (backend, frontend, PostgreSQL, Redis) |
+| Docker-сервисов | 3 (backend, frontend, PostgreSQL) |
 | Backend тест-файлов | 9 (routes, clients, geo, quality, benchmark) |
 
 ---

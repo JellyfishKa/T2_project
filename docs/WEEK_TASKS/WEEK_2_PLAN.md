@@ -179,7 +179,7 @@ class RouteOptimizer:
 
 ---
 
-### BE-10: Создание API endpoint для оптимизации маршрутов (POST /optimize)
+### BE-10: Создание API endpoint для оптимизации маршрутов (POST /api/v1/optimize)
 
 **Приоритет**: 🔴 HIGH
 
@@ -553,7 +553,7 @@ def test_all_models_fail_returns_error():
 | BE-7 | DB schema | 🔴 HIGH | 4ч | Qwen, T-Pro, Llama |
 | BE-8 | POST /locations/upload | 🔴 HIGH | 3ч | N/A |
 | BE-9 | Route optimizer алгоритм | 🔴 HIGH | 8ч | **Qwen, T-Pro, Llama** ✨ |
-| BE-10 | POST /optimize endpoint | 🔴 HIGH | 4ч | **Qwen, T-Pro, Llama** ✨ |
+| BE-10 | POST /api/v1/optimize endpoint | 🔴 HIGH | 4ч | **Qwen, T-Pro, Llama** ✨ |
 | BE-11 | GET /metrics endpoint | 🟡 MED | 3ч | **Qwen, T-Pro, Llama** ✨ |
 | BE-12 | LLM insights интеграция | 🟡 MED | 5ч | **Qwen, T-Pro, Llama** ✨ |
 | BE-13 | GET /compare endpoint | 🟡 MED | 4ч | **Qwen, T-Pro, Llama** ✨ |

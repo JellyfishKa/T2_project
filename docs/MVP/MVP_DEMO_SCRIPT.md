@@ -76,7 +76,7 @@ curl http://localhost:8000/health | python -m json.tool
 ```
 
 **Говорим:**
-> «Система состоит из 4 сервисов: backend на FastAPI, frontend на Vue 3, база данных PostgreSQL и Redis для кеширования. Все компоненты запускаются через Docker Compose одной командой. Health check показывает, что обе LLM-модели загружены и готовы к работе.»
+> «Система состоит из 3 сервисов: backend на FastAPI, frontend на Vue 3 и база данных PostgreSQL. Все компоненты запускаются через Docker Compose одной командой. Health check показывает, что обе LLM-модели загружены и готовы к работе.»
 
 ---
 

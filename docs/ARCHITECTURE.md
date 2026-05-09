@@ -89,7 +89,7 @@ Route ─────────────── OptimizationResult
 
 | Файл | Эндпоинты |
 |------|-----------|
-| optimize.py | POST /optimize, /optimize/variants, /optimize/confirm |
+| optimize.py | POST /api/v1/optimize, /api/v1/optimize/variants, /api/v1/optimize/confirm |
 | schedule.py | POST /generate, GET /, GET /{rep_id}, PATCH /{visit_id}, GET /daily, PUT /day-route, DELETE /day-route, GET /stash, POST /stash/{id}/resolve/* |
 | reps.py | GET/POST/PATCH/DELETE /reps |
 | force_majeure.py | POST/GET /force_majeure |
@@ -103,8 +103,8 @@ Route ─────────────── OptimizationResult
 | routing.py | CRUD /routing (Vehicle), POST /routing/preview |
 | holidays.py | GET /holidays, PATCH /holidays/{date} |
 | audit_log.py | GET /audit-log/monthly |
-| qwen.py | POST /qwen/optimize |
-| llama.py | POST /llama/optimize |
+| qwen.py | POST /api/v1/qwen/optimize |
+| llama.py | POST /api/v1/llama/optimize |
 | benchmark.py | POST /benchmark/run, GET /benchmark/status, GET /benchmark/compare |
 
 ### Сервисный слой
@@ -189,7 +189,7 @@ class LlamaClient(LLMClient):
 ### Fallback-цепочка оптимизации
 
 ```
-POST /optimize
+POST /api/v1/optimize
     |
     v
 [Qwen] -- успех --> OptimizeResponse (model_used="qwen")
@@ -290,7 +290,7 @@ POST /optimize
 
 ```
 Экспорт (export.py):
-  openpyxl.Workbook() -> 4 листа -> BytesIO -> StreamingResponse
+  openpyxl.Workbook() -> 6 листов -> BytesIO -> StreamingResponse
 
 Импорт (import_excel.py):
   UploadFile -> openpyxl.load_workbook(data_only=True)
@@ -398,8 +398,7 @@ const comparison = await fetchRouteComparison(routeId)
 Services:
   backend   -- FastAPI (порт 8000)
   frontend  -- Nginx + Vue SPA (порт 80)
-  db        -- PostgreSQL 15 (порт 5432)
-  redis     -- Redis 7 (порт 6379, кэш)
+  db        -- PostgreSQL 16 (порт 5432)
 ```
 
 ### CI/CD (GitHub Actions)
@@ -407,9 +406,10 @@ Services:
 ```
 Триггеры: push/PR на main
 Шаги:
-  1. Backend тесты:  pytest backend/tests/ --cov
-  2. Frontend тесты: npx vitest run
-  3. TypeScript:     npx vue-tsc --noEmit
+  1. Backend тесты:  cd backend && pytest tests/ -v --cov=src
+  2. ML тесты:       pytest ml/tests/ -v
+  3. Frontend тесты: cd frontend && npm run test:run -- --coverage
+  4. TypeScript:     cd frontend && npm run type-check
   4. Coverage report
 ```
 

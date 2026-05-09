@@ -27,16 +27,15 @@
 
 | Компонент | Статус | Описание |
 |-----------|--------|----------|
-| Frontend (Vue 3 + TypeScript) | ✅ | 6 страниц: Home, Dashboard, Optimize, Analytics, Schedule, Reps |
-| Backend (FastAPI + Python) | ✅ | 33 эндпоинта |
-| PostgreSQL | ✅ | 8 таблиц: locations, sales_reps, visit_schedule, visit_log, force_majeure_events, routes, metrics, optimization_results |
-| Redis | ✅ | Контейнер настроен (кеширование) |
-| Docker Compose | ✅ | 4 сервиса: postgres, redis, backend, frontend |
+| Frontend (Vue 3 + TypeScript) | ✅ | 6 страниц: Home, Dashboard, Optimize, Analytics, Schedule, Database |
+| Backend (FastAPI + Python) | ✅ | Набор API-эндпоинтов + CRUD (актуально в Swagger `/docs`) |
+| PostgreSQL | ✅ | 13 таблиц (включая holidays, audit_log, vehicles и служебные сущности) |
+| Docker Compose | ✅ | 3 сервиса: postgres, backend, frontend |
 | Nginx | ✅ | Проксирование `/api/*` → backend, SPA routing |
 | Qwen 0.5B GGUF | ✅ | Оценка вариантов маршрута (pros/cons), lazy load |
 | Llama 1B GGUF | ✅ | Альтернативная модель, lazy load |
 | SchedulePlanner | ✅ | Алгоритм A/B/C/D, 14 ТТ/день, форс-мажоры, автоперенос skipped |
-| Excel-экспорт | ✅ | 4 листа: Расписание, Журнал визитов, Статистика по ТТ, Активность ТП |
+| Excel-экспорт | ✅ | 6 листов: Расписание, Журнал визитов, Статистика по ТТ, Активность ТП, Журнал изменений, Маршруты навигатор |
 | 3 варианта оптимизации | ✅ | Greedy / Priority-first / Balanced + LLM evaluation |
 
 ### Полный список эндпоинтов
@@ -62,7 +61,7 @@
 | `GET /api/v1/locations/` | Список ТТ с пагинацией |
 | `POST /api/v1/locations/` | Создание ТТ |
 | `GET /api/v1/locations/{id}` | Детали ТТ |
-| `PUT /api/v1/locations/{id}` | Обновление ТТ |
+| `PATCH /api/v1/locations/{id}` | Обновление ТТ |
 | `DELETE /api/v1/locations/{id}` | Удаление ТТ |
 | `POST /api/v1/locations/upload` | Загрузка из XLSX/CSV/JSON |
 
@@ -95,7 +94,7 @@
 | `GET /api/v1/insights` | Охват ТТ, активность ТП, районы |
 | `GET /api/v1/routes/` | История маршрутов |
 | `GET /api/v1/routes/{id}` | Детали маршрута |
-| `GET /api/v1/export/schedule` | Excel-отчёт (4 листа) |
+| `GET /api/v1/export/schedule` | Excel-отчёт (6 листов) |
 | `GET /api/v1/benchmark/compare` | Сравнение LLM-моделей |
 | `GET /api/v1/benchmark/status` | Статус бенчмарка |
 | `GET /api/v1/benchmark/latest` | Последний результат бенчмарка |
@@ -262,10 +261,7 @@ ls -lh backend/src/models/*.gguf
 cd ~/T2_project
 
 # Убедиться: docker-compose.yml лежит в корне проекта
-ls docker-compose.yml   # или backend/docker-compose.yml
-
-# Если docker-compose.yml в backend/ — перенести в корень
-mv backend/docker-compose.yml ./docker-compose.yml
+ls docker-compose.yml
 
 # Сборка образов (занимает 5-15 минут при первом запуске)
 docker compose build
@@ -280,7 +276,6 @@ docker compose up -d
 docker compose ps
 # NAME            STATUS               PORTS
 # t2_postgres     Up (healthy)         0.0.0.0:5432->5432/tcp
-# t2_redis        Up                   0.0.0.0:6379->6379/tcp
 # t2_backend      Up (healthy)         0.0.0.0:8000->8000/tcp
 # t2_frontend     Up                   0.0.0.0:80->80/tcp
 ```
@@ -354,10 +349,10 @@ curl -X POST "http://localhost:8000/api/v1/schedule/generate" \
 
 ## 8. Запуск без Docker (отладка)
 
-### 8.1 Только БД и Redis через Docker
+### 8.1 Только БД через Docker
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 ```
 
 ### 8.2 Backend вручную
@@ -406,21 +401,26 @@ npm run dev -- --host 0.0.0.0
 curl http://localhost:8000/health
 ```
 
-Ожидаемый ответ:
+Ожидаемый ответ (пример):
 
 ```json
 {
   "status": "healthy",
   "database": "connected",
+  "disk_free_mb": 12345,
+  "visits_today": 0,
+  "version": "1.2.0",
+  "last_optimization_ms": null,
+  "last_schedule_gen_ms": null,
   "services": {
     "database": "connected",
-    "qwen": "unavailable",
-    "llama": "unavailable"
+    "qwen": { "status": "not_loaded", "optional": true },
+    "llama": { "status": "not_loaded", "optional": true }
   }
 }
 ```
 
-> `"unavailable"` для моделей — нормально. Они загружаются лениво при первом запросе.
+> `"not_loaded"` для моделей — нормально. Они загружаются лениво при первом запросе.
 
 ### 9.2 Тест оптимизации (быстрый greedy)
 
@@ -509,7 +509,7 @@ docker compose restart backend
 
 **Причина:** Попытка загрузить Qwen и Llama одновременно — не хватает RAM.
 
-**Решение:** Система корректно работает с одной моделью. В `/optimize/variants` выбирайте только **одну** модель (Qwen **или** Llama). Обе одновременно не загружаются.
+**Решение:** Система корректно работает с одной моделью. В `/api/v1/optimize/variants` выбирайте только **одну** модель (Qwen **или** Llama). Обе одновременно не загружаются.
 
 ### Analytics не загружается
 
@@ -574,7 +574,6 @@ df -h
 Настройка:
   [ ] Создать backend/.env из .env.example
   [ ] Убедиться что DATABASE_HOST=postgres (не localhost)
-  [ ] Перенести docker-compose.yml в корень (если в backend/)
   [ ] Проверить frontend/Dockerfile — npm ci без --only=production
 
 Модели:
@@ -585,7 +584,7 @@ df -h
 Запуск:
   [ ] docker compose build
   [ ] docker compose up -d
-  [ ] docker compose ps — все 4 контейнера Up
+  [ ] docker compose ps — все 3 контейнера Up
   [ ] curl http://localhost:8000/health → {"status": "healthy"}
   [ ] curl http://localhost:80 → HTML
 
@@ -596,8 +595,8 @@ df -h
 
 Проверка функций:
   [ ] /optimize → маршрут за < 1 сек
-  [ ] /optimize/variants → 3 варианта с метриками
-  [ ] /export/schedule → Excel скачивается, 4 листа
+  [ ] /api/v1/optimize/variants → 3 варианта с метриками
+  [ ] /export/schedule → Excel скачивается, 6 листов
   [ ] /schedule → отображается расписание
   [ ] /analytics → охват ТТ и активность ТП загружаются
 ```

@@ -305,7 +305,7 @@ Production:  http://<server-ip>/api/v1
 
 ### Оптимизация маршрутов
 
-#### `POST /optimize`
+#### `POST /api/v1/optimize`
 
 Оптимизация с авто-fallback (Qwen → Llama → Greedy).
 
@@ -407,7 +407,7 @@ Production:  http://<server-ip>/api/v1
 
 ---
 
-#### `POST /optimize/variants`
+#### `POST /api/v1/optimize/variants`
 
 Генерация 3 вариантов маршрута без сохранения.
 
@@ -425,7 +425,7 @@ Production:  http://<server-ip>/api/v1
 
 ---
 
-#### `POST /optimize/confirm`
+#### `POST /api/v1/optimize/confirm`
 
 Сохранение выбранного варианта в БД.
 
@@ -452,13 +452,13 @@ Production:  http://<server-ip>/api/v1
 
 ---
 
-#### `POST /qwen/optimize`
+#### `POST /api/v1/qwen/optimize`
 
-Прямой вызов Qwen. Response идентичен `/optimize`.
+Прямой вызов Qwen. Response идентичен `/api/v1/optimize`.
 
-#### `POST /llama/optimize`
+#### `POST /api/v1/llama/optimize`
 
-Прямой вызов Llama. Response идентичен `/optimize`.
+Прямой вызов Llama. Response идентичен `/api/v1/optimize`.
 
 ---
 
@@ -856,7 +856,7 @@ Query params: ?month=2026-02   (обязательный)
 
 ---
 
-## Полный список endpoints (Неделя 4)
+## Базовый список endpoints (MVP)
 
 | Метод | Путь | Тег | Статус |
 |-------|------|-----|--------|
@@ -881,7 +881,7 @@ Query params: ?month=2026-02   (обязательный)
 | DELETE | `/api/v1/reps/{id}` | Reps | ✅ |
 | POST | `/api/v1/schedule/generate` | Schedule | ✅ |
 | GET | `/api/v1/schedule/` | Schedule | ✅ |
-| PATCH | `/api/v1/schedule/{id}/status` | Schedule | ✅ |
+| PATCH | `/api/v1/schedule/{visit_id}` | Schedule | ✅ |
 | POST | `/api/v1/force_majeure` | ForceMajeure | ✅ |
 | GET | `/api/v1/force_majeure` | ForceMajeure | ✅ |
 | POST | `/api/v1/visits` | Visits | ✅ |

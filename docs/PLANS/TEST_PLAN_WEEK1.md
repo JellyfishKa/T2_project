@@ -53,5 +53,5 @@
 ## 5. Стратегия выполнения
 
 1. Установить зависимости: `pip install -r backend/requirements/dev/requirements.txt`
-2. Запустить тесты: `pytest backend/tests/`
+2. Запустить тесты: `cd backend && pytest tests/`
 3. Проверить покрытие: `pytest --cov=backend/src backend/tests/`

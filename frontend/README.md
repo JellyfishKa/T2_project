@@ -88,7 +88,7 @@ npx prettier --check src/
 
 ## Требования
 
-- Node.js 18+ 
+- Node.js 20+
 - npm 9
 - Современный браузер (Chrome 90+, Firefox 88+, Safari 14+)
 

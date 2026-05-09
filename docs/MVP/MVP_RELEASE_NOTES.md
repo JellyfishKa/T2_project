@@ -85,7 +85,7 @@
 
 #### Excel интеграция
 
-- **Экспорт** (`GET /api/v1/export/schedule?month=YYYY-MM`) — 4 листа:
+- **Экспорт** (`GET /api/v1/export/schedule?month=YYYY-MM`) — 6 листов (в актуальной версии):
   - Расписание — все плановые визиты
   - Журнал визитов — выполненные с длительностью (мин)
   - Статистика по ТТ — охват, % выполнения по категориям
@@ -162,7 +162,7 @@
 
 #### Инфраструктура
 
-- Docker Compose: backend, frontend, PostgreSQL, Redis
+- Docker Compose: backend, frontend, PostgreSQL
 - Multi-stage Docker builds
 - Nginx: проксирование API, SPA routing
 - GitHub Actions CI/CD
